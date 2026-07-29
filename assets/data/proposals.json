@@ -1,0 +1,6 @@
+[
+  {"id":"kampar","city":"Kampar, Perak","description":"Nearest charging station is 8 km away from this area.","supports":52,"status":"Pending","area":"Residential Area","charger":"AC Charger","distance":8.0,"demand":"High"},
+  {"id":"ipoh","city":"Ipoh, Perak","description":"High EV population and commercial activities.","supports":124,"status":"Approved","area":"Commercial Area","charger":"DC Fast Charger","distance":3.4,"demand":"High"},
+  {"id":"johor","city":"Johor Bahru, Johor","description":"Existing charging stations are insufficient.","supports":89,"status":"Under Review","area":"Mixed Area","charger":"AC Charger","distance":6.2,"demand":"Medium"},
+  {"id":"shah","city":"Shah Alam, Selangor","description":"Growing residential area with increasing EV users.","supports":36,"status":"Rejected","area":"Residential Area","charger":"AC Charger","distance":4.8,"demand":"Medium"}
+]
