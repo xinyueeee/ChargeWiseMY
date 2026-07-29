@@ -1,17 +1,28 @@
-# chargewise_my
+# ChargeWise MY — Infrastructure Planning
 
-EV Infrastructure Decision Support System
+Flutter implementation of the EV Infrastructure Decision Support System planning module.
 
-## Getting Started
+## Included
 
-This project is a starting point for a Flutter application.
+- MVVM structure under `lib/modules/planning`
+- Dashboard, new proposal, proposal list, proposal details, gap analysis, and admin recommendation screens
+- Local JSON fixtures in `assets/data`
+- Google Maps markers for existing stations (green), proposed stations (blue), and priority areas (orange/red)
+- One-reaction-only community support and immediate count update
+- Rule-based recommendation: high demand, station distance above 5 km, and more than 30 supports produces `Suitable Location`
 
-A few resources to get you started if this is your first Flutter project:
+## Run
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+This workspace's Flutter wrapper could not generate native platform folders. On a normal Flutter workstation, run the following once from this folder (it preserves `lib/` and `assets/`):
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter create --platforms=android,ios .
+flutter pub get
+flutter run
+```
+
+Add a Google Maps API key before running on Android or iOS. Follow the official `google_maps_flutter` setup for the generated platform files.
+
+## Backend hand-off
+
+`PlanningRepository` is the integration boundary. Replace its local asset reads and empty mutation methods with API/Firebase calls; screens and view models remain unchanged.
