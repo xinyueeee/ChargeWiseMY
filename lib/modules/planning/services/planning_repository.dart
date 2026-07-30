@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../../services/supabase_service.dart';
 import '../models/proposal.dart';
@@ -15,7 +16,7 @@ class PlanningRepository {
       _supabase.getProposalsWithReactions(),
       _supabase.getChargingStations(),
     ]);
-    final rows = results[0] as List<Map<String, dynamic>>;
+    final rows = results[0];
     final stations = List<Map<String, dynamic>>.from(results[1]);
     return rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
@@ -42,7 +43,30 @@ class PlanningRepository {
 
   Future<List<GapArea>> getGaps() async {
     final raw = await rootBundle.loadString('assets/data/priority_areas.json');
-    return (jsonDecode(raw) as List).map((e) => GapArea.fromJson(e)).toList();
+    final gaps =
+        (jsonDecode(raw) as List).map((e) => GapArea.fromJson(e)).toList();
+    debugPrint(
+        'Map diagnostics: ${gaps.length} priority-area records loaded; ${gaps.where((gap) => gap.latitude != null && gap.longitude != null).length} have valid coordinates.');
+    return gaps;
+  }
+
+  Future<List<ChargingStation>> getStations() async {
+    final stopwatch = Stopwatch()..start();
+    final rows = await _supabase.getChargingStations();
+    stopwatch.stop();
+    final stations = <ChargingStation>[];
+    var invalidCoordinates = 0;
+    for (final row in rows) {
+      final station = ChargingStation.fromSupabase(row);
+      if (station == null) {
+        invalidCoordinates++;
+      } else {
+        stations.add(station);
+      }
+    }
+    debugPrint(
+        'Map diagnostics: Supabase charging-station fetch ${stopwatch.elapsedMilliseconds}ms; ${rows.length} charging-station rows fetched; ${stations.length} valid coordinates; $invalidCoordinates invalid coordinate records.');
+    return stations;
   }
 
   Future<int> getStationCount() async {

@@ -7,7 +7,8 @@ class GapAnalysisScreen extends StatelessWidget {
   const GapAnalysisScreen({super.key});
   @override
   Widget build(BuildContext c) {
-    final gaps = c.watch<PlanningViewModel>().gaps;
+    final vm = c.watch<PlanningViewModel>();
+    final gaps = vm.gaps;
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -76,7 +77,13 @@ class GapAnalysisScreen extends StatelessWidget {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          const MapPanel(height: 300, gaps: true),
+          MapPanel(
+            height: 300,
+            gaps: true,
+            stations: vm.stations,
+            proposals: vm.proposals,
+            priorityAreas: vm.gaps,
+          ),
           const SizedBox(height: 24),
           const Text(
             'Top Priority Gaps',
