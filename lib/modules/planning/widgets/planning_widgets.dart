@@ -91,10 +91,13 @@ class MapPanel extends StatefulWidget {
 }
 
 class _MapPanelState extends State<MapPanel> {
-  static const _existingStationsClusterId =
+  static const ClusterManagerId _existingStationsClusterId =
       ClusterManagerId('existing_stations');
-  static const _clusterManagers = <ClusterManager>{
-    ClusterManager(clusterManagerId: _existingStationsClusterId),
+
+  static final Set<ClusterManager> _clusterManagers = <ClusterManager>{
+    ClusterManager(
+      clusterManagerId: _existingStationsClusterId,
+    ),
   };
 
   _MarkerIcons? _icons;
@@ -168,8 +171,7 @@ class _MapPanelState extends State<MapPanel> {
         in widget.priorityAreas.where((area) => area.priority == 'High')) {
       if (area.latitude == null || area.longitude == null) continue;
       priorityCircles.add(Circle(
-        circleId: CircleId(
-            'priority_${area.name.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '_')}'),
+        circleId: CircleId('priority_${area.id}'),
         center: LatLng(area.latitude!, area.longitude!),
         radius: 4000,
         fillColor: Colors.red.withValues(alpha: .18),

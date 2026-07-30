@@ -80,24 +80,33 @@ class Proposal {
 
 class GapArea {
   const GapArea({
+    required this.id,
     required this.name,
     required this.priority,
     required this.distance,
-    required this.users,
+    required this.nearbyStationCount,
+    required this.priorityScore,
+    required this.reason,
     this.latitude,
     this.longitude,
   });
-  final String name, priority, users;
+  final String id, name, priority, reason;
   final double distance;
+  final int nearbyStationCount;
+  final double priorityScore;
   final double? latitude;
   final double? longitude;
-  factory GapArea.fromJson(Map<String, dynamic> json) => GapArea(
-        name: json['name'],
-        priority: json['priority'],
-        distance: (json['distance'] as num).toDouble(),
-        users: json['users'],
-        latitude: CoordinateParser.latitude(json['latitude']),
-        longitude: CoordinateParser.longitude(json['longitude']),
+
+  factory GapArea.fromAnalysis(Map<Object?, Object?> data) => GapArea(
+        id: data['id']! as String,
+        name: data['name']! as String,
+        priority: data['priority']! as String,
+        distance: (data['nearestStationKm']! as num).toDouble(),
+        nearbyStationCount: data['nearbyStationCount']! as int,
+        priorityScore: (data['score']! as num).toDouble(),
+        reason: data['reason']! as String,
+        latitude: CoordinateParser.latitude(data['latitude']),
+        longitude: CoordinateParser.longitude(data['longitude']),
       );
 }
 

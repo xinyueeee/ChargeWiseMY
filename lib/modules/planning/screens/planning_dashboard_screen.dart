@@ -20,6 +20,11 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
     return Scaffold(
       body: Consumer<PlanningViewModel>(
         builder: (_, vm, __) {
+          debugPrint(
+            'PlanningDashboardScreen reads priority areas: '
+            'viewModel=${identityHashCode(vm)}, '
+            'count=${vm.highPriorityAreaCount}.',
+          );
           return vm.loading
               ? const Center(child: CircularProgressIndicator())
               : SafeArea(
@@ -89,7 +94,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
                             height: 300,
                             stations: vm.stations,
                             proposals: vm.proposals,
-                            priorityAreas: vm.gaps,
+                            priorityAreas: vm.priorityAreas,
                           ),
                           Positioned(
                             left: 14,
@@ -163,7 +168,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
                             ),
                             SizedBox(width: 10),
                             StatisticCard(
-                              value: '${vm.highPriorityCount}',
+                              value: '${vm.highPriorityAreaCount}',
                               label: 'High Priority Areas',
                               icon: Icons.insights,
                               color: Colors.orange,
