@@ -1,24 +1,121 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/priority_area_filter.dart';
+import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import 'priority_area_map_screen.dart';
 
-class GapAnalysisScreen extends StatelessWidget {
+class GapAnalysisScreen extends StatefulWidget {
   const GapAnalysisScreen({super.key});
+
+  @override
+  State<GapAnalysisScreen> createState() => _GapAnalysisScreenState();
+}
+
+class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
+  String _selectedState = allStatesFilter;
+  PlanningViewModel? _viewModel;
+  List<GapArea> _nationwideAreas = const [];
+  List<GapArea> _filteredAreas = const [];
+  Map<String, int> _stateCounts = const {};
+  double _averageDistance = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint(
+      'GapAnalysisScreen initState: instance=${identityHashCode(this)}.',
+    );
+    debugPrint(
+      'GapAnalysisScreen map-free diagnostic: '
+      'instance=${identityHashCode(this)}, ownsGoogleMap=false.',
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final viewModel = context.read<PlanningViewModel>();
+    if (identical(viewModel, _viewModel)) return;
+    _viewModel?.removeListener(_handleViewModelChange);
+    _viewModel = viewModel;
+    _viewModel!.addListener(_handleViewModelChange);
+    _refreshFilteredData();
+  }
+
+  @override
+  void dispose() {
+    _viewModel?.removeListener(_handleViewModelChange);
+    debugPrint(
+      'GapAnalysisScreen dispose: instance=${identityHashCode(this)}.',
+    );
+    super.dispose();
+  }
+
+  void _handleViewModelChange() {
+    if (!mounted) return;
+    setState(_refreshFilteredData);
+  }
+
+  void _refreshFilteredData() {
+    final areas = _viewModel?.priorityAreas ?? const <GapArea>[];
+    if (identical(areas, _nationwideAreas)) return;
+    final counts = <String, int>{
+      for (final state in malaysianStateOptions) state: 0,
+      allStatesFilter: areas.length,
+    };
+    for (final area in areas) {
+      if (counts.containsKey(area.state)) {
+        counts[area.state] = counts[area.state]! + 1;
+      }
+    }
+    _nationwideAreas = areas;
+    _stateCounts = Map.unmodifiable(counts);
+    _applyStateFilter();
+  }
+
+  void _applyStateFilter() {
+    _filteredAreas = filterPriorityAreasByState(
+      _nationwideAreas,
+      _selectedState,
+    );
+    _averageDistance = _filteredAreas.isEmpty
+        ? 0
+        : _filteredAreas.fold<double>(
+                0, (sum, area) => sum + area.distance) /
+            _filteredAreas.length;
+  }
+
+  void _openAreaMap(GapArea area) {
+    if (area.latitude == null || area.longitude == null) {
+      debugPrint(
+        'GapAnalysisScreen map action skipped: '
+        'area=${area.id}, reason=invalid coordinates.',
+      );
+      return;
+    }
+    debugPrint(
+      'GapAnalysisScreen opens focused map: '
+      'instance=${identityHashCode(this)}, area=${area.id}.',
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PriorityAreaMapScreen(area: area),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext c) {
-    final vm = c.watch<PlanningViewModel>();
-    final priorityAreas = vm.priorityAreas;
+    final vm = _viewModel!;
     debugPrint(
       'GapAnalysisScreen reads priority areas: '
       'viewModel=${identityHashCode(vm)}, '
-      'count=${vm.highPriorityAreaCount}.',
+      'nationwideCount=${vm.highPriorityAreaCount}, '
+      'selectedState=$_selectedState, '
+      'filteredCount=${_filteredAreas.length}.',
     );
-    final averageDistance = priorityAreas.isEmpty
-        ? 0.0
-        : priorityAreas.fold<double>(
-                0, (sum, area) => sum + area.distance) /
-            priorityAreas.length;
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -88,6 +185,46 @@ class GapAnalysisScreen extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _selectedState,
+            isExpanded: true,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.location_on_outlined),
+              labelText: 'State',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+            items: [
+              for (final state in malaysianStateOptions)
+                DropdownMenuItem<String>(
+                  value: state,
+                  child: Text(
+                    '$state '
+                    '(${_stateCounts[state] ?? 0})',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (state) {
+              if (state == null || state == _selectedState) return;
+              setState(() {
+                _selectedState = state;
+                _applyStateFilter();
+              });
+            },
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _selectedState == allStatesFilter
+                ? '${_filteredAreas.length} priority gaps nationwide'
+                : '${_filteredAreas.length} priority gaps in $_selectedState',
+            style: const TextStyle(
+              color: Color(0xFF5F6B82),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 18),
           GridView.count(
             crossAxisCount: 2,
@@ -96,19 +233,19 @@ class GapAnalysisScreen extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             children: [
               StatisticCard(
-                value: '${priorityAreas.length}',
+                value: '${_filteredAreas.length}',
                 label: 'Infrastructure Gaps Identified',
                 icon: Icons.bolt,
                 color: green,
               ),
               StatisticCard(
-                value: '${vm.highPriorityAreaCount}',
+                value: '${_filteredAreas.length}',
                 label: 'High Priority Areas',
                 icon: Icons.location_on,
                 color: blue,
               ),
               StatisticCard(
-                value: '${averageDistance.toStringAsFixed(1)} km',
+                value: '${_averageDistance.toStringAsFixed(1)} km',
                 label: 'Average Nearest-Station Distance',
                 icon: Icons.bar_chart,
                 color: Colors.orange,
@@ -127,19 +264,58 @@ class GapAnalysisScreen extends StatelessWidget {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          MapPanel(
-            height: 300,
-            gaps: true,
-            stations: vm.stations,
-            proposals: vm.proposals,
-            priorityAreas: priorityAreas,
+          AppCard(
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.map_outlined,
+                  size: 46,
+                  color: green,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Interactive map available on demand',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Open a priority area to view its coverage circle. '
+                  'This keeps only one Android map active at a time.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF5F6B82)),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _filteredAreas.isEmpty
+                      ? null
+                      : () => _openAreaMap(_filteredAreas.first),
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('View highest-priority gap on map'),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           const Text(
             'Top Priority Gaps',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          ...priorityAreas.asMap().entries.map(
+          if (_filteredAreas.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: AppCard(
+                child: Text(
+                  _selectedState == allStatesFilter
+                      ? 'No priority coverage gaps detected nationwide.'
+                      : 'No priority coverage gaps detected in $_selectedState.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ..._filteredAreas.asMap().entries.map(
                 (e) => Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: AppCard(
@@ -181,21 +357,26 @@ class GapAnalysisScreen extends StatelessWidget {
                                 'Nearest station: '
                                 '${e.value.distance.toStringAsFixed(1)} km',
                               ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Priority score: '
+                                '${e.value.priorityScore.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Priority score: '
-                              '${e.value.priorityScore.toStringAsFixed(0)}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                        const SizedBox(width: 6),
+                        IconButton(
+                          tooltip: 'View on map',
+                          onPressed: e.value.latitude == null ||
+                                  e.value.longitude == null
+                              ? null
+                              : () => _openAreaMap(e.value),
+                          icon: const Icon(Icons.map_outlined),
                         ),
-                        const Icon(Icons.chevron_right),
                       ],
                     ),
                   ),
@@ -210,9 +391,9 @@ class GapAnalysisScreen extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
-                priorityAreas.isEmpty
+                _filteredAreas.isEmpty
                     ? 'No high-priority coverage gaps were detected using the current station data and thresholds.'
-                    : '${priorityAreas.length} non-overlapping coverage gaps were detected from ${vm.stations.length} station coordinates. These results measure charging access, not predicted EV demand.',
+                    : '${_filteredAreas.length} non-overlapping coverage gaps are shown for ${_selectedState == allStatesFilter ? 'Malaysia' : _selectedState}. The nationwide analysis used ${vm.stations.length} station coordinates and measures charging access, not predicted EV demand.',
               ),
             ),
           ),

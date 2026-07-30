@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -10,18 +11,33 @@ class SupabaseService {
     const pageSize = 1000;
     final stations = <Map<String, dynamic>>[];
     var offset = 0;
+    var pageNumber = 0;
+    final totalStopwatch = Stopwatch()..start();
 
     while (true) {
+      pageNumber++;
+      final pageStopwatch = Stopwatch()..start();
       final page = await client
           .from('charging_stations')
           .select('station_id, station_name, latitude, longitude, charger_type')
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
+      pageStopwatch.stop();
       final rows = List<Map<String, dynamic>>.from(page);
       stations.addAll(rows);
+      debugPrint(
+        'Supabase station pagination: page=$pageNumber, '
+        'rows=${rows.length}, duration=${pageStopwatch.elapsedMilliseconds}ms.',
+      );
       if (rows.length < pageSize) break;
       offset += pageSize;
     }
+    totalStopwatch.stop();
+    debugPrint(
+      'Supabase station pagination complete: pages=$pageNumber, '
+      'rows=${stations.length}, sequential=true, '
+      'duration=${totalStopwatch.elapsedMilliseconds}ms.',
+    );
     return stations;
   }
 

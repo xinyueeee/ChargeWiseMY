@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/navigation/app_route_observer.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import 'gap_analysis_screen.dart';
@@ -14,7 +15,65 @@ class PlanningDashboardScreen extends StatefulWidget {
       _PlanningDashboardScreenState();
 }
 
-class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
+class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
+    with RouteAware {
+  PageRoute<dynamic>? _subscribedRoute;
+  bool _mapMounted = true;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint(
+      'PlanningDashboardScreen initState: '
+      'instance=${identityHashCode(this)}.',
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> ||
+        identical(route, _subscribedRoute)) {
+      return;
+    }
+    if (_subscribedRoute != null) {
+      appRouteObserver.unsubscribe(this);
+    }
+    _subscribedRoute = route;
+    appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPushNext() {
+    _setMapMounted(false, reason: 'dashboard route covered');
+  }
+
+  @override
+  void didPopNext() {
+    _setMapMounted(true, reason: 'dashboard route visible again');
+  }
+
+  void _setMapMounted(bool value, {required String reason}) {
+    if (_mapMounted == value || !mounted) return;
+    debugPrint(
+      'PlanningDashboardScreen map lifecycle: '
+      'instance=${identityHashCode(this)}, '
+      'mounted=$value, reason=$reason.',
+    );
+    setState(() => _mapMounted = value);
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    debugPrint(
+      'PlanningDashboardScreen dispose: '
+      'instance=${identityHashCode(this)}, mapMounted=$_mapMounted.',
+    );
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,8 +147,9 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Stack(
-                        children: [
+                      if (_mapMounted)
+                        Stack(
+                          children: [
                           MapPanel(
                             height: 300,
                             stations: vm.stations,
@@ -139,8 +199,10 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                          ],
+                        )
+                      else
+                        const SizedBox(height: 300),
                       const SizedBox(height: 18),
                       const Text(
                         'Infrastructure Overview',

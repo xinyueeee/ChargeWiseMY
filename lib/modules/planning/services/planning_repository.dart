@@ -13,14 +13,11 @@ class PlanningRepository {
   Future<List<GapArea>>? _gapCache;
   int _analyzerExecutionCount = 0;
 
-  Future<List<Proposal>> getProposals() async {
+  Future<List<Proposal>> getProposals(
+    List<ChargingStation> stations,
+  ) async {
     await _supabase.ensureMockUser();
-    final results = await Future.wait([
-      _supabase.getProposalsWithReactions(),
-      _supabase.getChargingStations(),
-    ]);
-    final rows = results[0];
-    final stations = List<Map<String, dynamic>>.from(results[1]);
+    final rows = await _supabase.getProposalsWithReactions();
     return rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
           row['proposal_reactions'] as List? ?? []);
@@ -62,7 +59,9 @@ class PlanningRepository {
       'analyzerExecutionCount=$_analyzerExecutionCount.',
     );
     _gapCacheKey = cacheKey;
-    _gapCache = _gapAnalyzer.analyze(sortedStations);
+    _gapCache = _gapAnalyzer
+        .analyze(sortedStations)
+        .then((areas) => List<GapArea>.unmodifiable(areas));
     return _gapCache!;
   }
 
@@ -83,9 +82,10 @@ class PlanningRepository {
       .join(';');
 
   Future<List<ChargingStation>> getStations() async {
-    final stopwatch = Stopwatch()..start();
+    final fetchStopwatch = Stopwatch()..start();
     final rows = await _supabase.getChargingStations();
-    stopwatch.stop();
+    fetchStopwatch.stop();
+    final parsingStopwatch = Stopwatch()..start();
     final stations = <ChargingStation>[];
     var invalidCoordinates = 0;
     for (final row in rows) {
@@ -96,8 +96,13 @@ class PlanningRepository {
         stations.add(station);
       }
     }
+    parsingStopwatch.stop();
     debugPrint(
-        'Map diagnostics: Supabase charging-station fetch ${stopwatch.elapsedMilliseconds}ms; ${rows.length} charging-station rows fetched; ${stations.length} valid coordinates; $invalidCoordinates invalid coordinate records.');
+      'Station loading diagnostics: fetch=${fetchStopwatch.elapsedMilliseconds}ms, '
+      'parsing=${parsingStopwatch.elapsedMilliseconds}ms, '
+      'rows=${rows.length}, valid=${stations.length}, '
+      'invalid=$invalidCoordinates.',
+    );
     return stations;
   }
 
@@ -134,16 +139,16 @@ class PlanningRepository {
       _supabase.updateProposalStatus(id, status);
 
   double _nearestStationKm(
-      Map<String, dynamic> proposal, List<Map<String, dynamic>> stations) {
+    Map<String, dynamic> proposal,
+    List<ChargingStation> stations,
+  ) {
     if (stations.isEmpty) return 0;
     final lat = (proposal['latitude'] as num?)?.toDouble();
     final lng = (proposal['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return 0;
     return stations.map((station) {
-      final stationLat = (station['latitude'] as num?)?.toDouble() ?? lat;
-      final stationLng = (station['longitude'] as num?)?.toDouble() ?? lng;
-      final dx = (lat - stationLat) * 111;
-      final dy = (lng - stationLng) * 111;
+      final dx = (lat - station.latitude) * 111;
+      final dy = (lng - station.longitude) * 111;
       return math.sqrt(dx * dx + dy * dy);
     }).reduce((a, b) => a < b ? a : b);
   }

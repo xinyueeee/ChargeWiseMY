@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/navigation/app_route_observer.dart';
 import 'modules/planning/screens/planning_dashboard_screen.dart';
 import 'modules/planning/services/planning_repository.dart';
 import 'modules/planning/viewmodels/planning_viewmodel.dart';
@@ -34,6 +35,7 @@ class ChargeWiseApp extends StatelessWidget {
               primary: Color(0xFF00B894),
             ),
           ),
+          navigatorObservers: [appRouteObserver],
           home: const PlanningDashboardScreen(),
         ),
       );

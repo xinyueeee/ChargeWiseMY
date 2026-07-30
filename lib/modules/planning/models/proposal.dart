@@ -82,6 +82,7 @@ class GapArea {
   const GapArea({
     required this.id,
     required this.name,
+    required this.state,
     required this.priority,
     required this.distance,
     required this.nearbyStationCount,
@@ -90,7 +91,7 @@ class GapArea {
     this.latitude,
     this.longitude,
   });
-  final String id, name, priority, reason;
+  final String id, name, state, priority, reason;
   final double distance;
   final int nearbyStationCount;
   final double priorityScore;
@@ -100,6 +101,7 @@ class GapArea {
   factory GapArea.fromAnalysis(Map<Object?, Object?> data) => GapArea(
         id: data['id']! as String,
         name: data['name']! as String,
+        state: data['state']! as String,
         priority: data['priority']! as String,
         distance: (data['nearestStationKm']! as num).toDouble(),
         nearbyStationCount: data['nearbyStationCount']! as int,
