@@ -8,7 +8,17 @@ class GapAnalysisScreen extends StatelessWidget {
   @override
   Widget build(BuildContext c) {
     final vm = c.watch<PlanningViewModel>();
-    final gaps = vm.gaps;
+    final priorityAreas = vm.priorityAreas;
+    debugPrint(
+      'GapAnalysisScreen reads priority areas: '
+      'viewModel=${identityHashCode(vm)}, '
+      'count=${vm.highPriorityAreaCount}.',
+    );
+    final averageDistance = priorityAreas.isEmpty
+        ? 0.0
+        : priorityAreas.fold<double>(
+                0, (sum, area) => sum + area.distance) /
+            priorityAreas.length;
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -20,14 +30,54 @@ class GapAnalysisScreen extends StatelessWidget {
         elevation: 0,
         foregroundColor: Colors.black,
       ),
-      body: ListView(
+      body: vm.loading
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 12),
+                  Text(
+                    vm.analyzingGaps
+                        ? 'Analyzing charging-station coverage…'
+                        : 'Loading complete charging-station data…',
+                  ),
+                ],
+              ),
+            )
+          : vm.errorMessage != null
+              ? Center(
+                  child: AppCard(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(vm.errorMessage!),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: vm.load,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            'Identify infrastructure gaps and prioritize areas for new stations.',
+            'Charging-infrastructure coverage-gap analysis based on existing station locations.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Color(0xFF5F6B82), fontSize: 17),
           ),
+          if (vm.analyzingGaps) ...[
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            const Text(
+              'Analyzing charging-station coverage…',
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: 20),
           TextField(
             decoration: InputDecoration(
@@ -44,29 +94,29 @@ class GapAnalysisScreen extends StatelessWidget {
             childAspectRatio: 1.3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            children: const [
+            children: [
               StatisticCard(
-                value: '24',
+                value: '${priorityAreas.length}',
                 label: 'Infrastructure Gaps Identified',
                 icon: Icons.bolt,
                 color: green,
               ),
               StatisticCard(
-                value: '12',
+                value: '${vm.highPriorityAreaCount}',
                 label: 'High Priority Areas',
                 icon: Icons.location_on,
                 color: blue,
               ),
               StatisticCard(
-                value: '8.7 km',
-                label: 'Average Distance',
+                value: '${averageDistance.toStringAsFixed(1)} km',
+                label: 'Average Nearest-Station Distance',
                 icon: Icons.bar_chart,
                 color: Colors.orange,
               ),
               StatisticCard(
-                value: '85.3K',
-                label: 'EV Users Affected',
-                icon: Icons.group,
+                value: '${vm.stations.length}',
+                label: 'Station Coordinates Analysed',
+                icon: Icons.ev_station,
                 color: Colors.deepPurple,
               ),
             ],
@@ -82,14 +132,14 @@ class GapAnalysisScreen extends StatelessWidget {
             gaps: true,
             stations: vm.stations,
             proposals: vm.proposals,
-            priorityAreas: vm.gaps,
+            priorityAreas: priorityAreas,
           ),
           const SizedBox(height: 24),
           const Text(
             'Top Priority Gaps',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          ...gaps.asMap().entries.map(
+          ...priorityAreas.asMap().entries.map(
                 (e) => Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: AppCard(
@@ -115,16 +165,36 @@ class GapAnalysisScreen extends StatelessWidget {
                                 e.value.name,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 16,
+                                 fontSize: 16,
                                 ),
                               ),
                               Text(
-                                '${e.value.priority} Priority • ${e.value.distance} km nearest station',
+                                '${e.value.nearbyStationCount} charging '
+                                'station${e.value.nearbyStationCount == 1 ? '' : 's'} '
+                                'within 25 km',
+                                style: const TextStyle(
+                                  color: Color(0xFF5F6B82),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                'Nearest station: '
+                                '${e.value.distance.toStringAsFixed(1)} km',
                               ),
                             ],
                           ),
                         ),
-                        Text(e.value.users),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Priority score: '
+                              '${e.value.priorityScore.toStringAsFixed(0)}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
                         const Icon(Icons.chevron_right),
                       ],
                     ),
@@ -132,15 +202,17 @@ class GapAnalysisScreen extends StatelessWidget {
                 ),
               ),
           const SizedBox(height: 16),
-          const AppCard(
+          AppCard(
             child: ListTile(
-              leading: Icon(Icons.lightbulb_outline, color: green),
-              title: Text(
+              leading: const Icon(Icons.lightbulb_outline, color: green),
+              title: const Text(
                 'Insights',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
-                'Most gaps are concentrated in the northern and eastern regions. Prioritizing these areas can improve accessibility.',
+                priorityAreas.isEmpty
+                    ? 'No high-priority coverage gaps were detected using the current station data and thresholds.'
+                    : '${priorityAreas.length} non-overlapping coverage gaps were detected from ${vm.stations.length} station coordinates. These results measure charging access, not predicted EV demand.',
               ),
             ),
           ),

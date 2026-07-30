@@ -59,7 +59,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                   height: 240,
                   stations: vm.stations,
                   proposals: vm.proposals,
-                  priorityAreas: vm.gaps,
+                  priorityAreas: vm.priorityAreas,
                 ),
                 const SizedBox(height: 14),
                 OutlinedButton.icon(

@@ -15,6 +15,7 @@ class SupabaseService {
       final page = await client
           .from('charging_stations')
           .select('station_id, station_name, latitude, longitude, charger_type')
+          .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
       final rows = List<Map<String, dynamic>>.from(page);
       stations.addAll(rows);
