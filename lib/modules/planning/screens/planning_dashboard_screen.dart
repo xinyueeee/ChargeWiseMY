@@ -85,7 +85,12 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
                       const SizedBox(height: 18),
                       Stack(
                         children: [
-                          const MapPanel(height: 300),
+                          MapPanel(
+                            height: 300,
+                            stations: vm.stations,
+                            proposals: vm.proposals,
+                            priorityAreas: vm.gaps,
+                          ),
                           Positioned(
                             left: 14,
                             top: 14,
@@ -99,6 +104,32 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
                                   Text('🔌  Proposed Stations'),
                                   SizedBox(height: 10),
                                   Text('🔴  High Priority Area'),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 14,
+                            top: 14,
+                            child: AppCard(
+                              padding: const EdgeInsets.all(12),
+                              child: const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _MapLegendItem(
+                                    asset: 'assets/icons/station_lightning.png',
+                                    label: 'Existing Stations',
+                                  ),
+                                  SizedBox(height: 10),
+                                  _MapLegendItem(
+                                    asset: 'assets/icons/proposed_station.png',
+                                    label: 'Proposed Stations',
+                                  ),
+                                  SizedBox(height: 10),
+                                  _MapLegendItem(
+                                    asset: 'assets/icons/high_priority.png',
+                                    label: 'High Priority Area',
+                                  ),
                                 ],
                               ),
                             ),
@@ -198,5 +229,22 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen> {
           icon: Icon(icon, color: green),
           label: Text(label, style: const TextStyle(color: Color(0xFF101B40))),
         ),
+      );
+}
+
+class _MapLegendItem extends StatelessWidget {
+  const _MapLegendItem({required this.asset, required this.label});
+
+  final String asset;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(asset, width: 22, height: 22),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
       );
 }

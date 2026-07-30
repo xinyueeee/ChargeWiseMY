@@ -1,1 +1,15 @@
-[{"name":"Bandar Teknologi, Kajang","priority":"High","distance":12.4,"users":"8.2K"},{"name":"Rawang, Selangor","priority":"Medium","distance":9.7,"users":"6.1K"},{"name":"Putrajaya","priority":"Low","distance":7.1,"users":"3.4K"}]
+[
+  {"name":"Bandar Teknologi, Kajang","priority":"High","distance":12.4,"users":"8.2K","latitude":2.992,"longitude":101.790},
+  {"name":"Rawang, Selangor","priority":"Medium","distance":9.7,"users":"6.1K","latitude":3.321,"longitude":101.576},
+  {"name":"Putrajaya","priority":"Low","distance":7.1,"users":"3.4K","latitude":2.9264,"longitude":101.6964},
+  {"name":"Cheras, Kuala Lumpur","priority":"High","distance":8.3,"users":"3.2K","latitude":3.064,"longitude":101.745},
+  {"name":"Shah Alam Industrial Zone, Selangor","priority":"High","distance":14.5,"users":"2.8K","latitude":3.0738,"longitude":101.5183},
+  {"name":"Subang Jaya, Selangor","priority":"High","distance":11.2,"users":"4.1K","latitude":3.043,"longitude":101.580},
+  {"name":"Iskandar Puteri, Johor","priority":"High","distance":17.8,"users":"3.5K","latitude":1.418,"longitude":103.650},
+  {"name":"George Town, Penang","priority":"High","distance":9.6,"users":"3.9K","latitude":5.414,"longitude":100.329},
+  {"name":"Simpang Pulai, Perak","priority":"High","distance":12.4,"users":"2.5K","latitude":4.618,"longitude":101.152},
+  {"name":"Melaka City Centre","priority":"High","distance":7.9,"users":"4.3K","latitude":2.1896,"longitude":102.2501},
+  {"name":"Bentong, Pahang","priority":"High","distance":15.2,"users":"2.1K","latitude":3.522,"longitude":101.909},
+  {"name":"Kota Kinabalu, Sabah","priority":"High","distance":18.5,"users":"3.1K","latitude":5.980,"longitude":116.073},
+  {"name":"Kuching, Sarawak","priority":"High","distance":16.3,"users":"2.9K","latitude":1.553,"longitude":110.359}
+]

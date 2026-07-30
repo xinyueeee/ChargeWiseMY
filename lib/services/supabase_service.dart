@@ -6,8 +6,22 @@ class SupabaseService {
   // Temporary identity until Supabase Auth is introduced.
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
 
-  Future<List<dynamic>> getChargingStations() async {
-    return client.from('charging_stations').select();
+  Future<List<Map<String, dynamic>>> getChargingStations() async {
+    const pageSize = 1000;
+    final stations = <Map<String, dynamic>>[];
+    var offset = 0;
+
+    while (true) {
+      final page = await client
+          .from('charging_stations')
+          .select('station_id, station_name, latitude, longitude, charger_type')
+          .range(offset, offset + pageSize - 1);
+      final rows = List<Map<String, dynamic>>.from(page);
+      stations.addAll(rows);
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+    return stations;
   }
 
   Future<int> getChargingStationCount() {

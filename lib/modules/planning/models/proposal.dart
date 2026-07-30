@@ -9,12 +9,16 @@ class Proposal {
     required this.charger,
     required this.distance,
     required this.demand,
+    this.latitude,
+    this.longitude,
     this.reaction = 0,
   });
   final String id, city, description, area, charger, demand;
   String status;
   final int supports;
   final double distance;
+  final double? latitude;
+  final double? longitude;
   int reaction;
   factory Proposal.fromJson(Map<String, dynamic> json) => Proposal(
         id: json['id'],
@@ -26,6 +30,8 @@ class Proposal {
         charger: json['charger'],
         distance: (json['distance'] as num).toDouble(),
         demand: json['demand'],
+        latitude: CoordinateParser.latitude(json['latitude']),
+        longitude: CoordinateParser.longitude(json['longitude']),
       );
 
   factory Proposal.fromSupabase(
@@ -48,6 +54,8 @@ class Proposal {
         charger: row['charger_type'] as String? ?? 'AC Charger',
         distance: nearestStationKm,
         demand: _displayDemand(row['expected_demand']),
+        latitude: CoordinateParser.latitude(row['latitude']),
+        longitude: CoordinateParser.longitude(row['longitude']),
         reaction: reaction,
       );
 
@@ -76,13 +84,68 @@ class GapArea {
     required this.priority,
     required this.distance,
     required this.users,
+    this.latitude,
+    this.longitude,
   });
   final String name, priority, users;
   final double distance;
+  final double? latitude;
+  final double? longitude;
   factory GapArea.fromJson(Map<String, dynamic> json) => GapArea(
         name: json['name'],
         priority: json['priority'],
         distance: (json['distance'] as num).toDouble(),
         users: json['users'],
+        latitude: CoordinateParser.latitude(json['latitude']),
+        longitude: CoordinateParser.longitude(json['longitude']),
       );
+}
+
+class ChargingStation {
+  const ChargingStation({
+    required this.id,
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.chargerType,
+  });
+
+  final String id;
+  final String name;
+  final double latitude;
+  final double longitude;
+  final String chargerType;
+
+  static ChargingStation? fromSupabase(Map<String, dynamic> row) {
+    final latitude = CoordinateParser.latitude(row['latitude']);
+    final longitude = CoordinateParser.longitude(row['longitude']);
+    final id = row['station_id']?.toString();
+    if (id == null || latitude == null || longitude == null) return null;
+    return ChargingStation(
+      id: id,
+      name: row['station_name']?.toString() ?? 'Charging station',
+      latitude: latitude,
+      longitude: longitude,
+      chargerType: row['charger_type']?.toString() ?? 'Charger',
+    );
+  }
+}
+
+class CoordinateParser {
+  const CoordinateParser._();
+
+  static double? latitude(dynamic value) => _parse(value, -90, 90);
+  static double? longitude(dynamic value) => _parse(value, -180, 180);
+
+  static double? _parse(dynamic value, double minimum, double maximum) {
+    final coordinate =
+        value is num ? value.toDouble() : double.tryParse('$value');
+    if (coordinate == null ||
+        !coordinate.isFinite ||
+        coordinate < minimum ||
+        coordinate > maximum) {
+      return null;
+    }
+    return coordinate;
+  }
 }

@@ -93,7 +93,12 @@ class ProposalDetailsScreen extends StatelessWidget {
             style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
-          const MapPanel(height: 270),
+          MapPanel(
+            height: 270,
+            stations: vm.stations,
+            proposals: vm.proposals,
+            priorityAreas: vm.gaps,
+          ),
           const SizedBox(height: 18),
           AppCard(
             child: Column(

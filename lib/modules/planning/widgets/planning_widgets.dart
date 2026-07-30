@@ -1,3 +1,5 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/proposal.dart';
@@ -69,44 +71,189 @@ class StatisticCard extends StatelessWidget {
       );
 }
 
-class MapPanel extends StatelessWidget {
-  const MapPanel({super.key, this.height = 250, this.gaps = false});
+class MapPanel extends StatefulWidget {
+  const MapPanel({
+    super.key,
+    this.height = 250,
+    this.gaps = false,
+    this.stations = const [],
+    this.proposals = const [],
+    this.priorityAreas = const [],
+  });
   final double height;
   final bool gaps;
+  final List<ChargingStation> stations;
+  final List<Proposal> proposals;
+  final List<GapArea> priorityAreas;
+
+  @override
+  State<MapPanel> createState() => _MapPanelState();
+}
+
+class _MapPanelState extends State<MapPanel> {
+  static const _existingStationsClusterId =
+      ClusterManagerId('existing_stations');
+  static const _clusterManagers = <ClusterManager>{
+    ClusterManager(clusterManagerId: _existingStationsClusterId),
+  };
+
+  _MarkerIcons? _icons;
+  Set<Marker> _markers = const {};
+  Set<Circle> _priorityCircles = const {};
+  int? _overlayDataHash;
+  bool _preparingMarkers = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIconsAndOverlays();
+  }
+
+  @override
+  void didUpdateWidget(covariant MapPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _rebuildOverlaysIfNeeded();
+  }
+
+  Future<void> _loadIconsAndOverlays() async {
+    try {
+      _icons = await _MarkerIcons.load();
+      _rebuildOverlaysIfNeeded(force: true);
+    } catch (error, stackTrace) {
+      debugPrint('Map marker icon load failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _preparingMarkers = false);
+    }
+  }
+
+  int get _currentDataHash => Object.hashAll([
+        for (final station in widget.stations)
+          Object.hash(station.id, station.latitude, station.longitude),
+        for (final proposal in widget.proposals)
+          Object.hash(proposal.id, proposal.latitude, proposal.longitude),
+        for (final area in widget.priorityAreas)
+          Object.hash(area.name, area.priority, area.latitude, area.longitude),
+      ]);
+
+  void _rebuildOverlaysIfNeeded({bool force = false}) {
+    if (_icons == null) return;
+    final dataHash = _currentDataHash;
+    if (!force && dataHash == _overlayDataHash) return;
+
+    final stopwatch = Stopwatch()..start();
+    final markers = <Marker>{};
+    for (final station in widget.stations) {
+      markers.add(Marker(
+        markerId: MarkerId('station_${station.id}'),
+        position: LatLng(station.latitude, station.longitude),
+        icon: _icons!.station,
+        clusterManagerId: _existingStationsClusterId,
+        infoWindow:
+            InfoWindow(title: station.name, snippet: station.chargerType),
+      ));
+    }
+    for (final proposal in widget.proposals) {
+      if (proposal.latitude == null || proposal.longitude == null) continue;
+      markers.add(Marker(
+        markerId: MarkerId('proposal_${proposal.id}'),
+        position: LatLng(proposal.latitude!, proposal.longitude!),
+        icon: _icons!.proposal,
+        infoWindow:
+            InfoWindow(title: proposal.city, snippet: 'Proposed station'),
+      ));
+    }
+    final priorityCircles = <Circle>{};
+    for (final area
+        in widget.priorityAreas.where((area) => area.priority == 'High')) {
+      if (area.latitude == null || area.longitude == null) continue;
+      priorityCircles.add(Circle(
+        circleId: CircleId(
+            'priority_${area.name.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '_')}'),
+        center: LatLng(area.latitude!, area.longitude!),
+        radius: 4000,
+        fillColor: Colors.red.withValues(alpha: .18),
+        strokeColor: Colors.red.withValues(alpha: .9),
+        strokeWidth: 2,
+      ));
+    }
+    final validProposals = widget.proposals
+        .where((proposal) =>
+            proposal.latitude != null && proposal.longitude != null)
+        .length;
+    final validPriorityAreas = widget.priorityAreas
+        .where((area) =>
+            area.priority == 'High' &&
+            area.latitude != null &&
+            area.longitude != null)
+        .length;
+    stopwatch.stop();
+    _markers = markers;
+    _priorityCircles = priorityCircles;
+    _overlayDataHash = dataHash;
+    debugPrint(
+      'Map diagnostics: marker creation ${stopwatch.elapsedMilliseconds}ms; '
+      '${widget.stations.length} station markers assigned to clustering; '
+      '$validProposals non-clustered proposal markers '
+      '(${widget.proposals.length - validProposals} invalid coordinates); '
+      '$validPriorityAreas priority circles '
+      '(${widget.priorityAreas.where((area) => area.priority == 'High').length - validPriorityAreas} invalid coordinates); '
+      '${markers.length} total markers.',
+    );
+  }
+
   @override
   Widget build(BuildContext c) => ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: SizedBox(
-          height: height,
-          child: GoogleMap(
-            initialCameraPosition: const CameraPosition(
-                target: LatLng(3.1390, 101.6869), zoom: 10.5),
-            zoomControlsEnabled: false,
-            myLocationButtonEnabled: false,
-            markers: {
-              Marker(
-                  markerId: MarkerId('existing_kl'),
-                  position: LatLng(3.1390, 101.6869),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueGreen),
-                  infoWindow: InfoWindow(title: 'Existing station')),
-              Marker(
-                  markerId: MarkerId('proposal_ampang'),
-                  position: LatLng(3.1480, 101.7610),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueAzure),
-                  infoWindow: InfoWindow(title: 'Proposed station')),
-              Marker(
-                  markerId: const MarkerId('priority_kajang'),
-                  position: const LatLng(2.9935, 101.7874),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(gaps
-                      ? BitmapDescriptor.hueRed
-                      : BitmapDescriptor.hueOrange),
-                  infoWindow: const InfoWindow(title: 'High priority area')),
-            },
+          height: widget.height,
+          child: Stack(
+            children: [
+              GoogleMap(
+                initialCameraPosition: const CameraPosition(
+                    target: LatLng(4.2105, 101.9758), zoom: 6.5),
+                gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                  Factory<OneSequenceGestureRecognizer>(
+                    () => EagerGestureRecognizer(),
+                  ),
+                },
+                zoomControlsEnabled: false,
+                myLocationButtonEnabled: false,
+                markers: _markers,
+                circles: _priorityCircles,
+                clusterManagers: _clusterManagers,
+                onMapCreated: (_) => debugPrint('Google Map created successfully.'),
+              ),
+              if (_preparingMarkers)
+                const Center(child: CircularProgressIndicator.adaptive()),
+            ],
           ),
         ),
       );
+}
+
+class _MarkerIcons {
+  const _MarkerIcons({required this.station, required this.proposal});
+
+  final BitmapDescriptor station;
+  final BitmapDescriptor proposal;
+
+  static Future<_MarkerIcons>? _cache;
+
+  static Future<_MarkerIcons> load() => _cache ??= _load();
+
+  static Future<_MarkerIcons> _load() async {
+    return _MarkerIcons(
+      station: await BitmapDescriptor.asset(
+        const ImageConfiguration(size: Size(28, 28)),
+        'assets/icons/station_lightning.png',
+      ),
+      proposal: await BitmapDescriptor.asset(
+        const ImageConfiguration(size: Size(32, 32)),
+        'assets/icons/proposed_station.png',
+      ),
+    );
+  }
 }
 
 class StatusChip extends StatelessWidget {

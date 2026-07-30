@@ -7,6 +7,7 @@ class PlanningViewModel extends ChangeNotifier {
   final PlanningRepository _repository;
   List<Proposal> proposals = [];
   List<GapArea> gaps = [];
+  List<ChargingStation> stations = [];
   int stationCount = 0;
   bool loading = true;
   String? errorMessage;
@@ -26,10 +27,12 @@ class PlanningViewModel extends ChangeNotifier {
         _repository.getProposals(),
         _repository.getGaps(),
         _repository.getStationCount(),
+        _repository.getStations(),
       ]);
       proposals = results[0] as List<Proposal>;
       gaps = results[1] as List<GapArea>;
       stationCount = results[2] as int;
+      stations = results[3] as List<ChargingStation>;
     } catch (error) {
       errorMessage = 'Unable to load planning data: $error';
     }
