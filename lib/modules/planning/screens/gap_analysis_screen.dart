@@ -89,49 +89,82 @@ class GapAnalysisScreen extends StatelessWidget {
                               ],
                               onChanged: (state) {
                                 if (state != null) {
-                                  viewModel.selectState(state);
+                                  viewModel.selectState(
+                                    state,
+                                    source: 'gap-analysis-dropdown',
+                                  );
                                 }
                               },
                             ),
                             const SizedBox(height: 10),
-                            ElevatedButton.icon(
-                              onPressed: viewModel.analyzingGaps
-                                  ? null
-                                  : viewModel.runSelectedStateAnalysis,
-                              icon: viewModel.analyzingGaps
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.analytics_outlined),
-                              label: Text(
-                                viewModel.analyzingGaps
-                                    ? 'Analyzing ${viewModel.selectedState}…'
-                                    : 'Run Analysis',
+                            AppCard(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.tune_outlined,
+                                    color: green,
+                                    size: 21,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          viewModel.selectedAnalysisProfile
+                                              .displayName,
+                                          style: const TextStyle(
+                                            color: planningTextColor,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          viewModel.selectedAnalysisProfile
+                                              .description,
+                                          style: const TextStyle(
+                                            color: planningMutedTextColor,
+                                            fontSize: 12,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            if (viewModel.analysisErrorMessage != null) ...[
-                              const SizedBox(height: 10),
-                              PlanningErrorState(
-                                message: viewModel.analysisErrorMessage!,
-                                onRetry: viewModel.runSelectedStateAnalysis,
-                              ),
-                            ],
                             const SizedBox(height: 10),
-                            Text(
-                              '${areas.length} ranked infrastructure gap'
-                              '${areas.length == 1 ? '' : 's'} in '
-                              '${viewModel.selectedState}',
-                              style: const TextStyle(
-                                color: planningMutedTextColor,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            AnalysisStatusPanel(
+                              message: viewModel.analysisStatusMessage ??
+                                  '${viewModel.selectedState} analysis ready',
+                              analyzing: viewModel.analyzingGaps,
+                              hasError:
+                                  viewModel.analysisErrorMessage != null,
+                              onRetry: viewModel.analysisErrorMessage == null
+                                  ? null
+                                  : viewModel.retrySelectedStateAnalysis,
                             ),
-                            planningSectionGap,
-                            LayoutBuilder(
+                            if (!viewModel.analyzingGaps &&
+                                viewModel.analysisErrorMessage == null) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                '${areas.length} ranked infrastructure gap'
+                                '${areas.length == 1 ? '' : 's'} in '
+                                '${viewModel.selectedState}',
+                                style: const TextStyle(
+                                  color: planningMutedTextColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              planningSectionGap,
+                              LayoutBuilder(
                               builder: (context, constraints) {
                                 final columns =
                                     constraints.maxWidth >= 700 ? 3 : 2;
@@ -195,27 +228,31 @@ class GapAnalysisScreen extends StatelessWidget {
                                   ],
                                 );
                               },
-                            ),
-                            planningSectionGap,
-                            PlanningSectionTitle(
-                              'Top Priority List',
-                              subtitle: areas.isEmpty
-                                  ? 'No ranked results for this region'
-                                  : 'Ranked by the existing coverage-gap score',
-                            ),
+                              ),
+                              planningSectionGap,
+                              PlanningSectionTitle(
+                                'Top Priority List',
+                                subtitle: areas.isEmpty
+                                    ? 'No ranked results for this region'
+                                    : 'Ranked by the existing coverage-gap score',
+                              ),
+                            ],
                           ]),
                         ),
                       ),
                       if (viewModel.analyzingGaps)
-                        const SliverPadding(
-                          padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                           sliver: SliverToBoxAdapter(
                             child: PlanningLoadingState(
-                              message:
-                                  'Analyzing cached station coordinates…',
+                              message: 'Analyzing '
+                                  '${viewModel.selectedState} infrastructure '
+                                  'coverage…',
                             ),
                           ),
                         )
+                      else if (viewModel.analysisErrorMessage != null)
+                        const SliverToBoxAdapter(child: SizedBox.shrink())
                       else if (areas.isEmpty)
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -223,9 +260,10 @@ class GapAnalysisScreen extends StatelessWidget {
                             child: PlanningEmptyState(
                               icon: Icons.check_circle_outline,
                               title: 'No infrastructure gaps detected',
-                              message:
-                                  'No grid cells in ${viewModel.selectedState} '
-                                  'met the current station-coverage criteria.',
+                              message: 'Every sampled land location in '
+                                  '${viewModel.selectedState} satisfies the '
+                                  'configured geographical coverage criteria. '
+                                  'No thresholds were relaxed to force a result.',
                             ),
                           ),
                         )
@@ -252,29 +290,34 @@ class GapAnalysisScreen extends StatelessWidget {
                             ),
                           ),
                         ),
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
-                        sliver: SliverToBoxAdapter(
-                          child: AppCard(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.insights_outlined, color: green),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    viewModel.analysisInsight,
-                                    style: const TextStyle(
-                                      color: planningMutedTextColor,
-                                      height: 1.4,
+                      if (!viewModel.analyzingGaps &&
+                          viewModel.analysisErrorMessage == null)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+                          sliver: SliverToBoxAdapter(
+                            child: AppCard(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.insights_outlined,
+                                    color: green,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      viewModel.analysisInsight,
+                                      style: const TextStyle(
+                                        color: planningMutedTextColor,
+                                        height: 1.4,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -375,7 +418,8 @@ class _PriorityGapCard extends StatelessWidget {
               _GapMetric(
                 icon: Icons.ev_station_outlined,
                 value:
-                    '${area.nearbyStationCount} stations within 25 km',
+                    '${area.nearbyStationCount} station locations within '
+                    '${area.nearbyRadiusKm.toStringAsFixed(1)} km',
               ),
             ],
           ),

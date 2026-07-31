@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../../services/supabase_service.dart';
 import '../models/proposal.dart';
+import 'analysis_profile.dart';
 import 'coverage_gap_analyzer.dart';
 import 'state_boundary_service.dart';
 
@@ -11,6 +12,9 @@ class PlanningRepository {
   final SupabaseService _supabase;
   final CoverageGapAnalyzer _gapAnalyzer = const CoverageGapAnalyzer();
   final Map<String, Future<List<GapArea>>> _gapCache = {};
+  List<ChargingStation>? _fingerprintSource;
+  List<ChargingStation> _fingerprintSortedStations = const [];
+  String _cachedStationFingerprint = '';
   int _analyzerExecutionCount = 0;
 
   Future<List<Proposal>> getProposals(
@@ -44,15 +48,27 @@ class PlanningRepository {
   Future<List<GapArea>> getGaps(
     List<ChargingStation> stations, {
     String selectedState = malaysiaSelection,
+    Map<String, int> stationCountsByState = const {},
   }) {
-    final sortedStations = List<ChargingStation>.of(stations)
-      ..sort(_compareStations);
-    final cacheKey = '$selectedState|${_stationFingerprint(sortedStations)}';
+    final cacheStopwatch = Stopwatch()..start();
+    _prepareStationFingerprint(stations);
+    final profile = AnalysisProfileConfig.resolve(
+      selectedState,
+      stationCountsByState,
+    );
+    final cacheKey = '$selectedState|${profile.cacheToken}|'
+        '${CoverageGapAnalyzer.stationSiteDeduplicationCacheToken}|'
+        '$_cachedStationFingerprint';
     final cached = _gapCache[cacheKey];
+    cacheStopwatch.stop();
     if (cached != null) {
       debugPrint(
         'Coverage-gap cache hit: state=$selectedState, '
-        'stationCount=${sortedStations.length}, '
+        'stationCount=${_fingerprintSortedStations.length}, '
+        'profile=${profile.definition.id}, '
+        'siteDedup='
+        '${CoverageGapAnalyzer.stationSiteDeduplicationCacheToken}, '
+        'lookup=${cacheStopwatch.elapsedMicroseconds}us, '
         'analyzerExecutionCount=$_analyzerExecutionCount.',
       );
       return cached;
@@ -61,14 +77,55 @@ class PlanningRepository {
     _analyzerExecutionCount++;
     debugPrint(
       'Coverage-gap cache miss: state=$selectedState, '
-      'stationCount=${sortedStations.length}, '
+      'stationCount=${_fingerprintSortedStations.length}, '
+      'profile=${profile.definition.id}, '
+      'siteDedup=${CoverageGapAnalyzer.stationSiteDeduplicationCacheToken}, '
+      'lookup=${cacheStopwatch.elapsedMicroseconds}us, '
       'analyzerExecutionCount=$_analyzerExecutionCount.',
     );
     final analysis = _gapAnalyzer
-        .analyze(sortedStations, selectedState: selectedState)
+        .analyze(
+          _fingerprintSortedStations,
+          selectedState: selectedState,
+          stationCountsByState: stationCountsByState,
+        )
         .then((areas) => List<GapArea>.unmodifiable(areas));
     _gapCache[cacheKey] = analysis;
     return analysis;
+  }
+
+  void invalidateGapAnalysis(
+    List<ChargingStation> stations, {
+    required String selectedState,
+    Map<String, int> stationCountsByState = const {},
+  }) {
+    _prepareStationFingerprint(stations);
+    final profile = AnalysisProfileConfig.resolve(
+      selectedState,
+      stationCountsByState,
+    );
+    final cacheKey = '$selectedState|${profile.cacheToken}|'
+        '${CoverageGapAnalyzer.stationSiteDeduplicationCacheToken}|'
+        '$_cachedStationFingerprint';
+    _gapCache.remove(cacheKey);
+    debugPrint('Coverage-gap cache invalidated: state=$selectedState.');
+  }
+
+  void _prepareStationFingerprint(List<ChargingStation> stations) {
+    if (identical(_fingerprintSource, stations)) return;
+    final stopwatch = Stopwatch()..start();
+    final sortedStations = List<ChargingStation>.of(stations)
+      ..sort(_compareStations);
+    _fingerprintSource = stations;
+    _fingerprintSortedStations = List<ChargingStation>.unmodifiable(
+      sortedStations,
+    );
+    _cachedStationFingerprint = _stationFingerprint(sortedStations);
+    stopwatch.stop();
+    debugPrint(
+      'Station fingerprint refreshed: count=${stations.length}, '
+      'duration=${stopwatch.elapsedMilliseconds}ms.',
+    );
   }
 
   int _compareStations(ChargingStation a, ChargingStation b) {

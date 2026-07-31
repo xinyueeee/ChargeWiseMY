@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/proposal.dart';
+import '../services/analysis_profile.dart';
 import '../services/planning_repository.dart';
 import '../services/state_boundary_service.dart';
 
@@ -32,6 +33,8 @@ class PlanningViewModel extends ChangeNotifier {
   bool analyzingGaps = false;
   String? errorMessage;
   String? analysisErrorMessage;
+  String? analysisStatusMessage;
+  bool? lastAnalysisCacheHit;
   String _selectedState = malaysiaSelection;
   int _loadGeneration = 0;
   int _analysisGeneration = 0;
@@ -46,6 +49,8 @@ class PlanningViewModel extends ChangeNotifier {
       _stateBoundaries.regionFor(_selectedState);
   GeoBounds? get selectedMapBounds =>
       selectedRegion?.bounds ?? _stateBoundaries.malaysiaBounds;
+  AnalysisProfileDefinition get selectedAnalysisProfile =>
+      AnalysisProfileConfig.definitionFor(_selectedState);
 
   List<ChargingStation> get selectedStations => _selectedStations;
   List<Proposal> get selectedProposals => _selectedProposals;
@@ -82,6 +87,11 @@ class PlanningViewModel extends ChangeNotifier {
           _priorityAreas.length;
   bool get hasAnalysisForSelectedState =>
       _analysisByState.containsKey(_selectedState);
+  bool get analysisReady =>
+      !loading &&
+      !analyzingGaps &&
+      analysisErrorMessage == null &&
+      hasAnalysisForSelectedState;
 
   String get analysisInsight {
     if (_priorityAreas.isEmpty) {
@@ -122,6 +132,8 @@ class PlanningViewModel extends ChangeNotifier {
     analyzingGaps = false;
     errorMessage = null;
     analysisErrorMessage = null;
+    analysisStatusMessage = 'Loading infrastructure planning data…';
+    lastAnalysisCacheHit = null;
     notifyListeners();
     try {
       final stationResults = await Future.wait([
@@ -159,13 +171,18 @@ class PlanningViewModel extends ChangeNotifier {
       _applySelectedStateFilters();
 
       analyzingGaps = true;
+      analysisStatusMessage =
+          'Analyzing $_selectedState infrastructure coverage…';
       final areas = await _repository.getGaps(
         stations,
         selectedState: _selectedState,
+        stationCountsByState: _stationCountByState,
       );
       if (generation != _loadGeneration) return;
       _analysisByState[_selectedState] = areas;
       _priorityAreas = areas;
+      analysisStatusMessage = _analysisReadyMessage(_selectedState, areas);
+      lastAnalysisCacheHit = false;
       _rebuildStateOverviewSummaries();
       debugPrint(
         'PlanningViewModel state analysis stored: '
@@ -176,6 +193,7 @@ class PlanningViewModel extends ChangeNotifier {
       if (generation != _loadGeneration) return;
       errorMessage =
           'Unable to load planning data. Check your connection and try again.';
+      analysisStatusMessage = errorMessage;
       debugPrint(
         'PlanningViewModel load failed: instance=${identityHashCode(this)}, '
         'generation=$generation, error=$error.',
@@ -195,30 +213,83 @@ class PlanningViewModel extends ChangeNotifier {
     );
   }
 
-  Future<void> selectState(String state) async {
+  Future<void> selectState(
+    String state, {
+    String source = 'unknown',
+  }) async {
     if (!stateOptions.contains(state) || state == _selectedState) return;
+    final previousState = _selectedState;
+    debugPrint(
+      'State selection requested: from=$previousState, to=$state, '
+      'source=$source.',
+    );
+    final filteringStopwatch = Stopwatch()..start();
     _analysisGeneration++;
-    analyzingGaps = false;
     _selectedState = state;
     _applySelectedStateFilters();
-    _priorityAreas = _analysisByState[state] ?? const [];
+    final cacheLookupStopwatch = Stopwatch()..start();
+    final cached = _analysisByState[state];
+    cacheLookupStopwatch.stop();
+    final cacheHit = cached != null;
+    _priorityAreas = cached ?? const [];
+    analyzingGaps = !cacheHit;
     analysisErrorMessage = null;
+    lastAnalysisCacheHit = cacheHit;
+    analysisStatusMessage = cached != null
+        ? _analysisReadyMessage(state, cached)
+        : 'Analyzing $state infrastructure coverage…';
+    filteringStopwatch.stop();
     notifyListeners();
-    await runSelectedStateAnalysis();
+    debugPrint(
+      'State filtering diagnostics: state=$state, '
+      'stations=${_selectedStations.length}, '
+      'proposals=${_selectedProposals.length}, '
+      'filtering=${filteringStopwatch.elapsedMicroseconds}us, '
+      'cacheLookup=${cacheLookupStopwatch.elapsedMicroseconds}us, '
+      'analysisCacheHit=$cacheHit.',
+    );
+    if (cacheHit) {
+      debugPrint(
+        'State selection applied: state=$state, cameraFitted=pending, '
+        'stationCount=${_selectedStations.length}, '
+        'proposalCount=${_selectedProposals.length}, '
+        'analysisCacheHit=true.',
+      );
+      return;
+    }
+    await runSelectedStateAnalysis(loadingAlreadyVisible: true);
   }
 
-  Future<void> runSelectedStateAnalysis() async {
-    if (loading || stations.isEmpty) return;
+  Future<void> runSelectedStateAnalysis({
+    bool loadingAlreadyVisible = false,
+    bool force = false,
+  }) async {
+    if (loading) return;
     final requestedState = _selectedState;
+    if (force) {
+      _repository.invalidateGapAnalysis(
+        stations,
+        selectedState: requestedState,
+        stationCountsByState: _stationCountByState,
+      );
+      _analysisByState.remove(requestedState);
+      _priorityAreas = const [];
+      _rebuildStateOverviewSummaries();
+    }
+    final cacheLookupStopwatch = Stopwatch()..start();
     final cached = _analysisByState[requestedState];
+    cacheLookupStopwatch.stop();
     if (cached != null) {
-      if (!identical(_priorityAreas, cached)) {
-        _priorityAreas = cached;
-        notifyListeners();
-      }
+      _priorityAreas = cached;
+      analyzingGaps = false;
+      analysisErrorMessage = null;
+      analysisStatusMessage = _analysisReadyMessage(requestedState, cached);
+      lastAnalysisCacheHit = true;
+      notifyListeners();
       debugPrint(
         'PlanningViewModel state analysis cache hit: '
-        'state=$requestedState, resultCount=${cached.length}.',
+        'state=$requestedState, resultCount=${cached.length}, '
+        'lookup=${cacheLookupStopwatch.elapsedMicroseconds}us.',
       );
       return;
     }
@@ -226,11 +297,16 @@ class PlanningViewModel extends ChangeNotifier {
     final generation = ++_analysisGeneration;
     analyzingGaps = true;
     analysisErrorMessage = null;
-    notifyListeners();
+    analysisStatusMessage =
+        'Analyzing $requestedState infrastructure coverage…';
+    lastAnalysisCacheHit = false;
+    if (!loadingAlreadyVisible) notifyListeners();
+    final analysisStopwatch = Stopwatch()..start();
     try {
       final areas = await _repository.getGaps(
         stations,
         selectedState: requestedState,
+        stationCountsByState: _stationCountByState,
       );
       if (generation != _analysisGeneration ||
           requestedState != _selectedState) {
@@ -242,14 +318,29 @@ class PlanningViewModel extends ChangeNotifier {
       }
       _analysisByState[requestedState] = areas;
       _priorityAreas = areas;
+      analysisStatusMessage = _analysisReadyMessage(requestedState, areas);
       _rebuildStateOverviewSummaries();
+      analysisStopwatch.stop();
+      debugPrint(
+        'State analysis diagnostics: state=$requestedState, '
+        'resultCount=${areas.length}, '
+        'duration=${analysisStopwatch.elapsedMilliseconds}ms.',
+      );
+      debugPrint(
+        'State selection applied: state=$requestedState, '
+        'cameraFitted=pending, stationCount=${_selectedStations.length}, '
+        'proposalCount=${_selectedProposals.length}, '
+        'analysisCacheHit=false.',
+      );
     } catch (error, stackTrace) {
       if (generation != _analysisGeneration ||
           requestedState != _selectedState) {
         return;
       }
       analysisErrorMessage =
-          'Unable to analyze $requestedState using the cached station data.';
+          'Unable to analyze $requestedState. Retry.';
+      analysisStatusMessage = analysisErrorMessage;
+      analysisStopwatch.stop();
       debugPrint(
         'PlanningViewModel state analysis failed: '
         'state=$requestedState, error=$error.',
@@ -263,6 +354,14 @@ class PlanningViewModel extends ChangeNotifier {
       }
     }
   }
+
+  Future<void> retrySelectedStateAnalysis() =>
+      runSelectedStateAnalysis(force: true);
+
+  String _analysisReadyMessage(String state, List<GapArea> areas) =>
+      areas.isEmpty
+          ? 'No qualifying infrastructure gaps were detected in $state.'
+          : '$state analysis ready';
 
   void _cacheStationStates() {
     final assignments = <String, String?>{};
@@ -338,19 +437,20 @@ class PlanningViewModel extends ChangeNotifier {
   }
 
   void _applySelectedStateFilters() {
+    if (_selectedState == malaysiaSelection) {
+      _selectedStations = stations;
+      _selectedProposals = proposals;
+      return;
+    }
     _selectedStations = List<ChargingStation>.unmodifiable(
-      _selectedState == malaysiaSelection
-          ? stations
-          : stations.where(
-              (station) => _stationStateById[station.id] == _selectedState,
-            ),
+      stations.where(
+        (station) => _stationStateById[station.id] == _selectedState,
+      ),
     );
     _selectedProposals = List<Proposal>.unmodifiable(
-      _selectedState == malaysiaSelection
-          ? proposals
-          : proposals.where(
-              (proposal) => _proposalStateById[proposal.id] == _selectedState,
-            ),
+      proposals.where(
+        (proposal) => _proposalStateById[proposal.id] == _selectedState,
+      ),
     );
   }
 

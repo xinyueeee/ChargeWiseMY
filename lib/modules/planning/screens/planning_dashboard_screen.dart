@@ -143,7 +143,12 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                                   ),
                               ],
                               onChanged: (state) {
-                                if (state != null) vm.selectState(state);
+                                if (state != null) {
+                                  vm.selectState(
+                                    state,
+                                    source: 'dashboard-dropdown',
+                                  );
+                                }
                               },
                             ),
                             if (vm.selectedState != malaysiaSelection) ...[
@@ -162,29 +167,20 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                                       'Return to Malaysia Overview',
                                   onDeleted: () => vm.selectState(
                                     malaysiaSelection,
+                                    source: 'state-chip-clear',
                                   ),
                                 ),
                               ),
                             ],
                             const SizedBox(height: 10),
-                            ElevatedButton.icon(
-                              onPressed: vm.analyzingGaps
+                            AnalysisStatusPanel(
+                              message: vm.analysisStatusMessage ??
+                                  '${vm.selectedState} analysis ready',
+                              analyzing: vm.analyzingGaps,
+                              hasError: vm.analysisErrorMessage != null,
+                              onRetry: vm.analysisErrorMessage == null
                                   ? null
-                                  : vm.runSelectedStateAnalysis,
-                              icon: vm.analyzingGaps
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.analytics_outlined),
-                              label: Text(
-                                vm.analyzingGaps
-                                    ? 'Analyzing ${vm.selectedState}…'
-                                    : 'Run Analysis',
-                              ),
+                                  : vm.retrySelectedStateAnalysis,
                             ),
                           ],
                         ),
@@ -203,7 +199,11 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                               stateOverviews: vm.stateOverviewSummaries,
                               selectedState: vm.selectedState,
                               focusBounds: vm.selectedMapBounds,
-                              onStateSelected: vm.selectState,
+                              analysisCacheHit: vm.lastAnalysisCacheHit,
+                              onStateSelected: (state, source) => vm.selectState(
+                                state,
+                                source: source,
+                              ),
                             ),
                             if (vm.selectedState != malaysiaSelection)
                               Positioned(

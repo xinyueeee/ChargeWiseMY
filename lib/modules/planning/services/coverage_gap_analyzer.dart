@@ -5,10 +5,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/proposal.dart';
+import 'analysis_profile.dart';
 import 'state_boundary_service.dart';
 
 class CoverageGapAnalyzer {
   const CoverageGapAnalyzer();
+
+  static const double stationSiteDeduplicationRadiusMetres = 75;
+  static const int stationSiteDeduplicationVersion = 1;
+  static const String stationSiteDeduplicationCacheToken =
+      'site-dedup-v1-radius75m';
 
   static Future<List<Map<String, Object?>>>? _landBoundariesCache;
 
@@ -21,6 +27,7 @@ class CoverageGapAnalyzer {
   Future<List<GapArea>> analyze(
     List<ChargingStation> stations, {
     String selectedState = malaysiaSelection,
+    Map<String, int> stationCountsByState = const {},
   }) async {
     final sortedStations = List<ChargingStation>.of(stations)
       ..sort((a, b) {
@@ -31,6 +38,10 @@ class CoverageGapAnalyzer {
         return a.longitude.compareTo(b.longitude);
       });
     final stopwatch = Stopwatch()..start();
+    final resolvedProfile = AnalysisProfileConfig.resolve(
+      selectedState,
+      stationCountsByState,
+    );
     final landBoundaries = await _loadLandBoundaries();
     final result = await compute(
       _runCoverageGapAnalysis,
@@ -41,6 +52,7 @@ class CoverageGapAnalyzer {
         ],
         'landBoundaries': landBoundaries,
         'selectedState': selectedState,
+        'analysisParameters': resolvedProfile.toPayload(),
       },
     );
     stopwatch.stop();
@@ -56,8 +68,36 @@ class CoverageGapAnalyzer {
         : (1 - indexedDistanceChecks / bruteForceDistanceChecks) * 100;
 
     debugPrint(
+      'Analysis profile: state=$selectedState, '
+      'profile=${resolvedProfile.definition.displayName}, '
+      'stationRecordCount=${result['selectedStateStationRecordCount']}, '
+      'uniqueCoordinates=${result['selectedStateUniqueCoordinateCount']}, '
+      'distinctSites50m=${result['selectedStateSiteCount50m']}, '
+      'distinctSites75m=${result['selectedStateSiteCount75m']}, '
+      'distinctSites100m=${result['selectedStateSiteCount100m']}, '
+      'profileAverage='
+      '${resolvedProfile.profileAverageStationCount.toStringAsFixed(1)}, '
+      'refinementFactor=${resolvedProfile.refinementFactor.toStringAsFixed(2)}, '
+      'gridSpacingKm=${resolvedProfile.gridSpacingKm.toStringAsFixed(2)}, '
+      'candidateSeparationKm='
+      '${resolvedProfile.candidateSeparationKm.toStringAsFixed(2)}, '
+      'GeneratedCandidates=${result['candidateCount']}, '
+      'GeneratedCandidateCells=${result['gridCellCount']}, '
+      'LandValidCandidateCells=${result['landValidGridCellCount']}, '
+      'CoverageQualifiedLandValidated=${result['landValidatedCount']}, '
+      'Retained=${areas.length}, '
+      'RejectedNearbyLocationsTooHigh='
+      '${result['rejectedByNearbyLocationCount']}, '
+      'RejectedNearestDistanceTooLow='
+      '${result['rejectedByMinimumDistanceCount']}, '
+      'RejectedBySeparation=${result['rejectedBySeparationCount']}.',
+    );
+    debugPrint(
       'Coverage-gap diagnostics: '
-      '${result['stationCount']} station coordinates analyzed; '
+      '${result['stationRecordCount']} station records preserved; '
+      '${result['stationCount']} deduplicated station locations analyzed '
+      '(radius=${stationSiteDeduplicationRadiusMetres.toStringAsFixed(0)}m, '
+      'version=$stationSiteDeduplicationVersion); '
       'state=$selectedState; '
       '${result['gridCellCount']} grid cells evaluated; '
       '$indexedDistanceChecks station-distance checks '
@@ -133,6 +173,9 @@ class CoverageGapAnalyzer {
 
 Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
   final selectedState = payload['selectedState'] as String;
+  final parameters = _AnalysisParameters.fromPayload(
+    payload['analysisParameters'] as Map<Object?, Object?>,
+  );
   final stationCoordinates = (payload['stations'] as List<Object?>)
       .cast<List<Object?>>()
       .map(
@@ -159,12 +202,54 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
           .where((boundary) => boundary.state == selectedState)
           .toList(growable: false);
 
+  final selectedStateStationCoordinates = selectedState == malaysiaSelection
+      ? stationCoordinates
+      : stationCoordinates
+          .where(
+            (coordinate) => landBoundaries.any(
+              (boundary) => boundary.contains(
+                coordinate.latitude,
+                coordinate.longitude,
+              ),
+            ),
+          )
+          .toList(growable: false);
+  final selectedStateUniqueCoordinateCount = selectedStateStationCoordinates
+      .map(
+        (coordinate) => '${coordinate.latitude.toStringAsFixed(8)}|'
+            '${coordinate.longitude.toStringAsFixed(8)}',
+      )
+      .toSet()
+      .length;
+  final selectedStateSiteCount50m =
+      _groupStationSites(selectedStateStationCoordinates, 50).length;
+  final selectedStateSiteCount75m =
+      _groupStationSites(selectedStateStationCoordinates, 75).length;
+  final selectedStateSiteCount100m =
+      _groupStationSites(selectedStateStationCoordinates, 100).length;
+  final stationSites = _groupStationSites(
+    stationCoordinates,
+    CoverageGapAnalyzer.stationSiteDeduplicationRadiusMetres,
+  );
+
   if (stationCoordinates.isEmpty) {
     return <String, Object>{
+      'stationRecordCount': 0,
       'stationCount': 0,
+      'selectedStateStationRecordCount': 0,
+      'selectedStateUniqueCoordinateCount': 0,
+      'selectedStateSiteCount50m': 0,
+      'selectedStateSiteCount75m': 0,
+      'selectedStateSiteCount100m': 0,
       'gridCellCount': 0,
+      'landValidGridCellCount': 0,
       'distanceCheckCount': 0,
       'candidateCount': 0,
+      'landValidatedCount': 0,
+      'rejectedByCoverageCount': 0,
+      'rejectedByNearbyLocationCount': 0,
+      'rejectedByMinimumDistanceCount': 0,
+      'rejectedBySeparationCount': 0,
       'correctedOffshoreCount': 0,
       'rejectedOffshoreCount': 0,
       'landDiagnostics': <Map<String, Object?>>[],
@@ -173,10 +258,23 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
   }
   if (landBoundaries.isEmpty) {
     return <String, Object>{
-      'stationCount': stationCoordinates.length,
+      'stationRecordCount': stationCoordinates.length,
+      'stationCount': stationSites.length,
+      'selectedStateStationRecordCount':
+          selectedStateStationCoordinates.length,
+      'selectedStateUniqueCoordinateCount': selectedStateUniqueCoordinateCount,
+      'selectedStateSiteCount50m': selectedStateSiteCount50m,
+      'selectedStateSiteCount75m': selectedStateSiteCount75m,
+      'selectedStateSiteCount100m': selectedStateSiteCount100m,
       'gridCellCount': 0,
+      'landValidGridCellCount': 0,
       'distanceCheckCount': 0,
       'candidateCount': 0,
+      'landValidatedCount': 0,
+      'rejectedByCoverageCount': 0,
+      'rejectedByNearbyLocationCount': 0,
+      'rejectedByMinimumDistanceCount': 0,
+      'rejectedBySeparationCount': 0,
       'correctedOffshoreCount': 0,
       'rejectedOffshoreCount': 0,
       'landDiagnostics': <Map<String, Object?>>[],
@@ -185,32 +283,84 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
   }
 
   final candidates = <_GapCandidate>[];
-  final stationIndex = _StationSpatialIndex(stationCoordinates);
+  final stationIndex = _StationSpatialIndex(stationSites);
   final analysisBounds = _boundsForLandBoundaries(landBoundaries);
   var gridCellCount = 0;
+  var landValidGridCellCount = 0;
   var correctedOffshoreCount = 0;
   var rejectedOffshoreCount = 0;
+  var landValidatedCount = 0;
+  var rejectedByCoverageCount = 0;
+  var rejectedByNearbyLocationCount = 0;
+  var rejectedByMinimumDistanceCount = 0;
+  var rejectedBySeparationCount = 0;
   final landDiagnostics = <Map<String, Object?>>[];
 
-  for (var latitudeIndex = 0;; latitudeIndex++) {
-    final latitude =
-        0.9 + latitudeIndex * CoverageGapAnalyzer.gridSpacingDegrees;
-    if (latitude > 7.4) break;
-    for (var longitudeIndex = 0;; longitudeIndex++) {
-      final longitude =
-          99.6 + longitudeIndex * CoverageGapAnalyzer.gridSpacingDegrees;
-      if (longitude > 119.3) break;
-      if (!analysisBounds.includesGridCell(latitude, longitude)) continue;
+  const latitudeOrigin = .9;
+  const longitudeOrigin = 99.6;
+  final gridSpacing = parameters.gridSpacingDegrees;
+  final latitudeStart = math.max(
+    0,
+    ((analysisBounds.south - gridSpacing / 2 - latitudeOrigin) /
+            gridSpacing)
+        .floor(),
+  ).toInt();
+  final latitudeEnd = math.min(
+    ((7.4 - latitudeOrigin) / gridSpacing).floor(),
+    ((analysisBounds.north + gridSpacing / 2 - latitudeOrigin) /
+            gridSpacing)
+        .ceil(),
+  ).toInt();
+  final longitudeStart = math.max(
+    0,
+    ((analysisBounds.west - gridSpacing / 2 - longitudeOrigin) /
+            gridSpacing)
+        .floor(),
+  ).toInt();
+  final longitudeEnd = math.min(
+    ((119.3 - longitudeOrigin) / gridSpacing).floor(),
+    ((analysisBounds.east + gridSpacing / 2 - longitudeOrigin) /
+            gridSpacing)
+        .ceil(),
+  ).toInt();
+
+  for (var latitudeIndex = latitudeStart;
+      latitudeIndex <= latitudeEnd;
+      latitudeIndex++) {
+    final latitude = latitudeOrigin + latitudeIndex * gridSpacing;
+    for (var longitudeIndex = longitudeStart;
+        longitudeIndex <= longitudeEnd;
+        longitudeIndex++) {
+      final longitude = longitudeOrigin + longitudeIndex * gridSpacing;
+      if (!analysisBounds.includesGridCell(
+        latitude,
+        longitude,
+        gridSpacing,
+      )) {
+        continue;
+      }
       if (!_isLikelyMalaysianLand(latitude, longitude)) continue;
       gridCellCount++;
+      if (_boundaryContaining(latitude, longitude, landBoundaries) != null) {
+        landValidGridCellCount++;
+      }
 
-      final coverage = stationIndex.coverageAt(latitude, longitude);
+      final coverage = stationIndex.coverageAt(
+        latitude,
+        longitude,
+        nearbyRadiusKm: parameters.nearbyRadiusKm,
+      );
       final nearbyStationCount = coverage.nearbyStationCount;
       final nearestStationKm = coverage.nearestStationKm;
 
-      if (nearbyStationCount > 1 ||
-          nearestStationKm <
-              CoverageGapAnalyzer.minimumNearestStationKm) {
+      if (nearbyStationCount > 1) {
+        rejectedByNearbyLocationCount++;
+        rejectedByCoverageCount++;
+        continue;
+      }
+      if (nearestStationKm < parameters.minimumNearestStationKm) {
+        rejectedByMinimumDistanceCount++;
+        rejectedByCoverageCount++;
         continue;
       }
 
@@ -218,6 +368,7 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
         latitude,
         longitude,
         landBoundaries,
+        gridSpacingDegrees: gridSpacing,
       );
       if (!landValidation.isValid) {
         rejectedOffshoreCount++;
@@ -226,6 +377,7 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
         );
         continue;
       }
+      landValidatedCount++;
 
       if (landValidation.wasMoved) {
         correctedOffshoreCount++;
@@ -238,11 +390,18 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
           ? stationIndex.coverageAt(
               landValidation.latitude!,
               landValidation.longitude!,
+              nearbyRadiusKm: parameters.nearbyRadiusKm,
             )
           : coverage;
-      if (validatedCoverage.nearbyStationCount > 1 ||
-          validatedCoverage.nearestStationKm <
-              CoverageGapAnalyzer.minimumNearestStationKm) {
+      if (validatedCoverage.nearbyStationCount > 1) {
+        rejectedByNearbyLocationCount++;
+        rejectedByCoverageCount++;
+        continue;
+      }
+      if (validatedCoverage.nearestStationKm <
+          parameters.minimumNearestStationKm) {
+        rejectedByMinimumDistanceCount++;
+        rejectedByCoverageCount++;
         continue;
       }
 
@@ -283,28 +442,130 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
             existing.latitude,
             existing.longitude,
           ) >=
-          CoverageGapAnalyzer.minimumSeparationKm,
+          parameters.candidateSeparationKm,
     );
-    if (!sufficientlySeparated) continue;
+    if (!sufficientlySeparated) {
+      rejectedBySeparationCount++;
+      continue;
+    }
     selected.add(candidate);
-    if (selected.length == CoverageGapAnalyzer.maximumResults) break;
+    if (selected.length == parameters.retainedCandidateLimit) break;
   }
   selected.sort(_compareGapCandidates);
   final normalizedScores = _normalizePriorityScores(selected);
 
   return <String, Object>{
-    'stationCount': stationCoordinates.length,
+    'stationRecordCount': stationCoordinates.length,
+    'stationCount': stationSites.length,
+    'selectedStateStationRecordCount': selectedStateStationCoordinates.length,
+    'selectedStateUniqueCoordinateCount': selectedStateUniqueCoordinateCount,
+    'selectedStateSiteCount50m': selectedStateSiteCount50m,
+    'selectedStateSiteCount75m': selectedStateSiteCount75m,
+    'selectedStateSiteCount100m': selectedStateSiteCount100m,
     'gridCellCount': gridCellCount,
+    'landValidGridCellCount': landValidGridCellCount,
     'distanceCheckCount': stationIndex.distanceCheckCount,
     'candidateCount': candidates.length,
+    'landValidatedCount': landValidatedCount,
+    'rejectedByCoverageCount': rejectedByCoverageCount,
+    'rejectedByNearbyLocationCount': rejectedByNearbyLocationCount,
+    'rejectedByMinimumDistanceCount': rejectedByMinimumDistanceCount,
+    'rejectedBySeparationCount': rejectedBySeparationCount,
     'correctedOffshoreCount': correctedOffshoreCount,
     'rejectedOffshoreCount': rejectedOffshoreCount,
     'landDiagnostics': landDiagnostics,
     'areas': [
       for (var index = 0; index < selected.length; index++)
-        selected[index].toMap(index, normalizedScores[index]),
+        selected[index].toMap(
+          index,
+          normalizedScores[index],
+          nearbyRadiusKm: parameters.nearbyRadiusKm,
+        ),
     ],
   };
+}
+
+/// Groups records that represent the same physical charging location.
+///
+/// Input order is stable (station ID order in [analyze]). A record joins the
+/// nearest existing anchor only when it is within [radiusMetres] of that fixed
+/// anchor. Keeping the anchor fixed prevents transitive chains from merging
+/// two legitimately separate sites that are farther apart than the radius.
+List<_Coordinate> _groupStationSites(
+  List<_Coordinate> coordinates,
+  double radiusMetres,
+) {
+  if (coordinates.isEmpty) return const <_Coordinate>[];
+  const kilometresPerLatitudeDegree = 111.32;
+  final bucketDegrees = radiusMetres / 1000 / kilometresPerLatitudeDegree;
+  final buckets = <String, List<int>>{};
+  final sites = <_StationSiteAccumulator>[];
+
+  for (final coordinate in coordinates) {
+    final latitudeBucket = (coordinate.latitude / bucketDegrees).floor();
+    final longitudeBucket = (coordinate.longitude / bucketDegrees).floor();
+    var nearestSiteIndex = -1;
+    var nearestDistanceMetres = double.infinity;
+
+    for (var latitudeOffset = -1; latitudeOffset <= 1; latitudeOffset++) {
+      for (var longitudeOffset = -1;
+          longitudeOffset <= 1;
+          longitudeOffset++) {
+        final key = '${latitudeBucket + latitudeOffset}|'
+            '${longitudeBucket + longitudeOffset}';
+        for (final siteIndex in buckets[key] ?? const <int>[]) {
+          final anchor = sites[siteIndex].anchor;
+          final distanceMetres = _distanceKm(
+                coordinate.latitude,
+                coordinate.longitude,
+                anchor.latitude,
+                anchor.longitude,
+              ) *
+              1000;
+          if (distanceMetres <= radiusMetres &&
+              (distanceMetres < nearestDistanceMetres ||
+                  (distanceMetres == nearestDistanceMetres &&
+                      siteIndex < nearestSiteIndex))) {
+            nearestSiteIndex = siteIndex;
+            nearestDistanceMetres = distanceMetres;
+          }
+        }
+      }
+    }
+
+    if (nearestSiteIndex >= 0) {
+      sites[nearestSiteIndex].add(coordinate);
+      continue;
+    }
+    final siteIndex = sites.length;
+    sites.add(_StationSiteAccumulator(coordinate));
+    final key = '$latitudeBucket|$longitudeBucket';
+    (buckets[key] ??= <int>[]).add(siteIndex);
+  }
+
+  return sites.map((site) => site.centre).toList(growable: false);
+}
+
+class _StationSiteAccumulator {
+  _StationSiteAccumulator(this.anchor)
+      : _latitudeSum = anchor.latitude,
+        _longitudeSum = anchor.longitude;
+
+  final _Coordinate anchor;
+  var _recordCount = 1;
+  double _latitudeSum;
+  double _longitudeSum;
+
+  void add(_Coordinate coordinate) {
+    _recordCount++;
+    _latitudeSum += coordinate.latitude;
+    _longitudeSum += coordinate.longitude;
+  }
+
+  _Coordinate get centre => _Coordinate(
+        _latitudeSum / _recordCount,
+        _longitudeSum / _recordCount,
+      );
 }
 
 _AnalysisBounds _boundsForLandBoundaries(
@@ -326,6 +587,34 @@ _AnalysisBounds _boundsForLandBoundaries(
   return _AnalysisBounds(south, west, north, east);
 }
 
+class _AnalysisParameters {
+  const _AnalysisParameters({
+    required this.gridSpacingDegrees,
+    required this.nearbyRadiusKm,
+    required this.minimumNearestStationKm,
+    required this.candidateSeparationKm,
+    required this.retainedCandidateLimit,
+  });
+
+  factory _AnalysisParameters.fromPayload(Map<Object?, Object?> payload) =>
+      _AnalysisParameters(
+        gridSpacingDegrees:
+            (payload['gridSpacingDegrees'] as num).toDouble(),
+        nearbyRadiusKm: (payload['nearbyRadiusKm'] as num).toDouble(),
+        minimumNearestStationKm:
+            (payload['minimumNearestStationKm'] as num).toDouble(),
+        candidateSeparationKm:
+            (payload['candidateSeparationKm'] as num).toDouble(),
+        retainedCandidateLimit: payload['retainedCandidateLimit'] as int,
+      );
+
+  final double gridSpacingDegrees;
+  final double nearbyRadiusKm;
+  final double minimumNearestStationKm;
+  final double candidateSeparationKm;
+  final int retainedCandidateLimit;
+}
+
 class _AnalysisBounds {
   const _AnalysisBounds(this.south, this.west, this.north, this.east);
 
@@ -334,8 +623,12 @@ class _AnalysisBounds {
   final double north;
   final double east;
 
-  bool includesGridCell(double latitude, double longitude) {
-    const margin = CoverageGapAnalyzer.gridSpacingDegrees / 2;
+  bool includesGridCell(
+    double latitude,
+    double longitude,
+    double gridSpacingDegrees,
+  ) {
+    final margin = gridSpacingDegrees / 2;
     return latitude >= south - margin &&
         latitude <= north + margin &&
         longitude >= west - margin &&
@@ -406,8 +699,9 @@ bool _pointInPolygon(
 _LandValidation _validateLandCandidate(
   double latitude,
   double longitude,
-  List<_LandBoundary> boundaries,
-) {
+  List<_LandBoundary> boundaries, {
+    required double gridSpacingDegrees,
+  }) {
   final directBoundary = _boundaryContaining(
     latitude,
     longitude,
@@ -423,7 +717,7 @@ _LandValidation _validateLandCandidate(
 
   final searchOffsets = <_Coordinate>[];
   const searchSteps = 6;
-  final halfCell = CoverageGapAnalyzer.gridSpacingDegrees / 2;
+  final halfCell = gridSpacingDegrees / 2;
   for (var latitudeStep = -searchSteps;
       latitudeStep <= searchSteps;
       latitudeStep++) {
@@ -647,7 +941,11 @@ class _StationSpatialIndex {
   final Map<int, List<_Coordinate>> _buckets = {};
   int distanceCheckCount = 0;
 
-  _StationCoverage coverageAt(double latitude, double longitude) {
+  _StationCoverage coverageAt(
+    double latitude,
+    double longitude, {
+    required double nearbyRadiusKm,
+  }) {
     final latitudeBucket = _bucketIndex(latitude);
     final longitudeBucket = _bucketIndex(longitude);
     var nearestStationKm = double.infinity;
@@ -680,7 +978,7 @@ class _StationSpatialIndex {
               station.longitude,
             );
             if (distance < nearestStationKm) nearestStationKm = distance;
-            if (distance <= CoverageGapAnalyzer.nearbyRadiusKm) {
+            if (distance <= nearbyRadiusKm) {
               nearbyStationCount++;
             }
           }
@@ -695,7 +993,7 @@ class _StationSpatialIndex {
         ring,
       );
       final requiredSearchDistance = math.max(
-        CoverageGapAnalyzer.nearbyRadiusKm,
+        nearbyRadiusKm,
         nearestStationKm,
       );
       if (nearestStationKm.isFinite &&
@@ -769,7 +1067,11 @@ class _GapCandidate {
   final double originalLongitude;
   final String landValidationResult;
 
-  Map<String, Object> toMap(int rank, double priorityScore) {
+  Map<String, Object> toMap(
+    int rank,
+    double priorityScore, {
+    required double nearbyRadiusKm,
+  }) {
     final latitudeKey = (latitude * 1000).round();
     final longitudeKey = (longitude * 1000).round();
     final localityDistance = _distanceKm(
@@ -796,10 +1098,12 @@ class _GapCandidate {
       'nearestStationKm': nearestStationKm,
       'score': priorityScore,
       'coverageScore': rawScore,
+      'nearbyRadiusKm': nearbyRadiusKm,
       'reason':
-          'Only $nearbyStationCount charging station${nearbyStationCount == 1 ? '' : 's'} '
-              'within ${CoverageGapAnalyzer.nearbyRadiusKm.round()} km; '
-              'nearest station is ${nearestStationKm.toStringAsFixed(1)} km away.',
+          'Only $nearbyStationCount charging station location${nearbyStationCount == 1 ? '' : 's'} '
+              'within ${nearbyRadiusKm.toStringAsFixed(1)} km; '
+              'nearest station location is '
+              '${nearestStationKm.toStringAsFixed(1)} km away.',
       'rank': rank + 1,
     };
   }

@@ -126,6 +126,66 @@ class PlanningErrorState extends StatelessWidget {
       );
 }
 
+class AnalysisStatusPanel extends StatelessWidget {
+  const AnalysisStatusPanel({
+    super.key,
+    required this.message,
+    required this.analyzing,
+    required this.hasError,
+    this.onRetry,
+  });
+
+  final String message;
+  final bool analyzing;
+  final bool hasError;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = hasError
+        ? Colors.red
+        : analyzing
+            ? blue
+            : green;
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          if (analyzing)
+            SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.3,
+                color: color,
+              ),
+            )
+          else
+            Icon(
+              hasError ? Icons.error_outline : Icons.check_circle_outline,
+              color: color,
+              size: 21,
+            ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: hasError ? Colors.red.shade700 : planningTextColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (hasError && onRetry != null)
+            TextButton(
+              onPressed: analyzing ? null : onRetry,
+              child: const Text('Retry'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class PlanningEmptyState extends StatelessWidget {
   const PlanningEmptyState({
     super.key,
@@ -247,6 +307,8 @@ class StatisticCard extends StatelessWidget {
       );
 }
 
+typedef StateSelectionCallback = void Function(String state, String source);
+
 class MapPanel extends StatefulWidget {
   const MapPanel({
     super.key,
@@ -259,6 +321,7 @@ class MapPanel extends StatefulWidget {
     this.stateOverviews = const [],
     this.selectedState = malaysiaSelection,
     this.focusBounds,
+    this.analysisCacheHit,
     this.initialTarget = const LatLng(4.2105, 101.9758),
     this.initialZoom = 6.5,
     this.mapPadding = const EdgeInsets.all(12),
@@ -274,11 +337,12 @@ class MapPanel extends StatefulWidget {
   final List<StateOverviewSummary> stateOverviews;
   final String selectedState;
   final GeoBounds? focusBounds;
+  final bool? analysisCacheHit;
   final LatLng initialTarget;
   final double initialZoom;
   final EdgeInsets mapPadding;
   final ValueChanged<LatLng>? onTap;
-  final ValueChanged<String>? onStateSelected;
+  final StateSelectionCallback? onStateSelected;
 
   @override
   State<MapPanel> createState() => _MapPanelState();
@@ -530,7 +594,10 @@ class _MapPanelState extends State<MapPanel> {
                       '${summary.priorityAreaCount == null ? 'Priority analysis not run' : '${summary.priorityAreaCount} priority areas'}\n'
                       'Tap to explore this state',
                 ),
-                onTap: () => widget.onStateSelected?.call(summary.name),
+                onTap: () => widget.onStateSelected?.call(
+                  summary.name,
+                  'state-badge-tap',
+                ),
               ),
             ),
     ]).then((markers) {
@@ -1055,23 +1122,29 @@ class _MapPanelState extends State<MapPanel> {
   }
 
   Set<Polygon> _buildStatePolygons() {
-    final regions = widget.selectedState == malaysiaSelection
-        ? widget.stateRegions
-        : widget.stateRegions
-            .where((region) => region.name == widget.selectedState);
+    final regions = widget.stateRegions;
+    final isStateDetail = widget.selectedState != malaysiaSelection;
     final polygons = <Polygon>{};
     for (final region in regions) {
       for (var index = 0; index < region.polygons.length; index++) {
         final rings = region.polygons[index];
         if (rings.isEmpty) continue;
         final selected = widget.selectedState == region.name;
+        final strokeColor = selected
+            ? green
+            : isStateDetail
+                ? const Color(0xFF8B98A7)
+                : blue;
         polygons.add(
           Polygon(
             polygonId: PolygonId('state_${region.name}_$index'),
             consumeTapEvents: widget.onStateSelected != null,
             onTap: widget.onStateSelected == null
                 ? null
-                : () => widget.onStateSelected!(region.name),
+                : () => widget.onStateSelected!(
+                      region.name,
+                      'polygon-tap',
+                    ),
             points: [
               for (final point in rings.first)
                 LatLng(point.latitude, point.longitude),
@@ -1083,10 +1156,14 @@ class _MapPanelState extends State<MapPanel> {
                     LatLng(point.latitude, point.longitude),
                 ],
             ],
-            strokeColor: selected ? green : blue,
-            strokeWidth: selected ? 3 : 2,
-            fillColor: (selected ? green : blue).withValues(
-              alpha: selected ? .11 : .035,
+            strokeColor: strokeColor,
+            strokeWidth: selected ? 3 : 1,
+            fillColor: (selected ? green : strokeColor).withValues(
+              alpha: selected
+                  ? .12
+                  : isStateDetail
+                      ? .012
+                      : .035,
             ),
           ),
         );
@@ -1111,6 +1188,12 @@ class _MapPanelState extends State<MapPanel> {
       );
       debugPrint(
         'Map camera fitted: state=${widget.selectedState}, reason=$reason.',
+      );
+      debugPrint(
+        'State selection applied: state=${widget.selectedState}, '
+        'cameraFitted=true, stationCount=${widget.stations.length}, '
+        'proposalCount=${widget.proposals.length}, '
+        'analysisCacheHit=${widget.analysisCacheHit}.',
       );
     } catch (error, stackTrace) {
       debugPrint(
