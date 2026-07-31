@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:chargewise_my/modules/planning/models/proposal.dart';
+import 'package:chargewise_my/modules/planning/services/analysis_profile.dart';
 import 'package:chargewise_my/modules/planning/services/coverage_gap_analyzer.dart';
 import 'package:chargewise_my/modules/planning/services/state_boundary_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,6 +178,41 @@ void main() {
       reason: 'Every national count badge must be positioned on state land.',
     );
   });
+
+  test('analysis profiles are geographic and refinement stays modest', () {
+    expect(
+      AnalysisProfileConfig.definitionFor('Kuala Lumpur').profile,
+      AnalysisProfile.denseUrban,
+    );
+    expect(
+      AnalysisProfileConfig.definitionFor('Johor').profile,
+      AnalysisProfile.urban,
+    );
+    expect(
+      AnalysisProfileConfig.definitionFor('Sabah').profile,
+      AnalysisProfile.regional,
+    );
+
+    final johor = AnalysisProfileConfig.resolve(
+      'Johor',
+      const {
+        'Johor': 540,
+        'Selangor': 300,
+        'Penang': 180,
+        'Melaka': 120,
+        'Negeri Sembilan': 160,
+      },
+    );
+    expect(johor.definition.profile, AnalysisProfile.urban);
+    expect(
+      johor.refinementFactor,
+      inInclusiveRange(
+        AnalysisProfileConfig.minimumRefinementFactor,
+        AnalysisProfileConfig.maximumRefinementFactor,
+      ),
+    );
+    expect(johor.refinementFactor, lessThan(1));
+  });
 }
 
 class _CountingCoverageGapAnalyzer extends CoverageGapAnalyzer {
@@ -186,9 +222,14 @@ class _CountingCoverageGapAnalyzer extends CoverageGapAnalyzer {
   Future<List<GapArea>> analyze(
     List<ChargingStation> stations, {
     String selectedState = malaysiaSelection,
+    Map<String, int> stationCountsByState = const {},
   }) {
     executionCount++;
-    return super.analyze(stations, selectedState: selectedState);
+    return super.analyze(
+      stations,
+      selectedState: selectedState,
+      stationCountsByState: stationCountsByState,
+    );
   }
 }
 
