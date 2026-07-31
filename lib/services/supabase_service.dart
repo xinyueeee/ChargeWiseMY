@@ -79,4 +79,21 @@ class SupabaseService {
         .update({'status': status.toLowerCase().replaceAll(' ', '_')}).eq(
             'proposal_id', proposalId);
   }
+
+  Future<void> updateProposal(
+    String proposalId,
+    Map<String, dynamic> values,
+  ) async {
+    await client.from('proposals').update(values).eq(
+          'proposal_id',
+          proposalId,
+        );
+  }
+
+  Future<void> deleteProposal(String proposalId) async {
+    await client.from('proposals').delete().eq(
+          'proposal_id',
+          proposalId,
+        );
+  }
 }
