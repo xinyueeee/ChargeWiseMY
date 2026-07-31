@@ -88,6 +88,7 @@ class GapArea {
     required this.nearbyStationCount,
     required this.priorityScore,
     required this.reason,
+    this.coverageScore = 0,
     this.latitude,
     this.longitude,
   });
@@ -95,6 +96,7 @@ class GapArea {
   final double distance;
   final int nearbyStationCount;
   final double priorityScore;
+  final double coverageScore;
   final double? latitude;
   final double? longitude;
 
@@ -106,6 +108,7 @@ class GapArea {
         distance: (data['nearestStationKm']! as num).toDouble(),
         nearbyStationCount: data['nearbyStationCount']! as int,
         priorityScore: (data['score']! as num).toDouble(),
+        coverageScore: (data['coverageScore']! as num).toDouble(),
         reason: data['reason']! as String,
         latitude: CoordinateParser.latitude(data['latitude']),
         longitude: CoordinateParser.longitude(data['longitude']),

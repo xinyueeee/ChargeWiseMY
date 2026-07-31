@@ -3,14 +3,14 @@ import 'package:flutter/foundation.dart';
 import '../../../services/supabase_service.dart';
 import '../models/proposal.dart';
 import 'coverage_gap_analyzer.dart';
+import 'state_boundary_service.dart';
 
 class PlanningRepository {
   PlanningRepository({SupabaseService? supabaseService})
       : _supabase = supabaseService ?? SupabaseService();
   final SupabaseService _supabase;
   final CoverageGapAnalyzer _gapAnalyzer = const CoverageGapAnalyzer();
-  String? _gapCacheKey;
-  Future<List<GapArea>>? _gapCache;
+  final Map<String, Future<List<GapArea>>> _gapCache = {};
   int _analyzerExecutionCount = 0;
 
   Future<List<Proposal>> getProposals(
@@ -41,28 +41,34 @@ class PlanningRepository {
     }).toList();
   }
 
-  Future<List<GapArea>> getGaps(List<ChargingStation> stations) {
+  Future<List<GapArea>> getGaps(
+    List<ChargingStation> stations, {
+    String selectedState = malaysiaSelection,
+  }) {
     final sortedStations = List<ChargingStation>.of(stations)
       ..sort(_compareStations);
-    final cacheKey = _stationFingerprint(sortedStations);
-    if (_gapCacheKey == cacheKey && _gapCache != null) {
+    final cacheKey = '$selectedState|${_stationFingerprint(sortedStations)}';
+    final cached = _gapCache[cacheKey];
+    if (cached != null) {
       debugPrint(
-        'Coverage-gap cache hit: stationCount=${sortedStations.length}, '
+        'Coverage-gap cache hit: state=$selectedState, '
+        'stationCount=${sortedStations.length}, '
         'analyzerExecutionCount=$_analyzerExecutionCount.',
       );
-      return _gapCache!;
+      return cached;
     }
 
     _analyzerExecutionCount++;
     debugPrint(
-      'Coverage-gap cache miss: stationCount=${sortedStations.length}, '
+      'Coverage-gap cache miss: state=$selectedState, '
+      'stationCount=${sortedStations.length}, '
       'analyzerExecutionCount=$_analyzerExecutionCount.',
     );
-    _gapCacheKey = cacheKey;
-    _gapCache = _gapAnalyzer
-        .analyze(sortedStations)
+    final analysis = _gapAnalyzer
+        .analyze(sortedStations, selectedState: selectedState)
         .then((areas) => List<GapArea>.unmodifiable(areas));
-    return _gapCache!;
+    _gapCache[cacheKey] = analysis;
+    return analysis;
   }
 
   int _compareStations(ChargingStation a, ChargingStation b) {
@@ -117,8 +123,8 @@ class PlanningRepository {
       'title': proposal.city,
       'description': proposal.description,
       'address': proposal.city,
-      'latitude': 3.1390,
-      'longitude': 101.6869,
+      'latitude': proposal.latitude,
+      'longitude': proposal.longitude,
       'charger_type': proposal.charger,
       'expected_demand': proposal.demand == 'High'
           ? 3
@@ -128,6 +134,25 @@ class PlanningRepository {
       'status': 'pending',
     });
   }
+
+  Future<void> updateProposal(Proposal proposal) async {
+    await _supabase.updateProposal(proposal.id, {
+      'title': proposal.city,
+      'description': proposal.description,
+      'address': proposal.city,
+      'latitude': proposal.latitude,
+      'longitude': proposal.longitude,
+      'charger_type': proposal.charger,
+      'expected_demand': proposal.demand == 'High'
+          ? 3
+          : proposal.demand == 'Low'
+              ? 1
+              : 2,
+    });
+  }
+
+  Future<void> deleteProposal(String proposalId) =>
+      _supabase.deleteProposal(proposalId);
 
   Future<void> reactToProposal(Proposal proposal, bool like) =>
       _supabase.addReaction(

@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:chargewise_my/modules/planning/models/proposal.dart';
-import 'package:chargewise_my/modules/planning/models/priority_area_filter.dart';
 import 'package:chargewise_my/modules/planning/services/coverage_gap_analyzer.dart';
+import 'package:chargewise_my/modules/planning/services/state_boundary_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -35,7 +35,8 @@ void main() {
         (gap) =>
             gap.id.startsWith('gap_') &&
             gap.state.isNotEmpty &&
-            gap.priority == 'High' &&
+            const {'High', 'Medium', 'Low'}.contains(gap.priority) &&
+            gap.coverageScore > 0 &&
             gap.distance >=
                 CoverageGapAnalyzer.minimumNearestStationKm &&
             gap.reason.contains('nearest station'),
@@ -105,7 +106,7 @@ void main() {
     );
   });
 
-  test('state filtering reuses one nationwide analyzer result', () async {
+  test('state analysis ranks candidates inside the selected polygon', () async {
     const stations = <ChargingStation>[
       ChargingStation(
         id: 'west',
@@ -123,27 +124,29 @@ void main() {
       ),
     ];
     final analyzer = _CountingCoverageGapAnalyzer();
-    final nationwideAreas = await analyzer.analyze(stations);
-    final nationwideDashboardCount = nationwideAreas.length;
-    final selectedState = nationwideAreas.first.state;
+    final selangorAreas = await analyzer.analyze(
+      stations,
+      selectedState: 'Selangor',
+    );
+    final sarawakAreas = await analyzer.analyze(
+      stations,
+      selectedState: 'Sarawak',
+    );
 
-    final allStates =
-        filterPriorityAreasByState(nationwideAreas, allStatesFilter);
-    final stateAreas =
-        filterPriorityAreasByState(nationwideAreas, selectedState);
-
-    expect(allStates, orderedEquals(nationwideAreas));
-    expect(stateAreas, isNotEmpty);
-    expect(stateAreas.every((area) => area.state == selectedState), isTrue);
-    expect(analyzer.executionCount, 1);
-    expect(nationwideDashboardCount, nationwideAreas.length);
+    expect(selangorAreas, isNotEmpty);
+    expect(selangorAreas.every((area) => area.state == 'Selangor'), isTrue);
+    expect(sarawakAreas, isNotEmpty);
+    expect(sarawakAreas.every((area) => area.state == 'Sarawak'), isTrue);
+    expect(analyzer.executionCount, 2);
   });
 
-  test('complete Malaysian state filter remains available', () {
+  test('GeoJSON supplies the complete Malaysian state selector', () async {
+    final boundaries = StateBoundaryService();
+    await boundaries.load();
     expect(
-      malaysianStateOptions,
+      boundaries.stateOptions,
       const <String>[
-        'All States',
+        'Malaysia',
         'Johor',
         'Kedah',
         'Kelantan',
@@ -162,6 +165,17 @@ void main() {
         'Terengganu',
       ],
     );
+    expect(boundaries.regions, hasLength(16));
+    expect(
+      boundaries.regions.every(
+        (region) => region.contains(
+          region.labelPoint.latitude,
+          region.labelPoint.longitude,
+        ),
+      ),
+      isTrue,
+      reason: 'Every national count badge must be positioned on state land.',
+    );
   });
 }
 
@@ -169,9 +183,12 @@ class _CountingCoverageGapAnalyzer extends CoverageGapAnalyzer {
   int executionCount = 0;
 
   @override
-  Future<List<GapArea>> analyze(List<ChargingStation> stations) {
+  Future<List<GapArea>> analyze(
+    List<ChargingStation> stations, {
+    String selectedState = malaysiaSelection,
+  }) {
     executionCount++;
-    return super.analyze(stations);
+    return super.analyze(stations, selectedState: selectedState);
   }
 }
 

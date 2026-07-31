@@ -1,184 +1,287 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 
-class AiPlanningScreen extends StatelessWidget {
-  const AiPlanningScreen({super.key, required this.proposal});
+class AiPlanningScreen extends StatefulWidget {
+  const AiPlanningScreen({
+    super.key,
+    required this.proposal,
+  });
+
   final Proposal proposal;
+
   @override
-  Widget build(BuildContext c) {
-    final vm = c.watch<PlanningViewModel>();
-    final suitable = vm.recommendation(proposal) == 'Suitable Location';
+  State<AiPlanningScreen> createState() => _AiPlanningScreenState();
+}
+
+class _AiPlanningScreenState extends State<AiPlanningScreen> {
+  bool _updatingStatus = false;
+
+  Proposal get proposal => widget.proposal;
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<PlanningViewModel>();
+    final recommendation = viewModel.recommendation(proposal);
+    final suitable = recommendation == 'Suitable Location';
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'AI Infrastructure Planning',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 25),
+          'Planning Assessment',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 23),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(22),
-        children: [
-          AppCard(
-            child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: green,
-                child: Icon(Icons.bolt, color: Colors.white),
+      body: SafeArea(
+        child: ListView(
+          padding: planningPagePadding,
+          children: [
+            AppCard(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: green,
+                    child: Icon(Icons.ev_station, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          proposal.city,
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    color: planningTextColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${proposal.displayedSupports} community supports',
+                          style: const TextStyle(
+                            color: planningMutedTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(child: StatusChip(proposal.status)),
+                ],
               ),
-              title: Text(
-                proposal.city,
-                style: const TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: Text(
-                'Proposed on 2 Jun 2025\n👥  ${proposal.displayedSupports} Supports',
-              ),
-              trailing: StatusChip(proposal.status),
             ),
-          ),
-          const SizedBox(height: 20),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'AI Analysis Summary',
-                  style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                _line('Nearest Existing Station', '${proposal.distance} km'),
-                _line('Existing Stations Nearby', '2'),
-                _line('Population Density', 'High'),
-                _line('Expected Demand', proposal.demand),
-                _line(
-                  'Community Support',
-                  '${proposal.displayedSupports} Votes',
-                ),
-              ],
+            planningSectionGap,
+            const PlanningSectionTitle(
+              'Assessment summary',
+              subtitle: 'Uses the submitted proposal and station proximity',
             ),
-          ),
-          const SizedBox(height: 20),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 10),
+            AppCard(
+              child: Column(
+                children: [
+                  _AssessmentRow(
+                    'Nearest existing station',
+                    '${proposal.distance.toStringAsFixed(1)} km',
+                  ),
+                  const Divider(height: 1),
+                  _AssessmentRow('Expected usage', proposal.demand),
+                  const Divider(height: 1),
+                  _AssessmentRow(
+                    'Community support',
+                    '${proposal.displayedSupports}',
+                  ),
+                  const Divider(height: 1),
+                  _AssessmentRow('Current status', proposal.status),
+                ],
+              ),
+            ),
+            planningSectionGap,
+            const PlanningSectionTitle('Recommendation'),
+            const SizedBox(height: 10),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        suitable
+                            ? Icons.check_circle_outline
+                            : Icons.fact_check_outlined,
+                        color: suitable ? green : Colors.orange,
+                        size: 30,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          recommendation,
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    color:
+                                        suitable ? green : Colors.orange,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _ReasonLine(
+                    'Nearest-station distance: '
+                    '${proposal.distance.toStringAsFixed(1)} km',
+                  ),
+                  _ReasonLine(
+                    'Submitted expected usage: ${proposal.demand}',
+                  ),
+                  _ReasonLine(
+                    'Community support: ${proposal.displayedSupports}',
+                  ),
+                  const Divider(height: 24),
+                  const Text(
+                    'This is a transparent rule-based planning aid. It does '
+                    'not predict population growth or future EV demand.',
+                    style: TextStyle(
+                      color: planningMutedTextColor,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            planningSectionGap,
+            Row(
               children: [
-                const Text(
-                  'AI Recommendation',
-                  style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    const CircleAvatar(
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
                       backgroundColor: green,
-                      child: Icon(Icons.bolt, color: Colors.white),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
                     ),
-                    const SizedBox(width: 16),
-                    Text(
-                      vm.recommendation(proposal),
-                      style: const TextStyle(
-                        fontSize: 27,
-                        color: green,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 15),
-                  child: Text(
-                    '★★★★★',
-                    style: TextStyle(fontSize: 32, color: Colors.amber),
+                    onPressed: _updatingStatus
+                        ? null
+                        : () => _setStatus('Approved'),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Approve'),
                   ),
                 ),
-                const Divider(),
-                const Text(
-                  'Reason',
-                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '• Low charging coverage in this area\n• High and growing EV population\n• Strong community support\n• Good road accessibility and connectivity',
-                  style: TextStyle(
-                    fontSize: 17,
-                    height: 1.8,
-                    color: Color(0xFF5F6B82),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    onPressed: _updatingStatus
+                        ? null
+                        : () => _setStatus('Rejected'),
+                    icon: _updatingStatus
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.close),
+                    label: Text(_updatingStatus ? 'Updating…' : 'Reject'),
                   ),
-                ),
-                const Divider(height: 30),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Recommendation\n',
-                        style: TextStyle(fontSize: 17),
-                      ),
-                    ),
-                    Text(
-                      suitable ? 'Approve Proposal' : 'Needs review',
-                      style: const TextStyle(
-                        color: green,
-                        fontSize: 21,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => vm.setStatus(proposal, 'Approved'),
-                        style: ElevatedButton.styleFrom(backgroundColor: green),
-                        child: const Text(
-                          '✓  Approve',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => vm.setStatus(proposal, 'Rejected'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                        ),
-                        child: const Text('✕  Reject'),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: const FloatingBottomNav(),
     );
   }
 
-  Widget _line(String a, String b) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 13),
+  Future<void> _setStatus(String status) async {
+    setState(() => _updatingStatus = true);
+    try {
+      await context.read<PlanningViewModel>().setStatus(proposal, status);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Proposal marked as $status.')),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Proposal status update failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update the proposal status.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _updatingStatus = false);
+    }
+  }
+}
+
+class _AssessmentRow extends StatelessWidget {
+  const _AssessmentRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
         child: Row(
           children: [
             Expanded(
               child: Text(
-                a,
-                style: const TextStyle(fontSize: 18, color: Color(0xFF5F6B82)),
+                label,
+                style: const TextStyle(color: planningMutedTextColor),
               ),
             ),
-            Text(
-              b,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ReasonLine extends StatelessWidget {
+  const _ReasonLine(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.circle,
+                size: 7,
+                color: planningMutedTextColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(color: planningMutedTextColor),
+              ),
             ),
           ],
         ),

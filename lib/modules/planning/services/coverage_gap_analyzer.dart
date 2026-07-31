@@ -1,11 +1,16 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../models/proposal.dart';
+import 'state_boundary_service.dart';
 
 class CoverageGapAnalyzer {
   const CoverageGapAnalyzer();
+
+  static Future<List<Map<String, Object?>>>? _landBoundariesCache;
 
   static const double gridSpacingDegrees = 0.18;
   static const double nearbyRadiusKm = 25;
@@ -13,7 +18,10 @@ class CoverageGapAnalyzer {
   static const double minimumSeparationKm = 35;
   static const int maximumResults = 20;
 
-  Future<List<GapArea>> analyze(List<ChargingStation> stations) async {
+  Future<List<GapArea>> analyze(
+    List<ChargingStation> stations, {
+    String selectedState = malaysiaSelection,
+  }) async {
     final sortedStations = List<ChargingStation>.of(stations)
       ..sort((a, b) {
         final idComparison = a.id.compareTo(b.id);
@@ -23,6 +31,7 @@ class CoverageGapAnalyzer {
         return a.longitude.compareTo(b.longitude);
       });
     final stopwatch = Stopwatch()..start();
+    final landBoundaries = await _loadLandBoundaries();
     final result = await compute(
       _runCoverageGapAnalysis,
       <String, Object>{
@@ -30,14 +39,15 @@ class CoverageGapAnalyzer {
           for (final station in sortedStations)
             <double>[station.latitude, station.longitude],
         ],
+        'landBoundaries': landBoundaries,
+        'selectedState': selectedState,
       },
     );
     stopwatch.stop();
 
-    final areas = (result['areas'] as List<Object?>)
-        .cast<Map<Object?, Object?>>()
-        .map(GapArea.fromAnalysis)
-        .toList(growable: false);
+    final areaMaps = (result['areas'] as List<Object?>)
+        .cast<Map<Object?, Object?>>();
+    final areas = areaMaps.map(GapArea.fromAnalysis).toList(growable: false);
     final bruteForceDistanceChecks =
         (result['stationCount'] as int) * (result['gridCellCount'] as int);
     final indexedDistanceChecks = result['distanceCheckCount'] as int;
@@ -48,14 +58,30 @@ class CoverageGapAnalyzer {
     debugPrint(
       'Coverage-gap diagnostics: '
       '${result['stationCount']} station coordinates analyzed; '
+      'state=$selectedState; '
       '${result['gridCellCount']} grid cells evaluated; '
       '$indexedDistanceChecks station-distance checks '
       '(brute-force baseline=$bruteForceDistanceChecks, '
       'reduction=${checkReductionPercent.toStringAsFixed(1)}%); '
       '${result['candidateCount']} candidate gap areas found; '
+      '${result['correctedOffshoreCount']} offshore candidates corrected; '
+      '${result['rejectedOffshoreCount']} offshore candidates rejected; '
       '${areas.length} final non-overlapping priority areas returned; '
       '${stopwatch.elapsedMilliseconds}ms analysis duration.',
     );
+    for (final diagnostic
+        in (result['landDiagnostics'] as List<Object?>)
+            .cast<Map<Object?, Object?>>()) {
+      debugPrint(
+        'Coverage-gap land validation: '
+        'original=(${diagnostic['originalLatitude']}, '
+        '${diagnostic['originalLongitude']}), '
+        'result=${diagnostic['result']}, '
+        'corrected=(${diagnostic['correctedLatitude'] ?? 'n/a'}, '
+        '${diagnostic['correctedLongitude'] ?? 'n/a'}), '
+        'state=${diagnostic['state'] ?? 'n/a'}.',
+      );
+    }
     for (var index = 0; index < areas.length; index++) {
       final area = areas[index];
       double? closestSelectedAreaKm;
@@ -78,6 +104,9 @@ class CoverageGapAnalyzer {
       }
       debugPrint(
         'Coverage-gap selected #${index + 1}: '
+        'original=(${areaMaps[index]['originalLatitude']}, '
+        '${areaMaps[index]['originalLongitude']}), '
+        'landValidation=${areaMaps[index]['landValidationResult']}, '
         'lat=${area.latitude?.toStringAsFixed(4)}, '
         'lng=${area.longitude?.toStringAsFixed(4)}, '
         'label="${area.name}", '
@@ -89,9 +118,21 @@ class CoverageGapAnalyzer {
     }
     return areas;
   }
+
+  static Future<List<Map<String, Object?>>> _loadLandBoundaries() {
+    return _landBoundariesCache ??= rootBundle
+        .loadString('assets/data/malaysia_states.geojson')
+        .then((source) {
+      final collection = jsonDecode(source) as Map<String, Object?>;
+      return (collection['features'] as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .toList(growable: false);
+    });
+  }
 }
 
 Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
+  final selectedState = payload['selectedState'] as String;
   final stationCoordinates = (payload['stations'] as List<Object?>)
       .cast<List<Object?>>()
       .map(
@@ -108,6 +149,15 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
             coordinate.longitude <= 120,
       )
       .toList(growable: false);
+  final allLandBoundaries = (payload['landBoundaries'] as List<Object?>)
+      .cast<Map<Object?, Object?>>()
+      .map(_LandBoundary.fromFeature)
+      .toList(growable: false);
+  final landBoundaries = selectedState == malaysiaSelection
+      ? allLandBoundaries
+      : allLandBoundaries
+          .where((boundary) => boundary.state == selectedState)
+          .toList(growable: false);
 
   if (stationCoordinates.isEmpty) {
     return <String, Object>{
@@ -115,13 +165,32 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
       'gridCellCount': 0,
       'distanceCheckCount': 0,
       'candidateCount': 0,
+      'correctedOffshoreCount': 0,
+      'rejectedOffshoreCount': 0,
+      'landDiagnostics': <Map<String, Object?>>[],
+      'areas': <Map<String, Object>>[],
+    };
+  }
+  if (landBoundaries.isEmpty) {
+    return <String, Object>{
+      'stationCount': stationCoordinates.length,
+      'gridCellCount': 0,
+      'distanceCheckCount': 0,
+      'candidateCount': 0,
+      'correctedOffshoreCount': 0,
+      'rejectedOffshoreCount': 0,
+      'landDiagnostics': <Map<String, Object?>>[],
       'areas': <Map<String, Object>>[],
     };
   }
 
   final candidates = <_GapCandidate>[];
   final stationIndex = _StationSpatialIndex(stationCoordinates);
+  final analysisBounds = _boundsForLandBoundaries(landBoundaries);
   var gridCellCount = 0;
+  var correctedOffshoreCount = 0;
+  var rejectedOffshoreCount = 0;
+  final landDiagnostics = <Map<String, Object?>>[];
 
   for (var latitudeIndex = 0;; latitudeIndex++) {
     final latitude =
@@ -131,6 +200,7 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
       final longitude =
           99.6 + longitudeIndex * CoverageGapAnalyzer.gridSpacingDegrees;
       if (longitude > 119.3) break;
+      if (!analysisBounds.includesGridCell(latitude, longitude)) continue;
       if (!_isLikelyMalaysianLand(latitude, longitude)) continue;
       gridCellCount++;
 
@@ -144,17 +214,59 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
         continue;
       }
 
+      final landValidation = _validateLandCandidate(
+        latitude,
+        longitude,
+        landBoundaries,
+      );
+      if (!landValidation.isValid) {
+        rejectedOffshoreCount++;
+        landDiagnostics.add(
+          landValidation.toDiagnostic(latitude, longitude, 'rejected-offshore'),
+        );
+        continue;
+      }
+
+      if (landValidation.wasMoved) {
+        correctedOffshoreCount++;
+        landDiagnostics.add(
+          landValidation.toDiagnostic(latitude, longitude, 'moved-to-land'),
+        );
+      }
+
+      final validatedCoverage = landValidation.wasMoved
+          ? stationIndex.coverageAt(
+              landValidation.latitude!,
+              landValidation.longitude!,
+            )
+          : coverage;
+      if (validatedCoverage.nearbyStationCount > 1 ||
+          validatedCoverage.nearestStationKm <
+              CoverageGapAnalyzer.minimumNearestStationKm) {
+        continue;
+      }
+
       final rawScore =
-          nearestStationKm * 2.4 + (2 - nearbyStationCount) * 15;
-      final locality = _nearestLocality(latitude, longitude);
+          validatedCoverage.nearestStationKm * 2.4 +
+              (2 - validatedCoverage.nearbyStationCount) * 15;
+      final locality = _nearestLocality(
+        landValidation.latitude!,
+        landValidation.longitude!,
+        state: landValidation.state!,
+      );
       candidates.add(
         _GapCandidate(
-          latitude: latitude,
-          longitude: longitude,
-          nearbyStationCount: nearbyStationCount,
-          nearestStationKm: nearestStationKm,
+          latitude: landValidation.latitude!,
+          longitude: landValidation.longitude!,
+          nearbyStationCount: validatedCoverage.nearbyStationCount,
+          nearestStationKm: validatedCoverage.nearestStationKm,
           rawScore: rawScore,
           locality: locality,
+          state: landValidation.state!,
+          originalLatitude: latitude,
+          originalLongitude: longitude,
+          landValidationResult:
+              landValidation.wasMoved ? 'moved-to-land' : 'valid-land',
         ),
       );
     }
@@ -185,11 +297,50 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
     'gridCellCount': gridCellCount,
     'distanceCheckCount': stationIndex.distanceCheckCount,
     'candidateCount': candidates.length,
+    'correctedOffshoreCount': correctedOffshoreCount,
+    'rejectedOffshoreCount': rejectedOffshoreCount,
+    'landDiagnostics': landDiagnostics,
     'areas': [
       for (var index = 0; index < selected.length; index++)
         selected[index].toMap(index, normalizedScores[index]),
     ],
   };
+}
+
+_AnalysisBounds _boundsForLandBoundaries(
+  List<_LandBoundary> boundaries,
+) {
+  var south = double.infinity;
+  var west = double.infinity;
+  var north = -double.infinity;
+  var east = -double.infinity;
+  for (final boundary in boundaries) {
+    for (final coordinate in boundary.polygons
+        .expand((polygon) => polygon.expand((ring) => ring))) {
+      south = math.min(south, coordinate.latitude);
+      west = math.min(west, coordinate.longitude);
+      north = math.max(north, coordinate.latitude);
+      east = math.max(east, coordinate.longitude);
+    }
+  }
+  return _AnalysisBounds(south, west, north, east);
+}
+
+class _AnalysisBounds {
+  const _AnalysisBounds(this.south, this.west, this.north, this.east);
+
+  final double south;
+  final double west;
+  final double north;
+  final double east;
+
+  bool includesGridCell(double latitude, double longitude) {
+    const margin = CoverageGapAnalyzer.gridSpacingDegrees / 2;
+    return latitude >= south - margin &&
+        latitude <= north + margin &&
+        longitude >= west - margin &&
+        longitude <= east + margin;
+  }
 }
 
 int _compareGapCandidates(_GapCandidate a, _GapCandidate b) {
@@ -252,6 +403,168 @@ bool _pointInPolygon(
   return inside;
 }
 
+_LandValidation _validateLandCandidate(
+  double latitude,
+  double longitude,
+  List<_LandBoundary> boundaries,
+) {
+  final directBoundary = _boundaryContaining(
+    latitude,
+    longitude,
+    boundaries,
+  );
+  if (directBoundary != null) {
+    return _LandValidation.valid(
+      latitude: latitude,
+      longitude: longitude,
+      state: directBoundary.state,
+    );
+  }
+
+  final searchOffsets = <_Coordinate>[];
+  const searchSteps = 6;
+  final halfCell = CoverageGapAnalyzer.gridSpacingDegrees / 2;
+  for (var latitudeStep = -searchSteps;
+      latitudeStep <= searchSteps;
+      latitudeStep++) {
+    for (var longitudeStep = -searchSteps;
+        longitudeStep <= searchSteps;
+        longitudeStep++) {
+      if (latitudeStep == 0 && longitudeStep == 0) continue;
+      searchOffsets.add(
+        _Coordinate(
+          latitudeStep * halfCell / searchSteps,
+          longitudeStep * halfCell / searchSteps,
+        ),
+      );
+    }
+  }
+  searchOffsets.sort((a, b) {
+    final distanceA =
+        a.latitude * a.latitude + a.longitude * a.longitude;
+    final distanceB =
+        b.latitude * b.latitude + b.longitude * b.longitude;
+    final distanceComparison = distanceA.compareTo(distanceB);
+    if (distanceComparison != 0) return distanceComparison;
+    final latitudeComparison = a.latitude.compareTo(b.latitude);
+    if (latitudeComparison != 0) return latitudeComparison;
+    return a.longitude.compareTo(b.longitude);
+  });
+
+  for (final offset in searchOffsets) {
+    final correctedLatitude = latitude + offset.latitude;
+    final correctedLongitude = longitude + offset.longitude;
+    final boundary = _boundaryContaining(
+      correctedLatitude,
+      correctedLongitude,
+      boundaries,
+    );
+    if (boundary == null) continue;
+    return _LandValidation.valid(
+      latitude: correctedLatitude,
+      longitude: correctedLongitude,
+      state: boundary.state,
+      wasMoved: true,
+    );
+  }
+  return const _LandValidation.invalid();
+}
+
+_LandBoundary? _boundaryContaining(
+  double latitude,
+  double longitude,
+  List<_LandBoundary> boundaries,
+) {
+  for (final boundary in boundaries) {
+    if (boundary.contains(latitude, longitude)) return boundary;
+  }
+  return null;
+}
+
+class _LandValidation {
+  const _LandValidation.valid({
+    required this.latitude,
+    required this.longitude,
+    required this.state,
+    this.wasMoved = false,
+  }) : isValid = true;
+
+  const _LandValidation.invalid()
+      : latitude = null,
+        longitude = null,
+        state = null,
+        wasMoved = false,
+        isValid = false;
+
+  final double? latitude;
+  final double? longitude;
+  final String? state;
+  final bool wasMoved;
+  final bool isValid;
+
+  Map<String, Object?> toDiagnostic(
+    double originalLatitude,
+    double originalLongitude,
+    String result,
+  ) =>
+      <String, Object?>{
+        'originalLatitude': originalLatitude.toStringAsFixed(5),
+        'originalLongitude': originalLongitude.toStringAsFixed(5),
+        'result': result,
+        'correctedLatitude': latitude?.toStringAsFixed(5),
+        'correctedLongitude': longitude?.toStringAsFixed(5),
+        'state': state,
+      };
+}
+
+class _LandBoundary {
+  const _LandBoundary({required this.state, required this.polygons});
+
+  factory _LandBoundary.fromFeature(Map<Object?, Object?> feature) {
+    final properties = feature['properties'] as Map<Object?, Object?>;
+    final geometry = feature['geometry'] as Map<Object?, Object?>;
+    final geometryType = geometry['type'] as String;
+    final rawCoordinates = geometry['coordinates'] as List<Object?>;
+    final rawPolygons = geometryType == 'Polygon'
+        ? <Object?>[rawCoordinates]
+        : rawCoordinates;
+    return _LandBoundary(
+      state: _normalizeStateName(properties['NAME_1'] as String),
+      polygons: rawPolygons.map((rawPolygon) {
+        return (rawPolygon as List<Object?>).map((rawRing) {
+          return (rawRing as List<Object?>).map((rawCoordinate) {
+            final values = rawCoordinate as List<Object?>;
+            return _Coordinate(
+              (values[1] as num).toDouble(),
+              (values[0] as num).toDouble(),
+            );
+          }).toList(growable: false);
+        }).toList(growable: false);
+      }).toList(growable: false),
+    );
+  }
+
+  final String state;
+  final List<List<List<_Coordinate>>> polygons;
+
+  bool contains(double latitude, double longitude) {
+    for (final polygon in polygons) {
+      if (polygon.isEmpty ||
+          !_pointInPolygon(latitude, longitude, polygon.first)) {
+        continue;
+      }
+      final insideHole = polygon.skip(1).any(
+            (hole) => _pointInPolygon(latitude, longitude, hole),
+          );
+      if (!insideHole) return true;
+    }
+    return false;
+  }
+}
+
+String _normalizeStateName(String state) =>
+    state == 'Pulau Pinang' ? 'Penang' : state;
+
 double _distanceKm(
   double latitudeA,
   double longitudeA,
@@ -271,10 +584,17 @@ double _distanceKm(
 
 double _radians(double degrees) => degrees * math.pi / 180;
 
-_Locality _nearestLocality(double latitude, double longitude) {
-  var nearest = _localities.first;
+_Locality _nearestLocality(
+  double latitude,
+  double longitude, {
+  required String state,
+}) {
+  final stateLocalities =
+      _localities.where((locality) => locality.state == state).toList();
+  final candidates = stateLocalities.isEmpty ? _localities : stateLocalities;
+  var nearest = candidates.first;
   var nearestDistance = double.infinity;
-  for (final locality in _localities) {
+  for (final locality in candidates) {
     final distance = _distanceKm(
       latitude,
       longitude,
@@ -432,6 +752,10 @@ class _GapCandidate {
     required this.nearestStationKm,
     required this.rawScore,
     required this.locality,
+    required this.state,
+    required this.originalLatitude,
+    required this.originalLongitude,
+    required this.landValidationResult,
   });
 
   final double latitude;
@@ -440,6 +764,10 @@ class _GapCandidate {
   final double nearestStationKm;
   final double rawScore;
   final _Locality locality;
+  final String state;
+  final double originalLatitude;
+  final double originalLongitude;
+  final String landValidationResult;
 
   Map<String, Object> toMap(int rank, double priorityScore) {
     final latitudeKey = (latitude * 1000).round();
@@ -456,14 +784,18 @@ class _GapCandidate {
             'of ${locality.displayName}';
     return <String, Object>{
       'id': 'gap_${latitudeKey}_$longitudeKey',
+      'originalLatitude': originalLatitude.toStringAsFixed(5),
+      'originalLongitude': originalLongitude.toStringAsFixed(5),
+      'landValidationResult': landValidationResult,
       'name': displayName,
-      'state': locality.state,
-      'priority': 'High',
+      'state': state,
+      'priority': _priorityLevel(priorityScore),
       'latitude': latitude,
       'longitude': longitude,
       'nearbyStationCount': nearbyStationCount,
       'nearestStationKm': nearestStationKm,
       'score': priorityScore,
+      'coverageScore': rawScore,
       'reason':
           'Only $nearbyStationCount charging station${nearbyStationCount == 1 ? '' : 's'} '
               'within ${CoverageGapAnalyzer.nearbyRadiusKm.round()} km; '
@@ -471,6 +803,12 @@ class _GapCandidate {
       'rank': rank + 1,
     };
   }
+}
+
+String _priorityLevel(double priorityScore) {
+  if (priorityScore >= 85) return 'High';
+  if (priorityScore >= 70) return 'Medium';
+  return 'Low';
 }
 
 String _directionFromLocality(

@@ -34,6 +34,41 @@ class ChargeWiseApp extends StatelessWidget {
             colorScheme: const ColorScheme.light(
               primary: Color(0xFF00B894),
             ),
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: const Color(0xFFF8F9FC),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 14,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFDDE3EA)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFDDE3EA)),
+              ),
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            snackBarTheme: const SnackBarThemeData(
+              behavior: SnackBarBehavior.floating,
+            ),
           ),
           navigatorObservers: [appRouteObserver],
           home: const PlanningDashboardScreen(),
