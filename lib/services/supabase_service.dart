@@ -12,6 +12,8 @@ class SupabaseService {
     final stations = <Map<String, dynamic>>[];
     var offset = 0;
     var pageNumber = 0;
+    final seenStationIds = <String>{};
+    var duplicateRows = 0;
     final totalStopwatch = Stopwatch()..start();
 
     while (true) {
@@ -24,6 +26,12 @@ class SupabaseService {
           .range(offset, offset + pageSize - 1);
       pageStopwatch.stop();
       final rows = List<Map<String, dynamic>>.from(page);
+      for (final row in rows) {
+        final stationId = row['station_id']?.toString();
+        if (stationId != null && !seenStationIds.add(stationId)) {
+          duplicateRows++;
+        }
+      }
       stations.addAll(rows);
       debugPrint(
         'Supabase station pagination: page=$pageNumber, '
@@ -36,6 +44,8 @@ class SupabaseService {
     debugPrint(
       'Supabase station pagination complete: pages=$pageNumber, '
       'rows=${stations.length}, sequential=true, '
+      'uniqueStationIds=${seenStationIds.length}, '
+      'duplicatePageRows=$duplicateRows, '
       'duration=${totalStopwatch.elapsedMilliseconds}ms.',
     );
     return stations;

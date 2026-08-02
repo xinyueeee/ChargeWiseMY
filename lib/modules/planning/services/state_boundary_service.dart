@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 
 const malaysiaSelection = 'Malaysia';
+const malaysiaStateBoundaryDatasetVersion =
+    'geoboundaries-gbopen-mys-adm1-15666254-simplified-v1';
 
 class GeoCoordinate {
   const GeoCoordinate(this.latitude, this.longitude);
@@ -45,12 +48,16 @@ class StateRegion {
   const StateRegion({
     required this.name,
     required this.polygons,
+    required this.polygonBounds,
+    required this.displayPolygons,
     required this.bounds,
     required this.labelPoint,
   });
 
   final String name;
   final List<List<List<GeoCoordinate>>> polygons;
+  final List<GeoBounds> polygonBounds;
+  final List<List<List<GeoCoordinate>>> displayPolygons;
   final GeoBounds bounds;
   final GeoCoordinate labelPoint;
 
@@ -61,7 +68,15 @@ class StateRegion {
         longitude > bounds.east) {
       return false;
     }
-    for (final polygon in polygons) {
+    for (var index = 0; index < polygons.length; index++) {
+      final polygon = polygons[index];
+      final polygonBounds = this.polygonBounds[index];
+      if (latitude < polygonBounds.south ||
+          latitude > polygonBounds.north ||
+          longitude < polygonBounds.west ||
+          longitude > polygonBounds.east) {
+        continue;
+      }
       if (polygon.isEmpty ||
           !_pointInPolygon(latitude, longitude, polygon.first)) {
         continue;
@@ -89,6 +104,18 @@ class StateOverviewSummary {
   final int existingStationCount;
   final int proposedStationCount;
   final int? priorityAreaCount;
+}
+
+class StateBoundaryProximity {
+  const StateBoundaryProximity({
+    required this.state,
+    required this.distanceKm,
+  });
+
+  final String state;
+  final double distanceKm;
+
+  bool get nearBoundary => distanceKm <= 5;
 }
 
 class StateBoundaryService {
@@ -123,18 +150,69 @@ class StateBoundaryService {
     return null;
   }
 
+  StateBoundaryProximity? nearestStateBoundary(
+    double latitude,
+    double longitude,
+  ) {
+    StateBoundaryProximity? nearest;
+    for (final region in _regions) {
+      for (final ring in region.polygons.expand((polygon) => polygon)) {
+        if (ring.length < 2) continue;
+        for (var index = 0; index < ring.length; index++) {
+          final start = ring[index];
+          final end = ring[(index + 1) % ring.length];
+          final distance = _pointToSegmentKm(
+            latitude,
+            longitude,
+            start,
+            end,
+          );
+          if (nearest == null || distance < nearest.distanceKm) {
+            nearest = StateBoundaryProximity(
+              state: region.name,
+              distanceKm: distance,
+            );
+          }
+        }
+      }
+    }
+    return nearest;
+  }
+
   Future<List<StateRegion>> load() async {
     _regions = await (_regionCache ??= _loadRegions());
     return _regions;
   }
 
   static Future<List<StateRegion>> _loadRegions() async {
-    final source =
-        await rootBundle.loadString('assets/data/malaysia_states.geojson');
-    final collection = jsonDecode(source) as Map<String, Object?>;
-    final regions = (collection['features'] as List<Object?>)
+    final sources = await Future.wait([
+      rootBundle.loadString('assets/data/malaysia_states.geojson'),
+      rootBundle.loadString('assets/data/malaysia_states_display.geojson'),
+    ]);
+    final collection = jsonDecode(sources[0]) as Map<String, Object?>;
+    final displayCollection = jsonDecode(sources[1]) as Map<String, Object?>;
+    final detailedRegions = (collection['features'] as List<Object?>)
         .cast<Map<Object?, Object?>>()
         .map(_parseRegion)
+        .toList(growable: false);
+    final displayByState = <String, List<List<List<GeoCoordinate>>>>{
+      for (final region in (displayCollection['features'] as List<Object?>)
+          .cast<Map<Object?, Object?>>()
+          .map(_parseRegion))
+        region.name: region.polygons,
+    };
+    final regions = detailedRegions
+        .map(
+          (region) => StateRegion(
+            name: region.name,
+            polygons: region.polygons,
+            polygonBounds: region.polygonBounds,
+            displayPolygons:
+                displayByState[region.name] ?? region.polygons,
+            bounds: region.bounds,
+            labelPoint: region.labelPoint,
+          ),
+        )
         .toList(growable: false)
       ..sort((a, b) => a.name.compareTo(b.name));
     return List<StateRegion>.unmodifiable(regions);
@@ -162,13 +240,52 @@ class StateBoundaryService {
     final points = polygons.expand((polygon) => polygon.expand((ring) => ring));
     final name = _normalizeStateName(properties['NAME_1'] as String);
     final bounds = _boundsFor(points);
+    final polygonBounds = polygons
+        .map(
+          (polygon) => _boundsFor(
+            polygon.expand((ring) => ring),
+          ),
+        )
+        .toList(growable: false);
     return StateRegion(
       name: name,
       polygons: polygons,
+      polygonBounds: polygonBounds,
+      displayPolygons: polygons,
       bounds: bounds,
       labelPoint: _labelPointFor(name, polygons, bounds),
     );
   }
+}
+
+double _pointToSegmentKm(
+  double latitude,
+  double longitude,
+  GeoCoordinate start,
+  GeoCoordinate end,
+) {
+  final longitudeScale = math.cos(latitude * math.pi / 180) * 111.32;
+  const latitudeScale = 110.57;
+  final pointX = longitude * longitudeScale;
+  final pointY = latitude * latitudeScale;
+  final startX = start.longitude * longitudeScale;
+  final startY = start.latitude * latitudeScale;
+  final endX = end.longitude * longitudeScale;
+  final endY = end.latitude * latitudeScale;
+  final deltaX = endX - startX;
+  final deltaY = endY - startY;
+  final segmentLengthSquared = deltaX * deltaX + deltaY * deltaY;
+  final projection = segmentLengthSquared == 0
+      ? 0.0
+      : (((pointX - startX) * deltaX + (pointY - startY) * deltaY) /
+              segmentLengthSquared)
+          .clamp(0.0, 1.0)
+          .toDouble();
+  final nearestX = startX + projection * deltaX;
+  final nearestY = startY + projection * deltaY;
+  return math.sqrt(
+    math.pow(pointX - nearestX, 2) + math.pow(pointY - nearestY, 2),
+  );
 }
 
 const _labelPointOverrides = <String, GeoCoordinate>{
@@ -353,6 +470,14 @@ bool _pointInPolygon(
       previousIndex = currentIndex++) {
     final current = polygon[currentIndex];
     final previous = polygon[previousIndex];
+    if (_pointOnSegment(
+      latitude,
+      longitude,
+      previous,
+      current,
+    )) {
+      return true;
+    }
     final crossesLatitude =
         (current.latitude > latitude) != (previous.latitude > latitude);
     if (!crossesLatitude) continue;
@@ -366,5 +491,25 @@ bool _pointInPolygon(
   return inside;
 }
 
-String _normalizeStateName(String state) =>
-    state == 'Pulau Pinang' ? 'Penang' : state;
+bool _pointOnSegment(
+  double latitude,
+  double longitude,
+  GeoCoordinate start,
+  GeoCoordinate end,
+) {
+  const epsilon = 1e-10;
+  final cross = (longitude - start.longitude) *
+          (end.latitude - start.latitude) -
+      (latitude - start.latitude) * (end.longitude - start.longitude);
+  if (cross.abs() > epsilon) return false;
+  return longitude >= math.min(start.longitude, end.longitude) - epsilon &&
+      longitude <= math.max(start.longitude, end.longitude) + epsilon &&
+      latitude >= math.min(start.latitude, end.latitude) - epsilon &&
+      latitude <= math.max(start.latitude, end.latitude) + epsilon;
+}
+
+String _normalizeStateName(String state) => switch (state) {
+      'Pulau Pinang' => 'Penang',
+      'Malacca' => 'Melaka',
+      _ => state,
+    };

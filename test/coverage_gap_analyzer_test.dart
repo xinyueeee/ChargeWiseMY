@@ -213,6 +213,180 @@ void main() {
     );
     expect(johor.refinementFactor, lessThan(1));
   });
+
+  test('Dense Urban uses versioned neighbourhood strategy', () {
+    final profile = AnalysisProfileConfig.resolve(
+      'Kuala Lumpur',
+      const {'Kuala Lumpur': 623, 'Putrajaya': 40},
+    );
+    expect(profile.definition.profile, AnalysisProfile.denseUrban);
+    expect(profile.nearbyRadiusKm, 3);
+    expect(profile.retainedCandidateLimit, 16);
+    expect(
+      profile.cacheToken,
+      contains(
+        'dense-strategy-'
+        '${AnalysisProfileConfig.denseUrbanStrategyVersion}',
+      ),
+    );
+  });
+
+  test('Dense Urban qualifies relative scarcity without a distance gate', () {
+    expect(
+      CoverageGapAnalyzer.denseUrbanCellQualifies(
+        localStationLocationCount: 0,
+        localScarcity: .8,
+        neighbourhoodScarcity: .4,
+      ),
+      isTrue,
+    );
+    expect(
+      CoverageGapAnalyzer.denseUrbanCellQualifies(
+        localStationLocationCount: 3,
+        localScarcity: 0,
+        neighbourhoodScarcity: .05,
+      ),
+      isFalse,
+      reason: 'A well-covered cell must not be manufactured into a gap.',
+    );
+  });
+
+  test('raw duplicates do not change Dense Urban neighbourhood results',
+      () async {
+    const unique = <ChargingStation>[
+      ChargingStation(
+        id: 'a',
+        name: 'A',
+        latitude: 3.132,
+        longitude: 101.688,
+        chargerType: 'DC',
+      ),
+      ChargingStation(
+        id: 'b',
+        name: 'B',
+        latitude: 3.150,
+        longitude: 101.706,
+        chargerType: 'AC',
+      ),
+    ];
+    const duplicates = <ChargingStation>[
+      ...unique,
+      ChargingStation(
+        id: 'a-copy-1',
+        name: 'A duplicate',
+        latitude: 3.132,
+        longitude: 101.688,
+        chargerType: 'DC',
+      ),
+      ChargingStation(
+        id: 'a-copy-2',
+        name: 'A near duplicate',
+        latitude: 3.1321,
+        longitude: 101.6881,
+        chargerType: 'DC',
+      ),
+    ];
+    const analyzer = CoverageGapAnalyzer();
+    final uniqueResult = await analyzer.analyze(
+      unique,
+      selectedState: 'Kuala Lumpur',
+      stationCountsByState: const {'Kuala Lumpur': 4, 'Putrajaya': 4},
+    );
+    final duplicateResult = await analyzer.analyze(
+      duplicates,
+      selectedState: 'Kuala Lumpur',
+      stationCountsByState: const {'Kuala Lumpur': 4, 'Putrajaya': 4},
+    );
+    expect(
+      duplicateResult.map((area) => area.id).toList(),
+      uniqueResult.map((area) => area.id).toList(),
+    );
+    expect(
+      duplicateResult.map((area) => area.nearbyStationCount).toList(),
+      uniqueResult.map((area) => area.nearbyStationCount).toList(),
+    );
+  });
+
+  test('Dense Urban can retain scarcity below old distance gate', () async {
+    const stations = <ChargingStation>[
+      ChargingStation(
+        id: 'north',
+        name: 'North',
+        latitude: 3.150,
+        longitude: 101.688,
+        chargerType: 'AC',
+      ),
+      ChargingStation(
+        id: 'south',
+        name: 'South',
+        latitude: 3.114,
+        longitude: 101.688,
+        chargerType: 'AC',
+      ),
+      ChargingStation(
+        id: 'east',
+        name: 'East',
+        latitude: 3.132,
+        longitude: 101.706,
+        chargerType: 'DC',
+      ),
+      ChargingStation(
+        id: 'west',
+        name: 'West',
+        latitude: 3.132,
+        longitude: 101.670,
+        chargerType: 'DC',
+      ),
+    ];
+    final gaps = await const CoverageGapAnalyzer().analyze(
+      stations,
+      selectedState: 'Kuala Lumpur',
+      stationCountsByState: const {'Kuala Lumpur': 4, 'Putrajaya': 4},
+    );
+    expect(gaps, isNotEmpty);
+    expect(
+      gaps.any(
+        (area) =>
+            area.analysisProfileId == AnalysisProfile.denseUrban.name &&
+            area.distance < 2.5,
+      ),
+      isTrue,
+    );
+  });
+
+  test('Dense Urban results are separated and deterministic', () async {
+    const stations = <ChargingStation>[
+      ChargingStation(
+        id: 'one',
+        name: 'One',
+        latitude: 3.139,
+        longitude: 101.6869,
+        chargerType: 'DC',
+      ),
+    ];
+    const analyzer = CoverageGapAnalyzer();
+    final first = await analyzer.analyze(
+      stations,
+      selectedState: 'Kuala Lumpur',
+    );
+    final second = await analyzer.analyze(
+      stations,
+      selectedState: 'Kuala Lumpur',
+    );
+    expect(
+      first.map((area) => area.id).toList(),
+      second.map((area) => area.id).toList(),
+    );
+    final separation = AnalysisProfileConfig.resolve(
+      'Kuala Lumpur',
+      const {},
+    ).candidateSeparationKm;
+    for (var a = 0; a < first.length; a++) {
+      for (var b = a + 1; b < first.length; b++) {
+        expect(_distanceKm(first[a], first[b]), greaterThanOrEqualTo(separation));
+      }
+    }
+  });
 }
 
 class _CountingCoverageGapAnalyzer extends CoverageGapAnalyzer {

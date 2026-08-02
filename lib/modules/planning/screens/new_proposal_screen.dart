@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../models/proposal.dart';
+import '../services/proposal_location_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import 'proposal_location_map_screen.dart';
 
 class NewProposalScreen extends StatefulWidget {
   const NewProposalScreen({
@@ -22,13 +22,13 @@ class NewProposalScreen extends StatefulWidget {
 
 class _NewProposalScreenState extends State<NewProposalScreen> {
   final _formKey = GlobalKey<FormState>();
+  final ProposalLocationService _locations = ProposalLocationService();
+  late final TextEditingController _nameController;
   late final TextEditingController _reasonController;
-  late final TextEditingController _addressController;
-  late final TextEditingController _latitudeController;
-  late final TextEditingController _longitudeController;
-  late List<Proposal> _previewProposals;
   late String _demand;
   late String _chargerType;
+  ProposalLocationSelection? _selection;
+  bool _preparingLocation = false;
   bool _submitting = false;
 
   bool get _editing => widget.proposal != null;
@@ -37,35 +37,41 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   void initState() {
     super.initState();
     final proposal = widget.proposal;
+    _nameController = TextEditingController(text: proposal?.city);
     _reasonController = TextEditingController(text: proposal?.description);
-    _addressController = TextEditingController(text: proposal?.city);
-    _latitudeController = TextEditingController(
-      text: proposal?.latitude?.toStringAsFixed(6) ?? '',
-    );
-    _longitudeController = TextEditingController(
-      text: proposal?.longitude?.toStringAsFixed(6) ?? '',
-    );
     _demand = proposal?.demand ?? 'Medium';
     _chargerType = proposal?.charger ?? 'AC Charger';
-    _previewProposals = proposal == null
-        ? const <Proposal>[]
-        : List<Proposal>.unmodifiable([proposal]);
+    if (proposal?.latitude != null && proposal?.longitude != null) {
+      _preparingLocation = true;
+      _resolveSavedLocation(proposal!.latitude!, proposal.longitude!);
+    }
+  }
+
+  Future<void> _resolveSavedLocation(double latitude, double longitude) async {
+    try {
+      final selection = await _locations.resolve(latitude, longitude);
+      if (!mounted) return;
+      setState(() {
+        _selection = selection;
+        _preparingLocation = false;
+      });
+    } catch (error, stackTrace) {
+      debugPrint('Saved proposal location preparation failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() => _preparingLocation = false);
+    }
   }
 
   @override
   void dispose() {
+    _nameController.dispose();
     _reasonController.dispose();
-    _addressController.dispose();
-    _latitudeController.dispose();
-    _longitudeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final proposal = widget.proposal;
-    final initialLatitude = proposal?.latitude ?? 4.2105;
-    final initialLongitude = proposal?.longitude ?? 101.9758;
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     return Scaffold(
       appBar: AppBar(
@@ -95,107 +101,39 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
               ),
               planningSectionGap,
               const PlanningSectionTitle(
-                'Location',
+                'Proposal details',
                 subtitle: 'Required fields are marked with *',
               ),
               const SizedBox(height: 10),
               AppCard(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: MapPanel(
-                        height: 190,
-                        proposals: _previewProposals,
-                        onTap: _selectMapLocation,
-                        initialTarget: LatLng(
-                          initialLatitude,
-                          initialLongitude,
-                        ),
-                        initialZoom: proposal == null ? 5.5 : 13,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Tap the map to choose coordinates, or enter them below.',
-                      style: TextStyle(
-                        color: planningMutedTextColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
                     TextFormField(
-                      controller: _addressController,
+                      controller: _nameController,
+                      enabled: !_submitting,
                       textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(
-                        labelText: 'Address or area *',
-                        hintText: 'Example: Kampar, Perak',
-                        prefixIcon: Icon(Icons.location_on_outlined),
+                        labelText: 'Proposal name *',
+                        hintText: 'Example: Kampar community charger',
+                        prefixIcon: Icon(Icons.edit_location_alt_outlined),
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Enter the proposed address or area.';
+                        final name = value?.trim() ?? '';
+                        if (name.isEmpty) return 'Enter a proposal name.';
+                        if (name.length < 3) {
+                          return 'Use at least 3 characters.';
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final latitudeField = _coordinateField(
-                          controller: _latitudeController,
-                          label: 'Latitude *',
-                          minimum: -90,
-                          maximum: 90,
-                        );
-                        final longitudeField = _coordinateField(
-                          controller: _longitudeController,
-                          label: 'Longitude *',
-                          minimum: -180,
-                          maximum: 180,
-                        );
-                        if (constraints.maxWidth < 420) {
-                          return Column(
-                            children: [
-                              latitudeField,
-                              const SizedBox(height: 12),
-                              longitudeField,
-                            ],
-                          );
-                        }
-                        return Row(
-                          children: [
-                            Expanded(child: latitudeField),
-                            const SizedBox(width: 12),
-                            Expanded(child: longitudeField),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Coordinates are stored to six decimal places for a readable, precise location.',
-                      style: TextStyle(
-                        color: planningMutedTextColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              planningSectionGap,
-              const PlanningSectionTitle('Proposal details'),
-              const SizedBox(height: 10),
-              AppCard(
-                child: Column(
-                  children: [
                     DropdownButtonFormField<String>(
                       value: _chargerType,
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Charger type *',
+                        labelText: 'Proposal category *',
                         prefixIcon: Icon(Icons.electrical_services_outlined),
                         border: OutlineInputBorder(),
                       ),
@@ -211,18 +149,18 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                       ],
                       onChanged: _submitting
                           ? null
-                          : (value) =>
-                              setState(() => _chargerType = value!),
+                          : (value) => setState(() => _chargerType = value!),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _reasonController,
+                      enabled: !_submitting,
                       minLines: 4,
                       maxLines: 6,
                       maxLength: 300,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: const InputDecoration(
-                        labelText: 'Reason for proposal *',
+                        labelText: 'Description *',
                         hintText:
                             'Explain the infrastructure limitation at this location.',
                         alignLabelWithHint: true,
@@ -231,7 +169,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                       validator: (value) {
                         final reason = value?.trim() ?? '';
                         if (reason.isEmpty) {
-                          return 'Explain why this location needs a station.';
+                          return 'Describe why this location needs a station.';
                         }
                         if (reason.length < 20) {
                           return 'Provide at least 20 characters of context.';
@@ -242,6 +180,10 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                   ],
                 ),
               ),
+              planningSectionGap,
+              const PlanningSectionTitle('Location'),
+              const SizedBox(height: 10),
+              AppCard(child: _buildLocationContent()),
               planningSectionGap,
               const PlanningSectionTitle(
                 'Expected usage',
@@ -316,70 +258,134 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
     );
   }
 
-  Widget _coordinateField({
-    required TextEditingController controller,
-    required String label,
-    required double minimum,
-    required double maximum,
-  }) =>
-      TextFormField(
-        controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(
-          decimal: true,
-          signed: true,
+  Widget _buildLocationContent() {
+    if (_preparingLocation) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Expanded(child: Text('Preparing saved location…')),
+          ],
         ),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d{0,6}')),
-        ],
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-        validator: (value) {
-          final coordinate = double.tryParse(value?.trim() ?? '');
-          if (coordinate == null) return 'Enter a valid number.';
-          if (coordinate < minimum || coordinate > maximum) {
-            return 'Must be $minimum to $maximum.';
-          }
-          return null;
-        },
       );
-
-  void _selectMapLocation(LatLng location) {
-    if (_submitting) return;
-    _latitudeController.text = location.latitude.toStringAsFixed(6);
-    _longitudeController.text = location.longitude.toStringAsFixed(6);
-    final existing = widget.proposal;
-    final preview = Proposal(
-      id: existing?.id ?? 'draft_selection',
-      city: _addressController.text.trim().isEmpty
-          ? 'Selected proposal location'
-          : _addressController.text.trim(),
-      description: _reasonController.text.trim(),
-      supports: existing?.supports ?? 0,
-      status: existing?.status ?? 'Pending',
-      area: existing?.area ?? 'Residential Area',
-      charger: _chargerType,
-      distance: existing?.distance ?? 0,
-      demand: _demand,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      reaction: existing?.reaction ?? 0,
+    }
+    final selection = _selection;
+    if (selection == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.location_on_outlined, color: green),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Choose a point within Malaysia. The state and nearest town will be identified automatically.',
+                  style: TextStyle(color: planningMutedTextColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: _submitting ? null : _chooseLocation,
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Choose Location on Map'),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          selection.locationLabel,
+          style: const TextStyle(
+            color: planningTextColor,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _LocationReviewRow(label: 'State', value: selection.state),
+        const Divider(height: 1),
+        _LocationReviewRow(
+          label: 'Nearest town',
+          value: selection.nearestTown,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Coordinates recorded internally.',
+          style: TextStyle(
+            color: planningMutedTextColor,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _submitting ? null : _chooseLocation,
+          icon: const Icon(Icons.edit_location_alt_outlined),
+          label: const Text('Change Location'),
+        ),
+      ],
     );
-    setState(() {
-      _previewProposals = List<Proposal>.unmodifiable([preview]);
-    });
+  }
+
+  Future<void> _chooseLocation() async {
+    final selected = await Navigator.push<ProposalLocationSelection>(
+      context,
+      MaterialPageRoute<ProposalLocationSelection>(
+        builder: (_) => ProposalLocationMapScreen(
+          initialSelection: _selection,
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() => _selection = selected);
+    }
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() || _submitting) return;
+    if (_submitting || !_formKey.currentState!.validate()) return;
+    final selection = _selection;
+    if (selection == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Choose a valid location within Malaysia.'),
+        ),
+      );
+      return;
+    }
+    final viewModel = context.read<PlanningViewModel>();
+    if (_locations.isDuplicate(
+      selection,
+      _nameController.text,
+      viewModel.proposals,
+      excludedProposalId: widget.proposal?.id,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'A proposal with this name already exists at this location.',
+          ),
+        ),
+      );
+      return;
+    }
+
     FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
-
     final existing = widget.proposal;
     final proposal = Proposal(
       id: existing?.id ?? '',
-      city: _addressController.text.trim(),
+      city: _nameController.text.trim(),
       description: _reasonController.text.trim(),
       supports: existing?.supports ?? 0,
       status: existing?.status ?? 'Pending',
@@ -387,13 +393,17 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       charger: _chargerType,
       distance: existing?.distance ?? 0,
       demand: _demand,
-      latitude: double.parse(_latitudeController.text.trim()),
-      longitude: double.parse(_longitudeController.text.trim()),
+      locationLabel: selection.locationLabel,
+      state: selection.state,
+      nearestTown: selection.nearestTown,
+      createdAt: existing?.createdAt,
+      createdBy: existing?.createdBy ?? 'ChargeWise Demo User',
+      latitude: selection.latitude,
+      longitude: selection.longitude,
       reaction: existing?.reaction ?? 0,
     );
 
     try {
-      final viewModel = context.read<PlanningViewModel>();
       if (_editing) {
         await viewModel.updateProposal(proposal);
       } else {
@@ -403,6 +413,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          behavior: SnackBarBehavior.floating,
           content: Text(
             _editing
                 ? 'Proposal updated successfully.'
@@ -418,6 +429,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          behavior: SnackBarBehavior.floating,
           content: Text(
             'Unable to save the proposal. Check your connection and try again.',
           ),
@@ -425,4 +437,35 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       );
     }
   }
+}
+
+class _LocationReviewRow extends StatelessWidget {
+  const _LocationReviewRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: planningMutedTextColor),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
 }

@@ -1,14 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/navigation/app_route_observer.dart';
 import '../models/proposal.dart';
+import '../services/proposal_location_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import 'ai_planning_screen.dart';
 import 'new_proposal_screen.dart';
+import 'proposal_location_map_screen.dart';
 
 class ProposalDetailsScreen extends StatefulWidget {
   const ProposalDetailsScreen({
@@ -23,58 +23,11 @@ class ProposalDetailsScreen extends StatefulWidget {
       _ProposalDetailsScreenState();
 }
 
-class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
-    with RouteAware {
-  late final List<Proposal> _mapProposals;
-  PageRoute<dynamic>? _subscribedRoute;
-  bool _mapMounted = true;
+class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
   bool _deleting = false;
   bool _reacting = false;
 
   Proposal get proposal => widget.proposal;
-
-  @override
-  void initState() {
-    super.initState();
-    _mapProposals = proposal.latitude == null || proposal.longitude == null
-        ? const <Proposal>[]
-        : List<Proposal>.unmodifiable([proposal]);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route is! PageRoute<dynamic> ||
-        identical(route, _subscribedRoute)) {
-      return;
-    }
-    if (_subscribedRoute != null) {
-      appRouteObserver.unsubscribe(this);
-    }
-    _subscribedRoute = route;
-    appRouteObserver.subscribe(this, route);
-  }
-
-  @override
-  void didPushNext() {
-    if (_mapMounted && mounted) {
-      setState(() => _mapMounted = false);
-    }
-  }
-
-  @override
-  void didPopNext() {
-    if (!_mapMounted && mounted) {
-      setState(() => _mapMounted = true);
-    }
-  }
-
-  @override
-  void dispose() {
-    appRouteObserver.unsubscribe(this);
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,27 +146,44 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
             planningSectionGap,
             const PlanningSectionTitle('Location'),
             const SizedBox(height: 10),
-            if (proposal.latitude != null &&
-                proposal.longitude != null &&
-                _mapMounted)
-              MapPanel(
-                height: 230,
-                proposals: _mapProposals,
-                initialTarget: LatLng(
-                  proposal.latitude!,
-                  proposal.longitude!,
-                ),
-                initialZoom: 13,
-              )
-            else if (proposal.latitude == null ||
-                proposal.longitude == null)
+            if (proposal.latitude == null || proposal.longitude == null)
               const PlanningEmptyState(
                 icon: Icons.location_off_outlined,
                 title: 'Location unavailable',
                 message:
                     'This proposal does not contain valid map coordinates.',
+              )
+            else
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      proposal.locationLabel.isEmpty
+                          ? 'Selected proposal location'
+                          : proposal.locationLabel,
+                      style: const TextStyle(
+                        color: planningTextColor,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _InformationRow('State', proposal.state ?? 'Unavailable'),
+                    const Divider(height: 1),
+                    _InformationRow(
+                      'Nearest town',
+                      proposal.nearestTown ?? 'Unavailable',
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _viewOnMap,
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('View on Map'),
+                    ),
+                  ],
+                ),
               ),
-            if (!_mapMounted) const SizedBox(height: 230),
             planningSectionGap,
             const PlanningSectionTitle('Description'),
             const SizedBox(height: 10),
@@ -234,21 +204,39 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
             AppCard(
               child: Column(
                 children: [
+                  _InformationRow('Status', proposal.status),
+                  const Divider(height: 1),
+                  _InformationRow('Created', _formatDate(proposal.createdAt)),
+                  const Divider(height: 1),
+                  _InformationRow('Created by', proposal.createdBy),
+                  const Divider(height: 1),
                   _InformationRow('Expected usage', proposal.demand),
                   const Divider(height: 1),
                   _InformationRow('Charger type', proposal.charger),
-                  if (proposal.latitude != null &&
-                      proposal.longitude != null) ...[
-                    const Divider(height: 1),
+                ],
+              ),
+            ),
+            if (proposal.latitude != null && proposal.longitude != null) ...[
+              const SizedBox(height: 10),
+              AppCard(
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: 8),
+                  leading: const Icon(Icons.code_outlined, color: green),
+                  title: const Text(
+                    'Technical Information',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  children: [
                     _InformationRow(
                       'Coordinates',
                       '${proposal.latitude!.toStringAsFixed(6)}, '
                           '${proposal.longitude!.toStringAsFixed(6)}',
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
+            ],
             planningSectionGap,
             Row(
               children: [
@@ -310,6 +298,50 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
     );
   }
 
+  Future<void> _viewOnMap() async {
+    final latitude = proposal.latitude;
+    final longitude = proposal.longitude;
+    if (latitude == null || longitude == null) return;
+    final selection = ProposalLocationSelection(
+      latitude: latitude,
+      longitude: longitude,
+      state: proposal.state ?? 'Malaysia',
+      nearestTown: proposal.nearestTown ?? 'Selected location',
+      locationLabel: proposal.locationLabel.isEmpty
+          ? 'Selected proposal location'
+          : proposal.locationLabel,
+    );
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => ProposalLocationMapScreen(
+          initialSelection: selection,
+          readOnly: true,
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'Unavailable';
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final local = date.toLocal();
+    return '${local.day} ${months[local.month - 1]} ${local.year}';
+  }
+
   Future<void> _react({required bool like}) async {
     setState(() => _reacting = true);
     try {
@@ -352,9 +384,10 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete proposal?'),
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.red),
+        title: const Text('Permanently delete proposal?'),
         content: Text(
-          'This permanently removes the proposal for ${proposal.city}. '
+          '“${proposal.city}” will be removed from the proposal list. '
           'This action cannot be undone.',
         ),
         actions: [
@@ -365,7 +398,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            child: const Text('Delete permanently'),
           ),
         ],
       ),
@@ -377,7 +410,10 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen>
       await context.read<PlanningViewModel>().deleteProposal(proposal.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Proposal deleted.')),
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Proposal deleted successfully.'),
+        ),
       );
       Navigator.of(context).pop();
     } catch (error, stackTrace) {

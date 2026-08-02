@@ -14,6 +14,10 @@ class AnalysisProfileDefinition {
     required this.minimumNearestStationKm,
     required this.candidateSeparationKm,
     required this.retainedCandidateLimit,
+    required this.preferredRoadDistanceMeters,
+    required this.maximumRoadDistanceMeters,
+    required this.maximumSettlementDistanceKm,
+    required this.maximumResultsPerSettlement,
   });
 
   final AnalysisProfile profile;
@@ -24,6 +28,10 @@ class AnalysisProfileDefinition {
   final double minimumNearestStationKm;
   final double candidateSeparationKm;
   final int retainedCandidateLimit;
+  final double preferredRoadDistanceMeters;
+  final double maximumRoadDistanceMeters;
+  final double maximumSettlementDistanceKm;
+  final int maximumResultsPerSettlement;
 
   String get id => profile.name;
 }
@@ -39,6 +47,10 @@ class ResolvedAnalysisProfile {
     required this.minimumNearestStationKm,
     required this.candidateSeparationKm,
     required this.retainedCandidateLimit,
+    required this.preferredRoadDistanceMeters,
+    required this.maximumRoadDistanceMeters,
+    required this.maximumSettlementDistanceKm,
+    required this.maximumResultsPerSettlement,
   });
 
   final AnalysisProfileDefinition definition;
@@ -50,12 +62,25 @@ class ResolvedAnalysisProfile {
   final double minimumNearestStationKm;
   final double candidateSeparationKm;
   final int retainedCandidateLimit;
+  final double preferredRoadDistanceMeters;
+  final double maximumRoadDistanceMeters;
+  final double maximumSettlementDistanceKm;
+  final int maximumResultsPerSettlement;
 
   double get gridSpacingKm => gridSpacingDegrees * 111;
 
   String get cacheToken =>
       '${definition.id}|profile-${AnalysisProfileConfig.profileVersion}|'
-      'refinement-${AnalysisProfileConfig.refinementVersion}';
+      'refinement-${AnalysisProfileConfig.refinementVersion}|'
+      'dense-strategy-${AnalysisProfileConfig.denseUrbanStrategyVersion}|'
+      'land-$malaysiaStateBoundaryDatasetVersion|'
+      'roads-${AnalysisProfileConfig.roadDatasetVersion}|'
+      'road-filter-${AnalysisProfileConfig.roadFilterVersion}|'
+      'road-threshold-${AnalysisProfileConfig.roadThresholdVersion}|'
+      'settlements-${AnalysisProfileConfig.settlementDatasetVersion}|'
+      'settlement-filter-${AnalysisProfileConfig.settlementFilterVersion}|'
+      'settlement-threshold-'
+      '${AnalysisProfileConfig.settlementThresholdVersion}';
 
   Map<String, Object> toPayload() => <String, Object>{
         'profileId': definition.id,
@@ -68,6 +93,10 @@ class ResolvedAnalysisProfile {
         'minimumNearestStationKm': minimumNearestStationKm,
         'candidateSeparationKm': candidateSeparationKm,
         'retainedCandidateLimit': retainedCandidateLimit,
+        'preferredRoadDistanceMeters': preferredRoadDistanceMeters,
+        'maximumRoadDistanceMeters': maximumRoadDistanceMeters,
+        'maximumSettlementDistanceKm': maximumSettlementDistanceKm,
+        'maximumResultsPerSettlement': maximumResultsPerSettlement,
       };
 }
 
@@ -76,6 +105,14 @@ class AnalysisProfileConfig {
 
   static const int profileVersion = 1;
   static const int refinementVersion = 1;
+  static const int denseUrbanStrategyVersion = 2;
+  static const String roadDatasetVersion = 'unavailable-v1';
+  static const int roadFilterVersion = 1;
+  static const int roadThresholdVersion = 1;
+  static const String settlementDatasetVersion =
+      'dosm-geonames-district-centres-my-v2';
+  static const int settlementFilterVersion = 1;
+  static const int settlementThresholdVersion = 1;
   static const double minimumRefinementFactor = .82;
   static const double maximumRefinementFactor = 1.18;
 
@@ -86,10 +123,14 @@ class AnalysisProfileConfig {
       description:
           'Neighbourhood-level charging infrastructure coverage assessment',
       gridSpacingDegrees: .018,
-      nearbyRadiusKm: 4,
+      nearbyRadiusKm: 3,
       minimumNearestStationKm: 2.5,
-      candidateSeparationKm: 4,
-      retainedCandidateLimit: 24,
+      candidateSeparationKm: 3,
+      retainedCandidateLimit: 16,
+      preferredRoadDistanceMeters: 300,
+      maximumRoadDistanceMeters: 500,
+      maximumSettlementDistanceKm: 20,
+      maximumResultsPerSettlement: 16,
     ),
     AnalysisProfile.urban: AnalysisProfileDefinition(
       profile: AnalysisProfile.urban,
@@ -101,6 +142,10 @@ class AnalysisProfileConfig {
       minimumNearestStationKm: 8,
       candidateSeparationKm: 15,
       retainedCandidateLimit: 22,
+      preferredRoadDistanceMeters: 500,
+      maximumRoadDistanceMeters: 1000,
+      maximumSettlementDistanceKm: 20,
+      maximumResultsPerSettlement: 4,
     ),
     AnalysisProfile.regional: AnalysisProfileDefinition(
       profile: AnalysisProfile.regional,
@@ -111,6 +156,10 @@ class AnalysisProfileConfig {
       minimumNearestStationKm: 15,
       candidateSeparationKm: 35,
       retainedCandidateLimit: 20,
+      preferredRoadDistanceMeters: 1000,
+      maximumRoadDistanceMeters: 3000,
+      maximumSettlementDistanceKm: 40,
+      maximumResultsPerSettlement: 3,
     ),
   };
 
@@ -199,6 +248,12 @@ class AnalysisProfileConfig {
       candidateSeparationKm:
           definition.candidateSeparationKm * refinementFactor,
       retainedCandidateLimit: definition.retainedCandidateLimit,
+      preferredRoadDistanceMeters: definition.preferredRoadDistanceMeters,
+      maximumRoadDistanceMeters: definition.maximumRoadDistanceMeters,
+      maximumSettlementDistanceKm:
+          definition.maximumSettlementDistanceKm,
+      maximumResultsPerSettlement:
+          definition.maximumResultsPerSettlement,
     );
   }
 }
