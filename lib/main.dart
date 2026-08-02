@@ -23,7 +23,7 @@ class ChargeWiseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider(
-        creagit statuste: (_) => PlanningViewModel(PlanningRepository())..load(),
+        create: (_) => PlanningViewModel(PlanningRepository())..load(),
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'ChargeWise MY',
