@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/proposal.dart';
+import '../services/analysis_profile.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import 'priority_area_map_screen.dart';
@@ -29,6 +30,8 @@ class GapAnalysisScreen extends StatelessWidget {
     return Consumer<PlanningViewModel>(
       builder: (context, viewModel, _) {
         final areas = viewModel.priorityAreas;
+        final denseUrban = viewModel.selectedAnalysisProfile.profile ==
+            AnalysisProfile.denseUrban;
         debugPrint(
           'GapAnalysisScreen reads state analysis: '
           'viewModel=${identityHashCode(viewModel)}, '
@@ -36,9 +39,17 @@ class GapAnalysisScreen extends StatelessWidget {
         );
         return Scaffold(
           appBar: AppBar(
-            title: const Text(
-              'State Gap Analysis',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+            title: Text(
+              denseUrban
+                  ? '${viewModel.selectedState} — Dense Urban Infrastructure Coverage Analysis'
+                  : 'State Gap Analysis',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             centerTitle: true,
             backgroundColor: Colors.white,
@@ -56,13 +67,29 @@ class GapAnalysisScreen extends StatelessWidget {
                         padding: planningPagePadding,
                         sliver: SliverList(
                           delegate: SliverChildListDelegate.fixed([
-                            const Text(
-                              'Coverage-gap analysis based only on existing '
-                              'charging-station coordinates and proximity.',
+                            Text(
+                              denseUrban
+                                  ? 'Neighbourhood-level assessment based on '
+                                      'charging-location distribution.'
+                                  : 'Coverage-gap analysis based only on existing '
+                                      'charging-station coordinates and proximity.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: planningMutedTextColor,
                                 height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Results prioritise charging-coverage gaps within '
+                              'recognised settlement planning areas. Exact site '
+                              'accessibility and land suitability require '
+                              'further assessment.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: planningMutedTextColor,
+                                fontSize: 12,
+                                height: 1.35,
                               ),
                             ),
                             planningSectionGap,
@@ -151,6 +178,40 @@ class GapAnalysisScreen extends StatelessWidget {
                                   ? null
                                   : viewModel.retrySelectedStateAnalysis,
                             ),
+                            const SizedBox(height: 10),
+                            const AppCard(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.route_outlined,
+                                    color: Colors.orange,
+                                    size: 21,
+                                  ),
+                                  SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Road-access validation is unavailable '
+                                      'for this analysis. Results represent '
+                                      'coverage-gap areas, not approved sites. '
+                                      'Road proximity, land ownership, parking, '
+                                      'electrical capacity, environmental '
+                                      'restrictions, and planning approval '
+                                      'require separate assessment.',
+                                      style: TextStyle(
+                                        color: planningMutedTextColor,
+                                        fontSize: 12,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             if (!viewModel.analyzingGaps &&
                                 viewModel.analysisErrorMessage == null) ...[
                               const SizedBox(height: 10),
@@ -219,9 +280,15 @@ class GapAnalysisScreen extends StatelessWidget {
                                     ),
                                     StatisticCard(
                                       width: double.infinity,
-                                      value: viewModel.averageCoverageScore
-                                          .toStringAsFixed(1),
-                                      label: 'Average Coverage Score',
+                                      value: denseUrban
+                                          ? viewModel
+                                              .averageLocalStationLocationCount
+                                              .toStringAsFixed(1)
+                                          : viewModel.averageCoverageScore
+                                              .toStringAsFixed(1),
+                                      label: denseUrban
+                                          ? 'Average Sites per Gap Cell'
+                                          : 'Average Coverage Score',
                                       icon: Icons.analytics_outlined,
                                       color: Colors.deepPurple,
                                     ),
@@ -260,10 +327,13 @@ class GapAnalysisScreen extends StatelessWidget {
                             child: PlanningEmptyState(
                               icon: Icons.check_circle_outline,
                               title: 'No infrastructure gaps detected',
-                              message: 'Every sampled land location in '
-                                  '${viewModel.selectedState} satisfies the '
-                                  'configured geographical coverage criteria. '
-                                  'No thresholds were relaxed to force a result.',
+                              message: denseUrban
+                                  ? 'No neighbourhood cells met the configured '
+                                      'Dense Urban infrastructure-scarcity criteria.'
+                                  : 'Every sampled land location in '
+                                      '${viewModel.selectedState} satisfies the '
+                                      'configured geographical coverage criteria. '
+                                      'No thresholds were relaxed to force a result.',
                             ),
                           ),
                         )
@@ -397,6 +467,33 @@ class _PriorityGapCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          if (area.settlementEligibilityValidated &&
+              area.nearestSettlementName != null &&
+              area.distanceToSettlementKm != null) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_city_outlined,
+                  size: 17,
+                  color: green,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Near ${area.nearestSettlementName} · '
+                    '${area.distanceToSettlementKm!.toStringAsFixed(1)} km '
+                    'from settlement centre',
+                    style: const TextStyle(
+                      color: planningMutedTextColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
           Wrap(
             spacing: 14,
             runSpacing: 8,
@@ -421,6 +518,13 @@ class _PriorityGapCard extends StatelessWidget {
                     '${area.nearbyStationCount} station locations within '
                     '${area.nearbyRadiusKm.toStringAsFixed(1)} km',
               ),
+              if (area.analysisProfileId == AnalysisProfile.denseUrban.name ||
+                  area.analysisProfileId == AnalysisProfile.urban.name)
+                _GapMetric(
+                  icon: Icons.grid_view_outlined,
+                  value: '${area.localStationLocationCount} station '
+                      'locations in cell',
+                ),
             ],
           ),
           const SizedBox(height: 8),

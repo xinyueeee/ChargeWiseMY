@@ -17,12 +17,22 @@ class CoverageGapAnalyzer {
       'site-dedup-v1-radius75m';
 
   static Future<List<Map<String, Object?>>>? _landBoundariesCache;
+  static Future<List<Map<String, Object?>>>? _settlementsCache;
 
   static const double gridSpacingDegrees = 0.18;
   static const double nearbyRadiusKm = 25;
   static const double minimumNearestStationKm = 15;
   static const double minimumSeparationKm = 35;
   static const int maximumResults = 20;
+
+  @visibleForTesting
+  static bool denseUrbanCellQualifies({
+    required int localStationLocationCount,
+    required double localScarcity,
+    required double neighbourhoodScarcity,
+  }) =>
+      localStationLocationCount <= 1 &&
+      (localScarcity >= .30 || neighbourhoodScarcity >= .30);
 
   Future<List<GapArea>> analyze(
     List<ChargingStation> stations, {
@@ -43,6 +53,7 @@ class CoverageGapAnalyzer {
       stationCountsByState,
     );
     final landBoundaries = await _loadLandBoundaries();
+    final settlements = await _loadSettlements();
     final result = await compute(
       _runCoverageGapAnalysis,
       <String, Object>{
@@ -51,6 +62,7 @@ class CoverageGapAnalyzer {
             <double>[station.latitude, station.longitude],
         ],
         'landBoundaries': landBoundaries,
+        'settlements': settlements,
         'selectedState': selectedState,
         'analysisParameters': resolvedProfile.toPayload(),
       },
@@ -60,6 +72,16 @@ class CoverageGapAnalyzer {
     final areaMaps = (result['areas'] as List<Object?>)
         .cast<Map<Object?, Object?>>();
     final areas = areaMaps.map(GapArea.fromAnalysis).toList(growable: false);
+    final roadValidatedCandidates =
+        areas.where((area) => area.roadAccessibilityValidated).length;
+    final adjustedTowardRoad =
+        areas.where((area) => area.coordinateAdjusted).length;
+    final highPriorityCount =
+        areas.where((area) => area.priority == 'High').length;
+    final mediumPriorityCount =
+        areas.where((area) => area.priority == 'Medium').length;
+    final lowPriorityCount =
+        areas.where((area) => area.priority == 'Low').length;
     final bruteForceDistanceChecks =
         (result['stationCount'] as int) * (result['gridCellCount'] as int);
     final indexedDistanceChecks = result['distanceCheckCount'] as int;
@@ -70,6 +92,7 @@ class CoverageGapAnalyzer {
     debugPrint(
       'Analysis profile: state=$selectedState, '
       'profile=${resolvedProfile.definition.displayName}, '
+      'landBoundaryDataset=$malaysiaStateBoundaryDatasetVersion, '
       'stationRecordCount=${result['selectedStateStationRecordCount']}, '
       'uniqueCoordinates=${result['selectedStateUniqueCoordinateCount']}, '
       'distinctSites50m=${result['selectedStateSiteCount50m']}, '
@@ -109,6 +132,74 @@ class CoverageGapAnalyzer {
       '${areas.length} final non-overlapping priority areas returned; '
       '${stopwatch.elapsedMilliseconds}ms analysis duration.',
     );
+    debugPrint(
+      'Road-access diagnostics: '
+      'dataset=${AnalysisProfileConfig.roadDatasetVersion}, '
+      'coverageQualifiedCandidates=${result['candidateCount']}, '
+      'roadValidatedCandidates=$roadValidatedCandidates, '
+      'adjustedTowardRoad=$adjustedTowardRoad, '
+      'rejectedRoadTooFar=0, rejectedRoadOutsideState=0, '
+      'rejectedNoValidRoadReplacement=0, finalRetained=${areas.length}.',
+    );
+    debugPrint(
+      'Settlement-eligibility diagnostics: '
+      'dataset=${AnalysisProfileConfig.settlementDatasetVersion}, '
+      'generatedCandidates=${result['candidateCount']}, '
+      'landValidCandidates=${result['landValidatedCount']}, '
+      'rejectedTooFarFromSettlement='
+      '${result['rejectedTooFarFromSettlement'] ?? 0}, '
+      'replacementCandidatesEvaluated='
+      '${result['replacementCandidatesEvaluated'] ?? 0}, '
+      'replacementCandidatesAccepted='
+      '${result['replacementCandidatesAccepted'] ?? 0}, '
+      'rejectedNoSettlementRelevantPoint='
+      '${result['rejectedNoSettlementRelevantPoint'] ?? 0}, '
+      'retainedAfterCoverage=${result['retainedAfterCoverage'] ?? 0}, '
+      'retainedAfterSeparation='
+      '${result['retainedAfterSeparation'] ?? areas.length}, '
+      'finalRetained=${areas.length}, '
+      'groupedBySettlement=${result['settlementRetainedCounts'] ?? {}}.',
+    );
+    debugPrint(
+      'State gap-quality audit: state=$selectedState, '
+      'stationRecords=${result['selectedStateStationRecordCount']}, '
+      'distinctStationLocations75m=${result['selectedStateSiteCount75m']}, '
+      'generatedCandidatesOrCells=${result['gridCellCount']}, '
+      'landValidCandidates=${result['landValidatedCount']}, '
+      'settlementEligibleCandidates='
+      '${result['settlementEligibleCandidates'] ?? 0}, '
+      'rejectedByCoverage=${result['rejectedByCoverageCount']}, '
+      'rejectedBySettlementDistance='
+      '${result['rejectedTooFarFromSettlement'] ?? 0}, '
+      'rejectedBySeparation=${result['rejectedBySeparationCount']}, '
+      'retainedGaps=${areas.length}, high=$highPriorityCount, '
+      'medium=$mediumPriorityCount, low=$lowPriorityCount.',
+    );
+    if (resolvedProfile.definition.profile == AnalysisProfile.denseUrban) {
+      debugPrint(
+        'Dense Urban diagnostics: '
+        'stationRecordCount=${result['selectedStateStationRecordCount']}, '
+        'distinctStationSiteCount=${result['selectedStateSiteCount75m']}, '
+        'generatedNeighbourhoodCells=${result['gridCellCount']}, '
+        'landValidCells=${result['landValidGridCellCount']}, '
+        'cellsWithZeroSites=${result['cellsWithZeroSites']}, '
+        'cellsWithOneSite=${result['cellsWithOneSite']}, '
+        'cellsWithTwoOrMoreSites=${result['cellsWithTwoOrMoreSites']}, '
+        'localSiteCountDistribution='
+        '${result['localSiteCountDistribution']}, '
+        'neighbourhoodSiteCountDistribution='
+        '${result['neighbourhoodSiteCountDistribution']}, '
+        'cellsRejectedAsWellCovered='
+        '${result['cellsRejectedAsWellCovered']}, '
+        'cellsRejectedAsTinyBoundaryFragments='
+        '${result['cellsRejectedAsTinyBoundaryFragments']}, '
+        'cellsMergedWithAdjacentCandidates='
+        '${result['cellsMergedWithAdjacentCandidates']}, '
+        'candidatesBeforeSeparation=${result['candidateCount']}, '
+        'finalRetainedCandidates=${areas.length}, '
+        'analysisDuration=${stopwatch.elapsedMilliseconds}ms.',
+      );
+    }
     for (final diagnostic
         in (result['landDiagnostics'] as List<Object?>)
             .cast<Map<Object?, Object?>>()) {
@@ -155,6 +246,49 @@ class CoverageGapAnalyzer {
         '${closestSelectedAreaKm?.toStringAsFixed(1) ?? 'n/a'}km, '
         'score=${area.priorityScore.toStringAsFixed(0)}.',
       );
+      debugPrint(
+        'Road-access retained #${index + 1}: '
+        'originalCoordinate='
+        '(${area.originalAnalyticalLatitude?.toStringAsFixed(5)}, '
+        '${area.originalAnalyticalLongitude?.toStringAsFixed(5)}), '
+        'adjustedCoordinate=(${area.latitude?.toStringAsFixed(5)}, '
+        '${area.longitude?.toStringAsFixed(5)}), '
+        'nearestRoadDistanceMeters='
+        '${area.nearestRoadDistanceMeters?.toStringAsFixed(1) ?? 'unavailable'}, '
+        'adjustmentDistanceMeters='
+        '${area.adjustmentDistanceMeters.toStringAsFixed(1)}, '
+        'profile=${area.analysisProfileId}, '
+        'validated=${area.roadAccessibilityValidated}, '
+        'priorityScore=${area.priorityScore.toStringAsFixed(0)}.',
+      );
+      debugPrint(
+        'Settlement retained #${index + 1}: '
+        'coordinate=(${area.latitude?.toStringAsFixed(5)}, '
+        '${area.longitude?.toStringAsFixed(5)}), '
+        'nearestSettlement=${area.nearestSettlementName ?? 'unavailable'}, '
+        'settlementCategory='
+        '${area.nearestSettlementCategory ?? 'unavailable'}, '
+        'distanceToSettlementKm='
+        '${area.distanceToSettlementKm?.toStringAsFixed(1) ?? 'unavailable'}, '
+        'nearestStationDistanceKm=${area.distance.toStringAsFixed(1)}, '
+        'nearbyStationLocations=${area.nearbyStationCount}, '
+        'priorityScore=${area.priorityScore.toStringAsFixed(0)}.',
+      );
+      if (area.analysisProfileId == AnalysisProfile.denseUrban.name) {
+        debugPrint(
+          'Dense Urban selected #${index + 1}: '
+          'coordinate=(${area.latitude?.toStringAsFixed(5)}, '
+          '${area.longitude?.toStringAsFixed(5)}), '
+          'localSites=${area.localStationLocationCount}, '
+          'nearbySites=${area.nearbyStationCount}, '
+          'nearestSite=${area.distance.toStringAsFixed(2)}km, '
+          'neighbouringCellAverage='
+          '${area.neighbouringCellAverage.toStringAsFixed(2)}, '
+          'rawSeverity=${area.coverageScore.toStringAsFixed(2)}, '
+          'normalizedScore=${area.priorityScore.toStringAsFixed(0)}, '
+          'priority=${area.priority}.',
+        );
+      }
     }
     return areas;
   }
@@ -169,6 +303,17 @@ class CoverageGapAnalyzer {
           .toList(growable: false);
     });
   }
+
+  static Future<List<Map<String, Object?>>> _loadSettlements() {
+    return _settlementsCache ??= rootBundle
+        .loadString('assets/data/malaysia_settlements.json')
+        .then((source) {
+      final document = jsonDecode(source) as Map<String, Object?>;
+      return (document['settlements'] as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .toList(growable: false);
+    });
+  }
 }
 
 Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
@@ -176,6 +321,16 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
   final parameters = _AnalysisParameters.fromPayload(
     payload['analysisParameters'] as Map<Object?, Object?>,
   );
+  final settlementsByState = <String, List<_Settlement>>{};
+  for (final settlementData in
+      (payload['settlements'] as List<Object?>).cast<Map<Object?, Object?>>()) {
+    final settlement = _Settlement.fromMap(settlementData);
+    (settlementsByState[settlement.state] ??= <_Settlement>[])
+        .add(settlement);
+  }
+  for (final settlements in settlementsByState.values) {
+    settlements.sort((a, b) => a.id.compareTo(b.id));
+  }
   final stationCoordinates = (payload['stations'] as List<Object?>)
       .cast<List<Object?>>()
       .map(
@@ -282,6 +437,22 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
     };
   }
 
+  if (parameters.profileId == AnalysisProfile.denseUrban.name ||
+      parameters.profileId == AnalysisProfile.urban.name) {
+    return _runDistributionCoverageAnalysis(
+      stationRecords: stationCoordinates,
+      stationSites: stationSites,
+      selectedStateStationCoordinates: selectedStateStationCoordinates,
+      selectedStateUniqueCoordinateCount: selectedStateUniqueCoordinateCount,
+      selectedStateSiteCount50m: selectedStateSiteCount50m,
+      selectedStateSiteCount75m: selectedStateSiteCount75m,
+      selectedStateSiteCount100m: selectedStateSiteCount100m,
+      landBoundaries: landBoundaries,
+      parameters: parameters,
+      settlementsByState: settlementsByState,
+    );
+  }
+
   final candidates = <_GapCandidate>[];
   final stationIndex = _StationSpatialIndex(stationSites);
   final analysisBounds = _boundsForLandBoundaries(landBoundaries);
@@ -294,6 +465,11 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
   var rejectedByNearbyLocationCount = 0;
   var rejectedByMinimumDistanceCount = 0;
   var rejectedBySeparationCount = 0;
+  var rejectedTooFarFromSettlement = 0;
+  var replacementCandidatesEvaluated = 0;
+  var replacementCandidatesAccepted = 0;
+  var rejectedNoSettlementRelevantPoint = 0;
+  var settlementEligibleCandidates = 0;
   final landDiagnostics = <Map<String, Object?>>[];
 
   const latitudeOrigin = .9;
@@ -386,13 +562,27 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
         );
       }
 
-      final validatedCoverage = landValidation.wasMoved
-          ? stationIndex.coverageAt(
-              landValidation.latitude!,
-              landValidation.longitude!,
-              nearbyRadiusKm: parameters.nearbyRadiusKm,
-            )
-          : coverage;
+      final settlementResult = _settlementRelevantPoint(
+        latitude: landValidation.latitude!,
+        longitude: landValidation.longitude!,
+        state: landValidation.state!,
+        settlements: settlementsByState[landValidation.state!] ?? const [],
+        landBoundaries: landBoundaries,
+        gridSpacingDegrees: gridSpacing,
+        maximumDistanceKm: parameters.maximumSettlementDistanceKm,
+      );
+      replacementCandidatesEvaluated += settlementResult.evaluatedAlternatives;
+      if (!settlementResult.isValid) {
+        rejectedTooFarFromSettlement++;
+        rejectedNoSettlementRelevantPoint++;
+        continue;
+      }
+      settlementEligibleCandidates++;
+      final validatedCoverage = stationIndex.coverageAt(
+        settlementResult.latitude!,
+        settlementResult.longitude!,
+        nearbyRadiusKm: parameters.nearbyRadiusKm,
+      );
       if (validatedCoverage.nearbyStationCount > 1) {
         rejectedByNearbyLocationCount++;
         rejectedByCoverageCount++;
@@ -404,19 +594,16 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
         rejectedByCoverageCount++;
         continue;
       }
+      if (settlementResult.wasAdjusted) replacementCandidatesAccepted++;
 
       final rawScore =
           validatedCoverage.nearestStationKm * 2.4 +
               (2 - validatedCoverage.nearbyStationCount) * 15;
-      final locality = _nearestLocality(
-        landValidation.latitude!,
-        landValidation.longitude!,
-        state: landValidation.state!,
-      );
+      final locality = settlementResult.settlement!.asLocality;
       candidates.add(
         _GapCandidate(
-          latitude: landValidation.latitude!,
-          longitude: landValidation.longitude!,
+          latitude: settlementResult.latitude!,
+          longitude: settlementResult.longitude!,
           nearbyStationCount: validatedCoverage.nearbyStationCount,
           nearestStationKm: validatedCoverage.nearestStationKm,
           rawScore: rawScore,
@@ -425,7 +612,19 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
           originalLatitude: latitude,
           originalLongitude: longitude,
           landValidationResult:
-              landValidation.wasMoved ? 'moved-to-land' : 'valid-land',
+              settlementResult.wasAdjusted
+                  ? 'adjusted-for-settlement-relevance'
+                  : landValidation.wasMoved
+                      ? 'moved-to-land'
+                      : 'valid-land',
+          nearestSettlementId: settlementResult.settlement!.id,
+          nearestSettlementName: settlementResult.settlement!.name,
+          nearestSettlementCategory: settlementResult.settlement!.category,
+          distanceToSettlementKm: settlementResult.distanceKm!,
+          settlementEligibilityValidated: true,
+          settlementCoordinateAdjusted: settlementResult.wasAdjusted,
+          settlementAdjustmentDistanceKm:
+              settlementResult.adjustmentDistanceKm,
         ),
       );
     }
@@ -433,7 +632,14 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
 
   candidates.sort(_compareGapCandidates);
   final selected = <_GapCandidate>[];
+  final retainedPerSettlement = <String, int>{};
   for (final candidate in candidates) {
+    final settlementCount =
+        retainedPerSettlement[candidate.nearestSettlementId] ?? 0;
+    if (settlementCount >= parameters.maximumResultsPerSettlement) {
+      rejectedBySeparationCount++;
+      continue;
+    }
     final sufficientlySeparated = selected.every(
       (existing) =>
           _distanceKm(
@@ -449,6 +655,8 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
       continue;
     }
     selected.add(candidate);
+    retainedPerSettlement[candidate.nearestSettlementId] =
+        settlementCount + 1;
     if (selected.length == parameters.retainedCandidateLimit) break;
   }
   selected.sort(_compareGapCandidates);
@@ -471,6 +679,15 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
     'rejectedByNearbyLocationCount': rejectedByNearbyLocationCount,
     'rejectedByMinimumDistanceCount': rejectedByMinimumDistanceCount,
     'rejectedBySeparationCount': rejectedBySeparationCount,
+    'rejectedTooFarFromSettlement': rejectedTooFarFromSettlement,
+    'replacementCandidatesEvaluated': replacementCandidatesEvaluated,
+    'replacementCandidatesAccepted': replacementCandidatesAccepted,
+    'rejectedNoSettlementRelevantPoint':
+        rejectedNoSettlementRelevantPoint,
+    'retainedAfterCoverage': candidates.length,
+    'retainedAfterSeparation': selected.length,
+    'settlementRetainedCounts': _settlementCounts(selected),
+    'settlementEligibleCandidates': settlementEligibleCandidates,
     'correctedOffshoreCount': correctedOffshoreCount,
     'rejectedOffshoreCount': rejectedOffshoreCount,
     'landDiagnostics': landDiagnostics,
@@ -491,6 +708,599 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
 /// nearest existing anchor only when it is within [radiusMetres] of that fixed
 /// anchor. Keeping the anchor fixed prevents transitive chains from merging
 /// two legitimately separate sites that are farther apart than the radius.
+Map<String, Object> _runDistributionCoverageAnalysis({
+  required List<_Coordinate> stationRecords,
+  required List<_Coordinate> stationSites,
+  required List<_Coordinate> selectedStateStationCoordinates,
+  required int selectedStateUniqueCoordinateCount,
+  required int selectedStateSiteCount50m,
+  required int selectedStateSiteCount75m,
+  required int selectedStateSiteCount100m,
+  required List<_LandBoundary> landBoundaries,
+  required _AnalysisParameters parameters,
+  required Map<String, List<_Settlement>> settlementsByState,
+}) {
+  const latitudeOrigin = .9;
+  const longitudeOrigin = 99.6;
+  final denseUrban = parameters.profileId == AnalysisProfile.denseUrban.name;
+  final gridSpacing = parameters.gridSpacingDegrees;
+  final stationIndex = _StationSpatialIndex(stationSites);
+  final analysisBounds = _boundsForLandBoundaries(landBoundaries);
+  final siteCountsByCell = <String, int>{};
+  for (final site in stationSites) {
+    final latitudeIndex = ((site.latitude - latitudeOrigin) / gridSpacing).round();
+    final longitudeIndex =
+        ((site.longitude - longitudeOrigin) / gridSpacing).round();
+    final key = '$latitudeIndex|$longitudeIndex';
+    siteCountsByCell[key] = (siteCountsByCell[key] ?? 0) + 1;
+  }
+
+  final latitudeStart = math.max(
+    0,
+    ((analysisBounds.south - gridSpacing / 2 - latitudeOrigin) / gridSpacing)
+        .floor(),
+  ).toInt();
+  final latitudeEnd = math.min(
+    ((7.4 - latitudeOrigin) / gridSpacing).floor(),
+    ((analysisBounds.north + gridSpacing / 2 - latitudeOrigin) / gridSpacing)
+        .ceil(),
+  ).toInt();
+  final longitudeStart = math.max(
+    0,
+    ((analysisBounds.west - gridSpacing / 2 - longitudeOrigin) / gridSpacing)
+        .floor(),
+  ).toInt();
+  final longitudeEnd = math.min(
+    ((119.3 - longitudeOrigin) / gridSpacing).floor(),
+    ((analysisBounds.east + gridSpacing / 2 - longitudeOrigin) / gridSpacing)
+        .ceil(),
+  ).toInt();
+
+  final cells = <_DistributionCell>[];
+  var generatedCells = 0;
+  var tinyBoundaryFragments = 0;
+  var rejectedOffshore = 0;
+  var rejectedTooFarFromSettlement = 0;
+  var replacementCandidatesEvaluated = 0;
+  var replacementCandidatesAccepted = 0;
+  var rejectedNoSettlementRelevantPoint = 0;
+  var settlementEligibleCandidates = 0;
+  var correctedOffshore = 0;
+  final landDiagnostics = <Map<String, Object?>>[];
+  for (var latitudeIndex = latitudeStart;
+      latitudeIndex <= latitudeEnd;
+      latitudeIndex++) {
+    final latitude = latitudeOrigin + latitudeIndex * gridSpacing;
+    for (var longitudeIndex = longitudeStart;
+        longitudeIndex <= longitudeEnd;
+        longitudeIndex++) {
+      final longitude = longitudeOrigin + longitudeIndex * gridSpacing;
+      if (!analysisBounds.includesGridCell(latitude, longitude, gridSpacing) ||
+          !_isLikelyMalaysianLand(latitude, longitude)) {
+        continue;
+      }
+      generatedCells++;
+      final landSampleRatio = _landSampleRatio(
+        latitude,
+        longitude,
+        gridSpacing,
+        landBoundaries,
+      );
+      if (landSampleRatio < .55) {
+        tinyBoundaryFragments++;
+        continue;
+      }
+      final validation = _validateLandCandidate(
+        latitude,
+        longitude,
+        landBoundaries,
+        gridSpacingDegrees: gridSpacing,
+      );
+      if (!validation.isValid) {
+        rejectedOffshore++;
+        continue;
+      }
+      if (validation.wasMoved) {
+        correctedOffshore++;
+        landDiagnostics.add(
+          validation.toDiagnostic(latitude, longitude, 'moved-to-land'),
+        );
+      }
+      final settlementResult = _settlementRelevantPoint(
+        latitude: validation.latitude!,
+        longitude: validation.longitude!,
+        state: validation.state!,
+        settlements: settlementsByState[validation.state!] ?? const [],
+        landBoundaries: landBoundaries,
+        gridSpacingDegrees: gridSpacing,
+        maximumDistanceKm: parameters.maximumSettlementDistanceKm,
+      );
+      replacementCandidatesEvaluated += settlementResult.evaluatedAlternatives;
+      if (!settlementResult.isValid) {
+        rejectedTooFarFromSettlement++;
+        rejectedNoSettlementRelevantPoint++;
+        continue;
+      }
+      settlementEligibleCandidates++;
+      final coverage = stationIndex.coverageAt(
+        settlementResult.latitude!,
+        settlementResult.longitude!,
+        nearbyRadiusKm: parameters.nearbyRadiusKm,
+      );
+      final key = '$latitudeIndex|$longitudeIndex';
+      cells.add(
+        _DistributionCell(
+          latitudeIndex: latitudeIndex,
+          longitudeIndex: longitudeIndex,
+          latitude: settlementResult.latitude!,
+          longitude: settlementResult.longitude!,
+          originalLatitude: latitude,
+          originalLongitude: longitude,
+          state: validation.state!,
+          landValidationResult:
+              settlementResult.wasAdjusted
+                  ? 'adjusted-for-settlement-relevance'
+                  : validation.wasMoved
+                      ? 'moved-to-land'
+                      : 'valid-land',
+          localSiteCount: siteCountsByCell[key] ?? 0,
+          nearbySiteCount: coverage.nearbyStationCount,
+          nearestSiteKm: coverage.nearestStationKm,
+          settlement: settlementResult.settlement!,
+          distanceToSettlementKm: settlementResult.distanceKm!,
+          settlementAdjusted: settlementResult.wasAdjusted,
+          settlementAdjustmentDistanceKm:
+              settlementResult.adjustmentDistanceKm,
+        ),
+      );
+    }
+  }
+
+  final nearbyCounts = cells.map((cell) => cell.nearbySiteCount).toList()
+    ..sort();
+  final medianNearbyCount = nearbyCounts.isEmpty
+      ? 0.0
+      : nearbyCounts.length.isOdd
+          ? nearbyCounts[nearbyCounts.length ~/ 2].toDouble()
+          : (nearbyCounts[nearbyCounts.length ~/ 2 - 1] +
+                  nearbyCounts[nearbyCounts.length ~/ 2]) /
+              2;
+  final candidates = <_GapCandidate>[];
+  var rejectedWellCovered = 0;
+  for (final cell in cells) {
+    final neighbourCounts = <int>[];
+    for (var latitudeOffset = -1; latitudeOffset <= 1; latitudeOffset++) {
+      for (var longitudeOffset = -1;
+          longitudeOffset <= 1;
+          longitudeOffset++) {
+        if (latitudeOffset == 0 && longitudeOffset == 0) continue;
+        neighbourCounts.add(
+          siteCountsByCell[
+                  '${cell.latitudeIndex + latitudeOffset}|'
+                  '${cell.longitudeIndex + longitudeOffset}'] ??
+              0,
+        );
+      }
+    }
+    final neighbourAverage = neighbourCounts.isEmpty
+        ? 0.0
+        : neighbourCounts.reduce((a, b) => a + b) /
+            neighbourCounts.length;
+    final localBaseline = math.max(1.0, neighbourAverage).toDouble();
+    final localScarcity =
+        (1 - cell.localSiteCount / localBaseline).clamp(0.0, 1.0).toDouble();
+    final neighbourhoodBaseline =
+        math.max(1.0, medianNearbyCount).toDouble();
+    final neighbourhoodScarcity =
+        (1 - cell.nearbySiteCount / neighbourhoodBaseline)
+            .clamp(0.0, 1.0)
+            .toDouble();
+    final distanceComponent = (cell.nearestSiteKm /
+            math.max(1.0, parameters.nearbyRadiusKm))
+        .clamp(0.0, 1.0)
+        .toDouble();
+    final denseQualifies = CoverageGapAnalyzer.denseUrbanCellQualifies(
+      localStationLocationCount: cell.localSiteCount,
+      localScarcity: localScarcity,
+      neighbourhoodScarcity: neighbourhoodScarcity,
+    );
+    final accessibilityQualifies = cell.nearbySiteCount <= 1 &&
+        cell.nearestSiteKm >= parameters.minimumNearestStationKm;
+    final urbanDensityQualifies = cell.localSiteCount <= 1 &&
+        localScarcity >= .35 &&
+        neighbourhoodScarcity >= .20;
+    final qualifies = denseUrban
+        ? denseQualifies
+        : accessibilityQualifies || urbanDensityQualifies;
+    if (!qualifies) {
+      rejectedWellCovered++;
+      continue;
+    }
+    if (cell.settlementAdjusted) replacementCandidatesAccepted++;
+    final distributionSeverity = 100 *
+        (.55 * localScarcity +
+            .30 * neighbourhoodScarcity +
+            .15 * distanceComponent);
+    final accessibilitySeverity = (cell.nearestSiteKm * 2.4 +
+            (2 - math.min(2, cell.nearbySiteCount)) * 15)
+        .toDouble();
+    final rawScore = denseUrban
+        ? distributionSeverity
+        : math.max(distributionSeverity, accessibilitySeverity).toDouble();
+    candidates.add(
+      _GapCandidate(
+        latitude: cell.latitude,
+        longitude: cell.longitude,
+        nearbyStationCount: cell.nearbySiteCount,
+        nearestStationKm: cell.nearestSiteKm,
+        rawScore: rawScore,
+        locality: cell.settlement.asLocality,
+        state: cell.state,
+        originalLatitude: cell.originalLatitude,
+        originalLongitude: cell.originalLongitude,
+        landValidationResult: cell.landValidationResult,
+        localStationLocationCount: cell.localSiteCount,
+        neighbouringCellAverage: neighbourAverage,
+        analysisProfileId: parameters.profileId,
+        nearestSettlementId: cell.settlement.id,
+        nearestSettlementName: cell.settlement.name,
+        nearestSettlementCategory: cell.settlement.category,
+        distanceToSettlementKm: cell.distanceToSettlementKm,
+        settlementEligibilityValidated: true,
+        settlementCoordinateAdjusted: cell.settlementAdjusted,
+        settlementAdjustmentDistanceKm:
+            cell.settlementAdjustmentDistanceKm,
+      ),
+    );
+  }
+
+  candidates.sort(_compareGapCandidates);
+  final selected = <_GapCandidate>[];
+  var mergedWithAdjacentCandidates = 0;
+  final retainedPerSettlement = <String, int>{};
+  for (final candidate in candidates) {
+    final settlementCount =
+        retainedPerSettlement[candidate.nearestSettlementId] ?? 0;
+    if (settlementCount >= parameters.maximumResultsPerSettlement) {
+      mergedWithAdjacentCandidates++;
+      continue;
+    }
+    if (selected.any(
+      (existing) => _distanceKm(
+        candidate.latitude,
+        candidate.longitude,
+        existing.latitude,
+        existing.longitude,
+      ) < parameters.candidateSeparationKm,
+    )) {
+      mergedWithAdjacentCandidates++;
+      continue;
+    }
+    selected.add(candidate);
+    retainedPerSettlement[candidate.nearestSettlementId] =
+        settlementCount + 1;
+    if (selected.length == parameters.retainedCandidateLimit) break;
+  }
+  final normalizedScores = _normalizePriorityScores(selected);
+  final localDistribution = _countDistribution(
+    cells.map((cell) => cell.localSiteCount),
+  );
+  final neighbourhoodDistribution = _countDistribution(
+    cells.map((cell) => cell.nearbySiteCount),
+  );
+  return <String, Object>{
+    'stationRecordCount': stationRecords.length,
+    'stationCount': stationSites.length,
+    'selectedStateStationRecordCount': selectedStateStationCoordinates.length,
+    'selectedStateUniqueCoordinateCount': selectedStateUniqueCoordinateCount,
+    'selectedStateSiteCount50m': selectedStateSiteCount50m,
+    'selectedStateSiteCount75m': selectedStateSiteCount75m,
+    'selectedStateSiteCount100m': selectedStateSiteCount100m,
+    'gridCellCount': generatedCells,
+    'landValidGridCellCount': cells.length,
+    'distanceCheckCount': stationIndex.distanceCheckCount,
+    'candidateCount': candidates.length,
+    'landValidatedCount': cells.length,
+    'rejectedByCoverageCount': rejectedWellCovered,
+    'rejectedByNearbyLocationCount': 0,
+    'rejectedByMinimumDistanceCount': 0,
+    'rejectedBySeparationCount': mergedWithAdjacentCandidates,
+    'rejectedTooFarFromSettlement': rejectedTooFarFromSettlement,
+    'replacementCandidatesEvaluated': replacementCandidatesEvaluated,
+    'replacementCandidatesAccepted': replacementCandidatesAccepted,
+    'rejectedNoSettlementRelevantPoint':
+        rejectedNoSettlementRelevantPoint,
+    'retainedAfterCoverage': candidates.length,
+    'retainedAfterSeparation': selected.length,
+    'settlementRetainedCounts': _settlementCounts(selected),
+    'settlementEligibleCandidates': settlementEligibleCandidates,
+    'correctedOffshoreCount': correctedOffshore,
+    'rejectedOffshoreCount': rejectedOffshore,
+    'cellsWithZeroSites':
+        cells.where((cell) => cell.localSiteCount == 0).length,
+    'cellsWithOneSite':
+        cells.where((cell) => cell.localSiteCount == 1).length,
+    'cellsWithTwoOrMoreSites':
+        cells.where((cell) => cell.localSiteCount >= 2).length,
+    'localSiteCountDistribution': localDistribution,
+    'neighbourhoodSiteCountDistribution': neighbourhoodDistribution,
+    'cellsRejectedAsWellCovered': rejectedWellCovered,
+    'cellsRejectedAsTinyBoundaryFragments': tinyBoundaryFragments,
+    'cellsMergedWithAdjacentCandidates': mergedWithAdjacentCandidates,
+    'landDiagnostics': landDiagnostics,
+    'areas': [
+      for (var index = 0; index < selected.length; index++)
+        selected[index].toMap(
+          index,
+          normalizedScores[index],
+          nearbyRadiusKm: parameters.nearbyRadiusKm,
+        ),
+    ],
+  };
+}
+
+double _landSampleRatio(
+  double latitude,
+  double longitude,
+  double gridSpacing,
+  List<_LandBoundary> boundaries,
+) {
+  var landSamples = 0;
+  for (final latitudeFactor in const <double>[-.4, 0, .4]) {
+    for (final longitudeFactor in const <double>[-.4, 0, .4]) {
+      if (_boundaryContaining(
+            latitude + latitudeFactor * gridSpacing,
+            longitude + longitudeFactor * gridSpacing,
+            boundaries,
+          ) !=
+          null) {
+        landSamples++;
+      }
+    }
+  }
+  return landSamples / 9;
+}
+
+Map<int, int> _countDistribution(Iterable<int> counts) {
+  final distribution = <int, int>{};
+  for (final count in counts) {
+    distribution[count] = (distribution[count] ?? 0) + 1;
+  }
+  return Map<int, int>.fromEntries(
+    distribution.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+  );
+}
+
+_SettlementRelevantPoint _settlementRelevantPoint({
+  required double latitude,
+  required double longitude,
+  required String state,
+  required List<_Settlement> settlements,
+  required List<_LandBoundary> landBoundaries,
+  required double gridSpacingDegrees,
+  required double maximumDistanceKm,
+}) {
+  if (settlements.isEmpty) return const _SettlementRelevantPoint.invalid();
+  final direct = _nearestSettlement(latitude, longitude, settlements);
+  if (direct.distanceKm <= maximumDistanceKm) {
+    return _SettlementRelevantPoint.valid(
+      latitude: latitude,
+      longitude: longitude,
+      settlement: direct.settlement,
+      distanceKm: direct.distanceKm,
+      adjustmentDistanceKm: 0,
+    );
+  }
+
+  final offsets = <_Coordinate>[];
+  const sampleSteps = 4;
+  final halfCell = gridSpacingDegrees / 2;
+  for (var latitudeStep = -sampleSteps;
+      latitudeStep <= sampleSteps;
+      latitudeStep++) {
+    for (var longitudeStep = -sampleSteps;
+        longitudeStep <= sampleSteps;
+        longitudeStep++) {
+      if (latitudeStep == 0 && longitudeStep == 0) continue;
+      offsets.add(
+        _Coordinate(
+          latitudeStep * halfCell / sampleSteps,
+          longitudeStep * halfCell / sampleSteps,
+        ),
+      );
+    }
+  }
+  offsets.sort((a, b) {
+    final distanceA = a.latitude * a.latitude +
+        a.longitude * a.longitude;
+    final distanceB = b.latitude * b.latitude +
+        b.longitude * b.longitude;
+    final distanceComparison = distanceA.compareTo(distanceB);
+    if (distanceComparison != 0) return distanceComparison;
+    final latitudeComparison = a.latitude.compareTo(b.latitude);
+    return latitudeComparison != 0
+        ? latitudeComparison
+        : a.longitude.compareTo(b.longitude);
+  });
+
+  var evaluated = 0;
+  for (final offset in offsets) {
+    evaluated++;
+    final replacementLatitude = latitude + offset.latitude;
+    final replacementLongitude = longitude + offset.longitude;
+    final boundary = _boundaryContaining(
+      replacementLatitude,
+      replacementLongitude,
+      landBoundaries,
+    );
+    if (boundary == null || boundary.state != state) continue;
+    final nearest = _nearestSettlement(
+      replacementLatitude,
+      replacementLongitude,
+      settlements,
+    );
+    if (nearest.distanceKm > maximumDistanceKm) continue;
+    return _SettlementRelevantPoint.valid(
+      latitude: replacementLatitude,
+      longitude: replacementLongitude,
+      settlement: nearest.settlement,
+      distanceKm: nearest.distanceKm,
+      adjustmentDistanceKm: _distanceKm(
+        latitude,
+        longitude,
+        replacementLatitude,
+        replacementLongitude,
+      ),
+      wasAdjusted: true,
+      evaluatedAlternatives: evaluated,
+    );
+  }
+  return _SettlementRelevantPoint.invalid(
+    evaluatedAlternatives: evaluated,
+  );
+}
+
+_NearestSettlement _nearestSettlement(
+  double latitude,
+  double longitude,
+  List<_Settlement> settlements,
+) {
+  var nearest = settlements.first;
+  var nearestDistance = _distanceKm(
+    latitude,
+    longitude,
+    nearest.latitude,
+    nearest.longitude,
+  );
+  for (final settlement in settlements.skip(1)) {
+    final distance = _distanceKm(
+      latitude,
+      longitude,
+      settlement.latitude,
+      settlement.longitude,
+    );
+    if (distance < nearestDistance ||
+        (distance == nearestDistance && settlement.id.compareTo(nearest.id) < 0)) {
+      nearest = settlement;
+      nearestDistance = distance;
+    }
+  }
+  return _NearestSettlement(nearest, nearestDistance);
+}
+
+Map<String, int> _settlementCounts(List<_GapCandidate> candidates) {
+  final counts = <String, int>{};
+  for (final candidate in candidates) {
+    counts[candidate.nearestSettlementName] =
+        (counts[candidate.nearestSettlementName] ?? 0) + 1;
+  }
+  return Map<String, int>.fromEntries(
+    counts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+  );
+}
+
+class _SettlementRelevantPoint {
+  const _SettlementRelevantPoint.valid({
+    required this.latitude,
+    required this.longitude,
+    required this.settlement,
+    required this.distanceKm,
+    required this.adjustmentDistanceKm,
+    this.wasAdjusted = false,
+    this.evaluatedAlternatives = 0,
+  }) : isValid = true;
+
+  const _SettlementRelevantPoint.invalid({this.evaluatedAlternatives = 0})
+      : latitude = null,
+        longitude = null,
+        settlement = null,
+        distanceKm = null,
+        adjustmentDistanceKm = 0,
+        wasAdjusted = false,
+        isValid = false;
+
+  final double? latitude;
+  final double? longitude;
+  final _Settlement? settlement;
+  final double? distanceKm;
+  final double adjustmentDistanceKm;
+  final bool wasAdjusted;
+  final bool isValid;
+  final int evaluatedAlternatives;
+}
+
+class _NearestSettlement {
+  const _NearestSettlement(this.settlement, this.distanceKm);
+  final _Settlement settlement;
+  final double distanceKm;
+}
+
+class _Settlement {
+  const _Settlement({
+    required this.id,
+    required this.name,
+    required this.state,
+    required this.latitude,
+    required this.longitude,
+    required this.category,
+  });
+
+  factory _Settlement.fromMap(Map<Object?, Object?> data) => _Settlement(
+        id: data['id']! as String,
+        name: data['name']! as String,
+        state: data['state']! as String,
+        latitude: (data['latitude']! as num).toDouble(),
+        longitude: (data['longitude']! as num).toDouble(),
+        category: data['category']! as String,
+      );
+
+  final String id;
+  final String name;
+  final String state;
+  final double latitude;
+  final double longitude;
+  final String category;
+
+  _Locality get asLocality =>
+      _Locality(name, state, latitude, longitude);
+}
+
+class _DistributionCell {
+  const _DistributionCell({
+    required this.latitudeIndex,
+    required this.longitudeIndex,
+    required this.latitude,
+    required this.longitude,
+    required this.originalLatitude,
+    required this.originalLongitude,
+    required this.state,
+    required this.landValidationResult,
+    required this.localSiteCount,
+    required this.nearbySiteCount,
+    required this.nearestSiteKm,
+    required this.settlement,
+    required this.distanceToSettlementKm,
+    required this.settlementAdjusted,
+    required this.settlementAdjustmentDistanceKm,
+  });
+
+  final int latitudeIndex;
+  final int longitudeIndex;
+  final double latitude;
+  final double longitude;
+  final double originalLatitude;
+  final double originalLongitude;
+  final String state;
+  final String landValidationResult;
+  final int localSiteCount;
+  final int nearbySiteCount;
+  final double nearestSiteKm;
+  final _Settlement settlement;
+  final double distanceToSettlementKm;
+  final bool settlementAdjusted;
+  final double settlementAdjustmentDistanceKm;
+}
+
 List<_Coordinate> _groupStationSites(
   List<_Coordinate> coordinates,
   double radiusMetres,
@@ -589,15 +1399,19 @@ _AnalysisBounds _boundsForLandBoundaries(
 
 class _AnalysisParameters {
   const _AnalysisParameters({
+    required this.profileId,
     required this.gridSpacingDegrees,
     required this.nearbyRadiusKm,
     required this.minimumNearestStationKm,
     required this.candidateSeparationKm,
     required this.retainedCandidateLimit,
+    required this.maximumSettlementDistanceKm,
+    required this.maximumResultsPerSettlement,
   });
 
   factory _AnalysisParameters.fromPayload(Map<Object?, Object?> payload) =>
       _AnalysisParameters(
+        profileId: payload['profileId'] as String,
         gridSpacingDegrees:
             (payload['gridSpacingDegrees'] as num).toDouble(),
         nearbyRadiusKm: (payload['nearbyRadiusKm'] as num).toDouble(),
@@ -606,13 +1420,20 @@ class _AnalysisParameters {
         candidateSeparationKm:
             (payload['candidateSeparationKm'] as num).toDouble(),
         retainedCandidateLimit: payload['retainedCandidateLimit'] as int,
+        maximumSettlementDistanceKm:
+            (payload['maximumSettlementDistanceKm'] as num).toDouble(),
+        maximumResultsPerSettlement:
+            payload['maximumResultsPerSettlement'] as int,
       );
 
+  final String profileId;
   final double gridSpacingDegrees;
   final double nearbyRadiusKm;
   final double minimumNearestStationKm;
   final double candidateSeparationKm;
   final int retainedCandidateLimit;
+  final double maximumSettlementDistanceKm;
+  final int maximumResultsPerSettlement;
 }
 
 class _AnalysisBounds {
@@ -622,6 +1443,12 @@ class _AnalysisBounds {
   final double west;
   final double north;
   final double east;
+
+  bool containsPoint(double latitude, double longitude) =>
+      latitude >= south &&
+      latitude <= north &&
+      longitude >= west &&
+      longitude <= east;
 
   bool includesGridCell(
     double latitude,
@@ -684,6 +1511,14 @@ bool _pointInPolygon(
   for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     final current = polygon[i];
     final previous = polygon[j];
+    if (_coordinateOnSegment(
+      latitude,
+      longitude,
+      previous,
+      current,
+    )) {
+      return true;
+    }
     final crossesLatitude =
         (current.latitude > latitude) != (previous.latitude > latitude);
     if (!crossesLatitude) continue;
@@ -694,6 +1529,23 @@ bool _pointInPolygon(
     if (longitude < longitudeAtLatitude) inside = !inside;
   }
   return inside;
+}
+
+bool _coordinateOnSegment(
+  double latitude,
+  double longitude,
+  _Coordinate start,
+  _Coordinate end,
+) {
+  const epsilon = 1e-10;
+  final cross = (longitude - start.longitude) *
+          (end.latitude - start.latitude) -
+      (latitude - start.latitude) * (end.longitude - start.longitude);
+  if (cross.abs() > epsilon) return false;
+  return longitude >= math.min(start.longitude, end.longitude) - epsilon &&
+      longitude <= math.max(start.longitude, end.longitude) + epsilon &&
+      latitude >= math.min(start.latitude, end.latitude) - epsilon &&
+      latitude <= math.max(start.latitude, end.latitude) + epsilon;
 }
 
 _LandValidation _validateLandCandidate(
@@ -812,7 +1664,11 @@ class _LandValidation {
 }
 
 class _LandBoundary {
-  const _LandBoundary({required this.state, required this.polygons});
+  const _LandBoundary({
+    required this.state,
+    required this.polygons,
+    required this.polygonBounds,
+  });
 
   factory _LandBoundary.fromFeature(Map<Object?, Object?> feature) {
     final properties = feature['properties'] as Map<Object?, Object?>;
@@ -822,27 +1678,34 @@ class _LandBoundary {
     final rawPolygons = geometryType == 'Polygon'
         ? <Object?>[rawCoordinates]
         : rawCoordinates;
+    final polygons = rawPolygons.map((rawPolygon) {
+      return (rawPolygon as List<Object?>).map((rawRing) {
+        return (rawRing as List<Object?>).map((rawCoordinate) {
+          final values = rawCoordinate as List<Object?>;
+          return _Coordinate(
+            (values[1] as num).toDouble(),
+            (values[0] as num).toDouble(),
+          );
+        }).toList(growable: false);
+      }).toList(growable: false);
+    }).toList(growable: false);
     return _LandBoundary(
       state: _normalizeStateName(properties['NAME_1'] as String),
-      polygons: rawPolygons.map((rawPolygon) {
-        return (rawPolygon as List<Object?>).map((rawRing) {
-          return (rawRing as List<Object?>).map((rawCoordinate) {
-            final values = rawCoordinate as List<Object?>;
-            return _Coordinate(
-              (values[1] as num).toDouble(),
-              (values[0] as num).toDouble(),
-            );
-          }).toList(growable: false);
-        }).toList(growable: false);
-      }).toList(growable: false),
+      polygons: polygons,
+      polygonBounds: polygons
+          .map(_coordinateBoundsForPolygon)
+          .toList(growable: false),
     );
   }
 
   final String state;
   final List<List<List<_Coordinate>>> polygons;
+  final List<_AnalysisBounds> polygonBounds;
 
   bool contains(double latitude, double longitude) {
-    for (final polygon in polygons) {
+    for (var index = 0; index < polygons.length; index++) {
+      final polygon = polygons[index];
+      if (!polygonBounds[index].containsPoint(latitude, longitude)) continue;
       if (polygon.isEmpty ||
           !_pointInPolygon(latitude, longitude, polygon.first)) {
         continue;
@@ -856,8 +1719,27 @@ class _LandBoundary {
   }
 }
 
-String _normalizeStateName(String state) =>
-    state == 'Pulau Pinang' ? 'Penang' : state;
+_AnalysisBounds _coordinateBoundsForPolygon(
+  List<List<_Coordinate>> polygon,
+) {
+  var south = double.infinity;
+  var west = double.infinity;
+  var north = -double.infinity;
+  var east = -double.infinity;
+  for (final coordinate in polygon.expand((ring) => ring)) {
+    south = math.min(south, coordinate.latitude);
+    west = math.min(west, coordinate.longitude);
+    north = math.max(north, coordinate.latitude);
+    east = math.max(east, coordinate.longitude);
+  }
+  return _AnalysisBounds(south, west, north, east);
+}
+
+String _normalizeStateName(String state) => switch (state) {
+      'Pulau Pinang' => 'Penang',
+      'Malacca' => 'Melaka',
+      _ => state,
+    };
 
 double _distanceKm(
   double latitudeA,
@@ -877,31 +1759,6 @@ double _distanceKm(
 }
 
 double _radians(double degrees) => degrees * math.pi / 180;
-
-_Locality _nearestLocality(
-  double latitude,
-  double longitude, {
-  required String state,
-}) {
-  final stateLocalities =
-      _localities.where((locality) => locality.state == state).toList();
-  final candidates = stateLocalities.isEmpty ? _localities : stateLocalities;
-  var nearest = candidates.first;
-  var nearestDistance = double.infinity;
-  for (final locality in candidates) {
-    final distance = _distanceKm(
-      latitude,
-      longitude,
-      locality.latitude,
-      locality.longitude,
-    );
-    if (distance < nearestDistance) {
-      nearest = locality;
-      nearestDistance = distance;
-    }
-  }
-  return nearest;
-}
 
 class _Coordinate {
   const _Coordinate(this.latitude, this.longitude);
@@ -1054,6 +1911,16 @@ class _GapCandidate {
     required this.originalLatitude,
     required this.originalLongitude,
     required this.landValidationResult,
+    this.localStationLocationCount = 0,
+    this.neighbouringCellAverage = 0,
+    this.analysisProfileId = 'regional',
+    required this.nearestSettlementId,
+    required this.nearestSettlementName,
+    required this.nearestSettlementCategory,
+    required this.distanceToSettlementKm,
+    required this.settlementEligibilityValidated,
+    required this.settlementCoordinateAdjusted,
+    required this.settlementAdjustmentDistanceKm,
   });
 
   final double latitude;
@@ -1066,6 +1933,16 @@ class _GapCandidate {
   final double originalLatitude;
   final double originalLongitude;
   final String landValidationResult;
+  final int localStationLocationCount;
+  final double neighbouringCellAverage;
+  final String analysisProfileId;
+  final String nearestSettlementId;
+  final String nearestSettlementName;
+  final String nearestSettlementCategory;
+  final double distanceToSettlementKm;
+  final bool settlementEligibilityValidated;
+  final bool settlementCoordinateAdjusted;
+  final double settlementAdjustmentDistanceKm;
 
   Map<String, Object> toMap(
     int rank,
@@ -1084,6 +1961,24 @@ class _GapCandidate {
         ? 'Coverage gap near ${locality.displayName}'
         : '${_directionFromLocality(locality, latitude, longitude)} '
             'of ${locality.displayName}';
+    final distributionBased = analysisProfileId == AnalysisProfile.denseUrban.name ||
+        analysisProfileId == AnalysisProfile.urban.name;
+    final settlementContext =
+        ' It is ${distanceToSettlementKm.toStringAsFixed(1)} km from '
+        '$nearestSettlementName, within the configured '
+        '$analysisProfileId planning area.';
+    final explanation = distributionBased
+        ? 'This neighbourhood cell contains $localStationLocationCount '
+            'charging location${localStationLocationCount == 1 ? '' : 's'} '
+            'and has lower infrastructure coverage than nearby cells. '
+            'The nearest charging location is '
+            '${nearestStationKm.toStringAsFixed(1)} km away.'
+            '$settlementContext'
+        : 'Only $nearbyStationCount charging station location'
+            '${nearbyStationCount == 1 ? '' : 's'} within '
+            '${nearbyRadiusKm.toStringAsFixed(1)} km; nearest station '
+            'location is ${nearestStationKm.toStringAsFixed(1)} km away.'
+            '$settlementContext';
     return <String, Object>{
       'id': 'gap_${latitudeKey}_$longitudeKey',
       'originalLatitude': originalLatitude.toStringAsFixed(5),
@@ -1095,15 +1990,29 @@ class _GapCandidate {
       'latitude': latitude,
       'longitude': longitude,
       'nearbyStationCount': nearbyStationCount,
+      'localStationLocationCount': localStationLocationCount,
+      'neighbouringCellAverage': neighbouringCellAverage,
+      'analysisProfileId': analysisProfileId,
+      'nearestSettlementId': nearestSettlementId,
+      'nearestSettlementName': nearestSettlementName,
+      'nearestSettlementCategory': nearestSettlementCategory,
+      'distanceToSettlementKm': distanceToSettlementKm,
+      'settlementEligibilityValidated': settlementEligibilityValidated,
+      'settlementCoordinateAdjusted': settlementCoordinateAdjusted,
+      'settlementAdjustmentDistanceKm': settlementAdjustmentDistanceKm,
+      'originalAnalyticalLatitude': originalLatitude,
+      'originalAnalyticalLongitude': originalLongitude,
+      'roadAccessibilityValidated': false,
+      'coordinateAdjusted': false,
+      'adjustmentDistanceMeters': 0.0,
+      'suitabilityNote':
+          'Within the configured $analysisProfileId settlement planning area; '
+          'road-access validation remains unavailable.',
       'nearestStationKm': nearestStationKm,
       'score': priorityScore,
       'coverageScore': rawScore,
       'nearbyRadiusKm': nearbyRadiusKm,
-      'reason':
-          'Only $nearbyStationCount charging station location${nearbyStationCount == 1 ? '' : 's'} '
-              'within ${nearbyRadiusKm.toStringAsFixed(1)} km; '
-              'nearest station location is '
-              '${nearestStationKm.toStringAsFixed(1)} km away.',
+      'reason': explanation,
       'rank': rank + 1,
     };
   }
@@ -1186,29 +2095,4 @@ const _sabah = <_Coordinate>[
   _Coordinate(7.30, 117.00),
   _Coordinate(6.60, 115.50),
   _Coordinate(5.20, 115.00),
-];
-
-const _localities = <_Locality>[
-  _Locality('Kangar', 'Perlis', 6.44, 100.20),
-  _Locality('Alor Setar', 'Kedah', 6.12, 100.37),
-  _Locality('George Town', 'Penang', 5.41, 100.33),
-  _Locality('Ipoh', 'Perak', 4.60, 101.09),
-  _Locality('Kota Bharu', 'Kelantan', 6.13, 102.24),
-  _Locality('Kuala Terengganu', 'Terengganu', 5.33, 103.14),
-  _Locality('Kuantan', 'Pahang', 3.81, 103.33),
-  _Locality('Shah Alam', 'Selangor', 3.07, 101.52),
-  _Locality('Kuala Lumpur', 'Kuala Lumpur', 3.14, 101.69),
-  _Locality('Putrajaya', 'Putrajaya', 2.93, 101.70),
-  _Locality('Seremban', 'Negeri Sembilan', 2.73, 101.94),
-  _Locality('Melaka City', 'Melaka', 2.19, 102.25),
-  _Locality('Johor Bahru', 'Johor', 1.49, 103.74),
-  _Locality('Kuching', 'Sarawak', 1.55, 110.36),
-  _Locality('Sibu', 'Sarawak', 2.29, 111.83),
-  _Locality('Bintulu', 'Sarawak', 3.17, 113.04),
-  _Locality('Miri', 'Sarawak', 4.40, 113.99),
-  _Locality('Labuan', 'Labuan', 5.28, 115.23),
-  _Locality('Kota Kinabalu', 'Sabah', 5.98, 116.07),
-  _Locality('Sandakan', 'Sabah', 5.84, 118.12),
-  _Locality('Lahad Datu', 'Sabah', 5.03, 118.33),
-  _Locality('Tawau', 'Sabah', 4.25, 117.89),
 ];

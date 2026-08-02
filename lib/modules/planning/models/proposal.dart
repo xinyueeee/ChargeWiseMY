@@ -9,11 +9,21 @@ class Proposal {
     required this.charger,
     required this.distance,
     required this.demand,
+    this.locationLabel = '',
+    this.state,
+    this.nearestTown,
+    this.createdAt,
+    this.createdBy = 'Community member',
     this.latitude,
     this.longitude,
     this.reaction = 0,
   });
   final String id, city, description, area, charger, demand;
+  final String locationLabel;
+  final String? state;
+  final String? nearestTown;
+  final DateTime? createdAt;
+  final String createdBy;
   String status;
   final int supports;
   final double distance;
@@ -30,6 +40,11 @@ class Proposal {
         charger: json['charger'],
         distance: (json['distance'] as num).toDouble(),
         demand: json['demand'],
+        locationLabel: json['locationLabel'] as String? ?? '',
+        state: json['state'] as String?,
+        nearestTown: json['nearestTown'] as String?,
+        createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
+        createdBy: json['createdBy'] as String? ?? 'Community member',
         latitude: CoordinateParser.latitude(json['latitude']),
         longitude: CoordinateParser.longitude(json['longitude']),
       );
@@ -54,8 +69,41 @@ class Proposal {
         charger: row['charger_type'] as String? ?? 'AC Charger',
         distance: nearestStationKm,
         demand: _displayDemand(row['expected_demand']),
+        locationLabel: (row['address'] as String?)?.trim().isNotEmpty == true
+            ? (row['address'] as String).trim()
+            : (row['title'] as String? ?? 'Selected location'),
+        createdAt: DateTime.tryParse('${row['created_at'] ?? ''}'),
+        createdBy:
+            row['user_id'] == '00000000-0000-4000-8000-000000000001'
+                ? 'ChargeWise Demo User'
+                : 'Community member',
         latitude: CoordinateParser.latitude(row['latitude']),
         longitude: CoordinateParser.longitude(row['longitude']),
+        reaction: reaction,
+      );
+
+  Proposal copyWithLocation({
+    required String locationLabel,
+    required String state,
+    required String nearestTown,
+  }) =>
+      Proposal(
+        id: id,
+        city: city,
+        description: description,
+        supports: supports,
+        status: status,
+        area: area,
+        charger: charger,
+        distance: distance,
+        demand: demand,
+        locationLabel: locationLabel,
+        state: state,
+        nearestTown: nearestTown,
+        createdAt: createdAt,
+        createdBy: createdBy,
+        latitude: latitude,
+        longitude: longitude,
         reaction: reaction,
       );
 
@@ -90,8 +138,28 @@ class GapArea {
     required this.reason,
     this.coverageScore = 0,
     this.nearbyRadiusKm = 25,
+    this.localStationLocationCount = 0,
+    this.neighbouringCellAverage = 0,
+    this.analysisProfileId = 'regional',
+    this.roadAccessibilityValidated = false,
+    this.coordinateAdjusted = false,
+    this.adjustmentDistanceMeters = 0,
+    this.suitabilityNote =
+        'Road-access validation is unavailable for this analysis.',
+    this.nearestSettlementId,
+    this.nearestSettlementName,
+    this.nearestSettlementCategory,
+    this.distanceToSettlementKm,
+    this.settlementEligibilityValidated = false,
+    this.settlementCoordinateAdjusted = false,
+    this.settlementAdjustmentDistanceKm = 0,
     this.latitude,
     this.longitude,
+    this.originalAnalyticalLatitude,
+    this.originalAnalyticalLongitude,
+    this.nearestRoadLatitude,
+    this.nearestRoadLongitude,
+    this.nearestRoadDistanceMeters,
   });
   final String id, name, state, priority, reason;
   final double distance;
@@ -99,8 +167,27 @@ class GapArea {
   final double priorityScore;
   final double coverageScore;
   final double nearbyRadiusKm;
+  final int localStationLocationCount;
+  final double neighbouringCellAverage;
+  final String analysisProfileId;
+  final bool roadAccessibilityValidated;
+  final bool coordinateAdjusted;
+  final double adjustmentDistanceMeters;
+  final String suitabilityNote;
+  final String? nearestSettlementId;
+  final String? nearestSettlementName;
+  final String? nearestSettlementCategory;
+  final double? distanceToSettlementKm;
+  final bool settlementEligibilityValidated;
+  final bool settlementCoordinateAdjusted;
+  final double settlementAdjustmentDistanceKm;
   final double? latitude;
   final double? longitude;
+  final double? originalAnalyticalLatitude;
+  final double? originalAnalyticalLongitude;
+  final double? nearestRoadLatitude;
+  final double? nearestRoadLongitude;
+  final double? nearestRoadDistanceMeters;
 
   factory GapArea.fromAnalysis(Map<Object?, Object?> data) => GapArea(
         id: data['id']! as String,
@@ -112,9 +199,46 @@ class GapArea {
         priorityScore: (data['score']! as num).toDouble(),
         coverageScore: (data['coverageScore']! as num).toDouble(),
         nearbyRadiusKm: (data['nearbyRadiusKm'] as num?)?.toDouble() ?? 25,
+        localStationLocationCount:
+            data['localStationLocationCount'] as int? ?? 0,
+        neighbouringCellAverage:
+            (data['neighbouringCellAverage'] as num?)?.toDouble() ?? 0,
+        analysisProfileId:
+            data['analysisProfileId'] as String? ?? 'regional',
+        roadAccessibilityValidated:
+            data['roadAccessibilityValidated'] as bool? ?? false,
+        coordinateAdjusted: data['coordinateAdjusted'] as bool? ?? false,
+        adjustmentDistanceMeters:
+            (data['adjustmentDistanceMeters'] as num?)?.toDouble() ?? 0,
+        suitabilityNote: data['suitabilityNote'] as String? ??
+            'Road-access validation is unavailable for this analysis.',
+        nearestSettlementId: data['nearestSettlementId'] as String?,
+        nearestSettlementName: data['nearestSettlementName'] as String?,
+        nearestSettlementCategory:
+            data['nearestSettlementCategory'] as String?,
+        distanceToSettlementKm:
+            (data['distanceToSettlementKm'] as num?)?.toDouble(),
+        settlementEligibilityValidated:
+            data['settlementEligibilityValidated'] as bool? ?? false,
+        settlementCoordinateAdjusted:
+            data['settlementCoordinateAdjusted'] as bool? ?? false,
+        settlementAdjustmentDistanceKm:
+            (data['settlementAdjustmentDistanceKm'] as num?)?.toDouble() ?? 0,
         reason: data['reason']! as String,
         latitude: CoordinateParser.latitude(data['latitude']),
         longitude: CoordinateParser.longitude(data['longitude']),
+        originalAnalyticalLatitude: CoordinateParser.latitude(
+          data['originalAnalyticalLatitude'] ?? data['latitude'],
+        ),
+        originalAnalyticalLongitude: CoordinateParser.longitude(
+          data['originalAnalyticalLongitude'] ?? data['longitude'],
+        ),
+        nearestRoadLatitude:
+            CoordinateParser.latitude(data['nearestRoadLatitude']),
+        nearestRoadLongitude:
+            CoordinateParser.longitude(data['nearestRoadLongitude']),
+        nearestRoadDistanceMeters:
+            (data['nearestRoadDistanceMeters'] as num?)?.toDouble(),
       );
 }
 

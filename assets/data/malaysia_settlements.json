@@ -1,0 +1,1228 @@
+{
+  "datasetVersion": "dosm-geonames-district-centres-my-v2",
+  "source": "DOSM administrative district classifications and GeoNames Malaysia populated-place coordinates",
+  "sourceUrls": [
+    "https://data.gov.my/data-catalogue/population_district",
+    "https://download.geonames.org/export/dump/MY.zip"
+  ],
+  "license": "Creative Commons Attribution 4.0",
+  "notes": "Curated state capitals, cities, towns, and recognised administrative district centres used only as settlement-planning eligibility anchors. Coordinates are WGS84 reference centres, not site parcels, demand predictions, or construction approvals.",
+  "settlements": [
+    {
+      "id": "my-johor-johor-bahru",
+      "name": "Johor Bahru",
+      "state": "Johor",
+      "latitude": 1.49,
+      "longitude": 103.74,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-kedah-alor-setar",
+      "name": "Alor Setar",
+      "state": "Kedah",
+      "latitude": 6.12,
+      "longitude": 100.37,
+      "category": "city"
+    },
+    {
+      "id": "my-kedah-baling",
+      "name": "Baling",
+      "state": "Kedah",
+      "latitude": 5.67806,
+      "longitude": 100.9177,
+      "category": "districtCentre",
+      "district": "Baling",
+      "geonamesId": 1734448
+    },
+    {
+      "id": "my-kedah-bandar-baharu",
+      "name": "Bandar Baharu",
+      "state": "Kedah",
+      "latitude": 5.13428,
+      "longitude": 100.49549,
+      "category": "districtCentre",
+      "district": "Bandar Baharu",
+      "geonamesId": 1734407
+    },
+    {
+      "id": "my-kedah-jitra",
+      "name": "Jitra",
+      "state": "Kedah",
+      "latitude": 6.26812,
+      "longitude": 100.42167,
+      "category": "districtCentre",
+      "district": "Jitra",
+      "geonamesId": 1736302
+    },
+    {
+      "id": "my-kedah-kuah",
+      "name": "Kuah",
+      "state": "Kedah",
+      "latitude": 6.32649,
+      "longitude": 99.8432,
+      "category": "districtCentre",
+      "district": "Kuah",
+      "geonamesId": 1222396
+    },
+    {
+      "id": "my-kedah-kuala-nerang",
+      "name": "Kuala Nerang",
+      "state": "Kedah",
+      "latitude": 6.25844,
+      "longitude": 100.61264,
+      "category": "districtCentre",
+      "district": "Kuala Nerang",
+      "geonamesId": 1736331
+    },
+    {
+      "id": "my-kedah-kulim",
+      "name": "Kulim",
+      "state": "Kedah",
+      "latitude": 5.36499,
+      "longitude": 100.56177,
+      "category": "districtCentre",
+      "district": "Kulim",
+      "geonamesId": 1734393
+    },
+    {
+      "id": "my-kedah-pendang",
+      "name": "Pendang",
+      "state": "Kedah",
+      "latitude": 5.99516,
+      "longitude": 100.47885,
+      "category": "districtCentre",
+      "district": "Pendang",
+      "geonamesId": 1765769
+    },
+    {
+      "id": "my-kedah-pokok-sena",
+      "name": "Pokok Sena",
+      "state": "Kedah",
+      "latitude": 6.17055,
+      "longitude": 100.51885,
+      "category": "districtCentre",
+      "district": "Pokok Sena",
+      "geonamesId": 1736338
+    },
+    {
+      "id": "my-kedah-sik",
+      "name": "Sik",
+      "state": "Kedah",
+      "latitude": 5.83333,
+      "longitude": 100.75,
+      "category": "districtCentre",
+      "district": "Sik",
+      "geonamesId": 6805124
+    },
+    {
+      "id": "my-kedah-sungai-petani",
+      "name": "Sungai Petani",
+      "state": "Kedah",
+      "latitude": 5.647,
+      "longitude": 100.48772,
+      "category": "districtCentre",
+      "district": "Sungai Petani",
+      "geonamesId": 1735498
+    },
+    {
+      "id": "my-kedah-yan-besar",
+      "name": "Yan Besar",
+      "state": "Kedah",
+      "latitude": 5.7989,
+      "longitude": 100.37264,
+      "category": "districtCentre",
+      "district": "Yan",
+      "geonamesId": 1735489
+    },
+    {
+      "id": "my-kelantan-bachok",
+      "name": "Bachok",
+      "state": "Kelantan",
+      "latitude": 6.06667,
+      "longitude": 102.4,
+      "category": "districtCentre",
+      "district": "Bachok",
+      "geonamesId": 1736380
+    },
+    {
+      "id": "my-kelantan-gua-musang",
+      "name": "Gua Musang",
+      "state": "Kelantan",
+      "latitude": 4.88441,
+      "longitude": 101.96857,
+      "category": "districtCentre",
+      "district": "Gua Musang",
+      "geonamesId": 1734651
+    },
+    {
+      "id": "my-kelantan-kampung-jeli",
+      "name": "Jeli",
+      "state": "Kelantan",
+      "latitude": 5.7,
+      "longitude": 101.83333,
+      "category": "districtCentre",
+      "district": "Jeli",
+      "geonamesId": 1734464
+    },
+    {
+      "id": "my-kelantan-kota-bharu",
+      "name": "Kota Bharu",
+      "state": "Kelantan",
+      "latitude": 6.13,
+      "longitude": 102.24,
+      "category": "city"
+    },
+    {
+      "id": "my-kelantan-kuala-krai",
+      "name": "Kuala Krai",
+      "state": "Kelantan",
+      "latitude": 5.5313,
+      "longitude": 102.19925,
+      "category": "districtCentre",
+      "district": "Kuala Krai",
+      "geonamesId": 1735572
+    },
+    {
+      "id": "my-kelantan-machang",
+      "name": "Machang",
+      "state": "Kelantan",
+      "latitude": 5.76407,
+      "longitude": 102.21414,
+      "category": "districtCentre",
+      "district": "Machang",
+      "geonamesId": 1735558
+    },
+    {
+      "id": "my-kelantan-pasir-mas",
+      "name": "Pasir Mas",
+      "state": "Kelantan",
+      "latitude": 6.04934,
+      "longitude": 102.13987,
+      "category": "districtCentre",
+      "district": "Pasir Mas",
+      "geonamesId": 1736372
+    },
+    {
+      "id": "my-kelantan-pasir-puteh",
+      "name": "Pasir Puteh",
+      "state": "Kelantan",
+      "latitude": 5.83333,
+      "longitude": 102.4,
+      "category": "districtCentre",
+      "district": "Pasir Puteh",
+      "geonamesId": 1735545
+    },
+    {
+      "id": "my-kelantan-tanah-merah",
+      "name": "Tanah Merah",
+      "state": "Kelantan",
+      "latitude": 5.8,
+      "longitude": 102.15,
+      "category": "districtCentre",
+      "district": "Tanah Merah",
+      "geonamesId": 1735553
+    },
+    {
+      "id": "my-kelantan-tumpat",
+      "name": "Tumpat",
+      "state": "Kelantan",
+      "latitude": 6.19775,
+      "longitude": 102.17098,
+      "category": "districtCentre",
+      "district": "Tumpat",
+      "geonamesId": 1736356
+    },
+    {
+      "id": "my-kuala-lumpur-kuala-lumpur",
+      "name": "Kuala Lumpur",
+      "state": "Kuala Lumpur",
+      "latitude": 3.14,
+      "longitude": 101.69,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-labuan-labuan",
+      "name": "Labuan",
+      "state": "Labuan",
+      "latitude": 5.28,
+      "longitude": 115.23,
+      "category": "city"
+    },
+    {
+      "id": "my-melaka-melaka-city",
+      "name": "Melaka City",
+      "state": "Melaka",
+      "latitude": 2.19,
+      "longitude": 102.25,
+      "category": "city"
+    },
+    {
+      "id": "my-negeri-sembilan-seremban",
+      "name": "Seremban",
+      "state": "Negeri Sembilan",
+      "latitude": 2.73,
+      "longitude": 101.94,
+      "category": "city"
+    },
+    {
+      "id": "my-pahang-bentung",
+      "name": "Bentong",
+      "state": "Pahang",
+      "latitude": 3.5316,
+      "longitude": 101.9038,
+      "category": "districtCentre",
+      "district": "Bentong",
+      "geonamesId": 1732667
+    },
+    {
+      "id": "my-pahang-jerantut",
+      "name": "Jerantut",
+      "state": "Pahang",
+      "latitude": 3.936,
+      "longitude": 102.3626,
+      "category": "districtCentre",
+      "district": "Jerantut",
+      "geonamesId": 1732602
+    },
+    {
+      "id": "my-pahang-kuala-lipis",
+      "name": "Kuala Lipis",
+      "state": "Pahang",
+      "latitude": 4.1842,
+      "longitude": 102.0468,
+      "category": "districtCentre",
+      "district": "Lipis",
+      "geonamesId": 1733023
+    },
+    {
+      "id": "my-pahang-kuala-rompin",
+      "name": "Kuala Rompin",
+      "state": "Pahang",
+      "latitude": 2.81667,
+      "longitude": 103.48333,
+      "category": "districtCentre",
+      "district": "Rompin",
+      "geonamesId": 1734914
+    },
+    {
+      "id": "my-pahang-kuantan",
+      "name": "Kuantan",
+      "state": "Pahang",
+      "latitude": 3.81,
+      "longitude": 103.33,
+      "category": "city"
+    },
+    {
+      "id": "my-pahang-maran",
+      "name": "Maran",
+      "state": "Pahang",
+      "latitude": 3.586,
+      "longitude": 102.773,
+      "category": "districtCentre",
+      "district": "Maran",
+      "geonamesId": 1732637
+    },
+    {
+      "id": "my-pahang-pekan",
+      "name": "Pekan",
+      "state": "Pahang",
+      "latitude": 3.4836,
+      "longitude": 103.3996,
+      "category": "districtCentre",
+      "district": "Pekan",
+      "geonamesId": 1734971
+    },
+    {
+      "id": "my-pahang-raub",
+      "name": "Raub",
+      "state": "Pahang",
+      "latitude": 3.7899,
+      "longitude": 101.857,
+      "category": "districtCentre",
+      "district": "Raub",
+      "geonamesId": 1732663
+    },
+    {
+      "id": "my-pahang-tanah-rata",
+      "name": "Tanah Rata",
+      "state": "Pahang",
+      "latitude": 4.46361,
+      "longitude": 101.3763,
+      "category": "districtCentre",
+      "district": "Cameron Highlands",
+      "geonamesId": 1735262
+    },
+    {
+      "id": "my-pahang-temerluh",
+      "name": "Temerloh",
+      "state": "Pahang",
+      "latitude": 3.4506,
+      "longitude": 102.4176,
+      "category": "districtCentre",
+      "district": "Temerloh",
+      "geonamesId": 1735022
+    },
+    {
+      "id": "my-pahang-triang",
+      "name": "Triang",
+      "state": "Pahang",
+      "latitude": 3.2462,
+      "longitude": 102.4155,
+      "category": "districtCentre",
+      "district": "Bera",
+      "geonamesId": 1735030
+    },
+    {
+      "id": "my-penang-george-town",
+      "name": "George Town",
+      "state": "Penang",
+      "latitude": 5.41,
+      "longitude": 100.33,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-perak-bagan-datuk",
+      "name": "Bagan Datuk",
+      "state": "Perak",
+      "latitude": 3.9899,
+      "longitude": 100.7819,
+      "category": "districtCentre",
+      "district": "Bagan Datuk",
+      "geonamesId": 1735179
+    },
+    {
+      "id": "my-perak-batu-gajah",
+      "name": "Batu Gajah",
+      "state": "Perak",
+      "latitude": 4.46916,
+      "longitude": 101.04107,
+      "category": "districtCentre",
+      "district": "Kinta",
+      "geonamesId": 1735268
+    },
+    {
+      "id": "my-perak-gerik",
+      "name": "Gerik",
+      "state": "Perak",
+      "latitude": 5.41667,
+      "longitude": 101.13333,
+      "category": "districtCentre",
+      "district": "Hulu Perak",
+      "geonamesId": 1734372
+    },
+    {
+      "id": "my-perak-ipoh",
+      "name": "Ipoh",
+      "state": "Perak",
+      "latitude": 4.6,
+      "longitude": 101.09,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-perak-kampar",
+      "name": "Kampar",
+      "state": "Perak",
+      "latitude": 4.3,
+      "longitude": 101.15,
+      "category": "districtCentre",
+      "district": "Kampar",
+      "geonamesId": 1735274
+    },
+    {
+      "id": "my-perak-kuala-kangsar",
+      "name": "Kuala Kangsar",
+      "state": "Perak",
+      "latitude": 4.76667,
+      "longitude": 100.93333,
+      "category": "districtCentre",
+      "district": "Kuala Kangsar",
+      "geonamesId": 1734599
+    },
+    {
+      "id": "my-perak-parit",
+      "name": "Parit",
+      "state": "Perak",
+      "latitude": 4.48333,
+      "longitude": 100.91667,
+      "category": "districtCentre",
+      "district": "Perak Tengah",
+      "geonamesId": 1735433
+    },
+    {
+      "id": "my-perak-parit-buntar",
+      "name": "Parit Buntar",
+      "state": "Perak",
+      "latitude": 5.12671,
+      "longitude": 100.49316,
+      "category": "districtCentre",
+      "district": "Kerian",
+      "geonamesId": 1735089
+    },
+    {
+      "id": "my-perak-selama",
+      "name": "Selama",
+      "state": "Perak",
+      "latitude": 5.2236,
+      "longitude": 100.69262,
+      "category": "districtCentre",
+      "district": "Selama",
+      "geonamesId": 1734399
+    },
+    {
+      "id": "my-perak-seri-manjung",
+      "name": "Seri Manjung",
+      "state": "Perak",
+      "latitude": 4.1987,
+      "longitude": 100.67,
+      "category": "districtCentre",
+      "district": "Manjung",
+      "geonamesId": 7792200
+    },
+    {
+      "id": "my-perak-tanjung-malim",
+      "name": "Tanjung Malim",
+      "state": "Perak",
+      "latitude": 3.681,
+      "longitude": 101.5198,
+      "category": "districtCentre",
+      "district": "Muallim",
+      "geonamesId": 1732672
+    },
+    {
+      "id": "my-perak-tapah-road",
+      "name": "Tapah Road",
+      "state": "Perak",
+      "latitude": 4.16667,
+      "longitude": 101.2,
+      "category": "districtCentre",
+      "district": "Batang Padang",
+      "geonamesId": 1735282
+    },
+    {
+      "id": "my-perak-teluk-intan",
+      "name": "Teluk Intan",
+      "state": "Perak",
+      "latitude": 4.02219,
+      "longitude": 101.02083,
+      "category": "districtCentre",
+      "district": "Hilir Perak",
+      "geonamesId": 1735459
+    },
+    {
+      "id": "my-perlis-kangar",
+      "name": "Kangar",
+      "state": "Perlis",
+      "latitude": 6.44,
+      "longitude": 100.2,
+      "category": "city"
+    },
+    {
+      "id": "my-putrajaya-putrajaya",
+      "name": "Putrajaya",
+      "state": "Putrajaya",
+      "latitude": 2.93,
+      "longitude": 101.7,
+      "category": "city"
+    },
+    {
+      "id": "my-sabah-beaufort",
+      "name": "Beaufort",
+      "state": "Sabah",
+      "latitude": 5.3473,
+      "longitude": 115.7455,
+      "category": "districtCentre",
+      "district": "Beaufort",
+      "geonamesId": 1733874
+    },
+    {
+      "id": "my-sabah-beluran",
+      "name": "Beluran",
+      "state": "Sabah",
+      "latitude": 5.8956,
+      "longitude": 117.5557,
+      "category": "districtCentre",
+      "district": "Beluran",
+      "geonamesId": 1734020
+    },
+    {
+      "id": "my-sabah-donggongon",
+      "name": "Donggongon",
+      "state": "Sabah",
+      "latitude": 5.90702,
+      "longitude": 116.10146,
+      "category": "districtCentre",
+      "district": "Penampang",
+      "geonamesId": 1733438
+    },
+    {
+      "id": "my-sabah-kalabakan",
+      "name": "Kalabakan",
+      "state": "Sabah",
+      "latitude": 4.41667,
+      "longitude": 117.48333,
+      "category": "districtCentre",
+      "district": "Kalabakan",
+      "geonamesId": 1734224
+    },
+    {
+      "id": "my-sabah-keningau",
+      "name": "Keningau",
+      "state": "Sabah",
+      "latitude": 5.3378,
+      "longitude": 116.1602,
+      "category": "districtCentre",
+      "district": "Keningau",
+      "geonamesId": 1734098
+    },
+    {
+      "id": "my-sabah-kinabatangan",
+      "name": "Kinabatangan",
+      "state": "Sabah",
+      "latitude": 5.58602,
+      "longitude": 117.85083,
+      "category": "districtCentre",
+      "district": "Kinabatangan",
+      "geonamesId": 13118087
+    },
+    {
+      "id": "my-sabah-kota-belud",
+      "name": "Kota Belud",
+      "state": "Sabah",
+      "latitude": 6.351,
+      "longitude": 116.4305,
+      "category": "districtCentre",
+      "district": "Kota Belud",
+      "geonamesId": 1736660
+    },
+    {
+      "id": "my-sabah-kota-kinabalu",
+      "name": "Kota Kinabalu",
+      "state": "Sabah",
+      "latitude": 5.98,
+      "longitude": 116.07,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-sabah-kuala-penyu",
+      "name": "Kuala Penyu",
+      "state": "Sabah",
+      "latitude": 5.5714,
+      "longitude": 115.5984,
+      "category": "districtCentre",
+      "district": "Kuala Penyu",
+      "geonamesId": 1733376
+    },
+    {
+      "id": "my-sabah-kampung-kunak",
+      "name": "Kunak",
+      "state": "Sabah",
+      "latitude": 4.68577,
+      "longitude": 118.24908,
+      "category": "districtCentre",
+      "district": "Kunak",
+      "geonamesId": 1733635
+    },
+    {
+      "id": "my-sabah-lahad-datu",
+      "name": "Lahad Datu",
+      "state": "Sabah",
+      "latitude": 5.03,
+      "longitude": 118.33,
+      "category": "districtCentre"
+    },
+    {
+      "id": "my-sabah-bandar-nabawan",
+      "name": "Nabawan",
+      "state": "Sabah",
+      "latitude": 5.0393,
+      "longitude": 116.4274,
+      "category": "districtCentre",
+      "district": "Nabawan",
+      "geonamesId": 1734114
+    },
+    {
+      "id": "my-sabah-papar",
+      "name": "Papar",
+      "state": "Sabah",
+      "latitude": 5.73333,
+      "longitude": 115.93333,
+      "category": "districtCentre",
+      "district": "Papar",
+      "geonamesId": 1733353
+    },
+    {
+      "id": "my-sabah-pitas",
+      "name": "Pitas",
+      "state": "Sabah",
+      "latitude": 6.72779,
+      "longitude": 117.05779,
+      "category": "districtCentre",
+      "district": "Pitas",
+      "geonamesId": 1736543
+    },
+    {
+      "id": "my-sabah-putatan",
+      "name": "Putatan",
+      "state": "Sabah",
+      "latitude": 5.9258,
+      "longitude": 116.06094,
+      "category": "districtCentre",
+      "district": "Putatan",
+      "geonamesId": 1733440
+    },
+    {
+      "id": "my-sabah-ranau",
+      "name": "Ranau",
+      "state": "Sabah",
+      "latitude": 5.9538,
+      "longitude": 116.6641,
+      "category": "districtCentre",
+      "district": "Ranau",
+      "geonamesId": 1733502
+    },
+    {
+      "id": "my-sabah-sandakan",
+      "name": "Sandakan",
+      "state": "Sabah",
+      "latitude": 5.84,
+      "longitude": 118.12,
+      "category": "city"
+    },
+    {
+      "id": "my-sabah-semporna",
+      "name": "Semporna",
+      "state": "Sabah",
+      "latitude": 4.48178,
+      "longitude": 118.61119,
+      "category": "districtCentre",
+      "district": "Semporna",
+      "geonamesId": 1733697
+    },
+    {
+      "id": "my-sabah-sipitang",
+      "name": "Sipitang",
+      "state": "Sabah",
+      "latitude": 5.07903,
+      "longitude": 115.54964,
+      "category": "districtCentre",
+      "district": "Sipitang",
+      "geonamesId": 1733868
+    },
+    {
+      "id": "my-sabah-tambunan",
+      "name": "Tambunan",
+      "state": "Sabah",
+      "latitude": 5.71667,
+      "longitude": 116.4,
+      "category": "districtCentre",
+      "district": "Tambunan",
+      "geonamesId": 1733468
+    },
+    {
+      "id": "my-sabah-tawau",
+      "name": "Tawau",
+      "state": "Sabah",
+      "latitude": 4.25,
+      "longitude": 117.89,
+      "category": "city"
+    },
+    {
+      "id": "my-sabah-telupid",
+      "name": "Telupid",
+      "state": "Sabah",
+      "latitude": 5.65,
+      "longitude": 117.11667,
+      "category": "districtCentre",
+      "district": "Telupid",
+      "geonamesId": 1733560
+    },
+    {
+      "id": "my-sabah-tenom",
+      "name": "Tenom",
+      "state": "Sabah",
+      "latitude": 5.11922,
+      "longitude": 115.93719,
+      "category": "districtCentre",
+      "district": "Tenom",
+      "geonamesId": 1733885
+    },
+    {
+      "id": "my-sabah-kampung-kuala-tongod",
+      "name": "Tongod",
+      "state": "Sabah",
+      "latitude": 5.267,
+      "longitude": 116.9705,
+      "category": "districtCentre",
+      "district": "Tongod",
+      "geonamesId": 1733833
+    },
+    {
+      "id": "my-sabah-tuaran",
+      "name": "Tuaran",
+      "state": "Sabah",
+      "latitude": 6.1774,
+      "longitude": 116.2314,
+      "category": "districtCentre",
+      "district": "Tuaran",
+      "geonamesId": 1736696
+    },
+    {
+      "id": "my-sarawak-bau",
+      "name": "Bau",
+      "state": "Sarawak",
+      "latitude": 1.41667,
+      "longitude": 110.15,
+      "category": "districtCentre",
+      "district": "Bau",
+      "geonamesId": 1734539
+    },
+    {
+      "id": "my-sarawak-bekenu",
+      "name": "Bekenu",
+      "state": "Sarawak",
+      "latitude": 4.05392,
+      "longitude": 113.84407,
+      "category": "districtCentre",
+      "district": "Subis",
+      "geonamesId": 1738030
+    },
+    {
+      "id": "my-sarawak-belaga",
+      "name": "Belaga",
+      "state": "Sarawak",
+      "latitude": 2.7,
+      "longitude": 113.78333,
+      "category": "districtCentre",
+      "district": "Belaga",
+      "geonamesId": 1737314
+    },
+    {
+      "id": "my-sarawak-beluru",
+      "name": "Beluru",
+      "state": "Sarawak",
+      "latitude": 3.98333,
+      "longitude": 114.1,
+      "category": "districtCentre",
+      "district": "Beluru",
+      "geonamesId": 1737936
+    },
+    {
+      "id": "my-sarawak-betong",
+      "name": "Betong",
+      "state": "Sarawak",
+      "latitude": 1.4,
+      "longitude": 111.51667,
+      "category": "districtCentre",
+      "district": "Betong",
+      "geonamesId": 1736902
+    },
+    {
+      "id": "my-sarawak-bintangor",
+      "name": "Bintangor",
+      "state": "Sarawak",
+      "latitude": 2.16667,
+      "longitude": 111.63333,
+      "category": "districtCentre",
+      "district": "Maradong",
+      "geonamesId": 1735881
+    },
+    {
+      "id": "my-sarawak-bintulu",
+      "name": "Bintulu",
+      "state": "Sarawak",
+      "latitude": 3.17,
+      "longitude": 113.04,
+      "category": "town"
+    },
+    {
+      "id": "my-sarawak-dalat",
+      "name": "Dalat",
+      "state": "Sarawak",
+      "latitude": 2.66667,
+      "longitude": 112.08333,
+      "category": "districtCentre",
+      "district": "Dalat",
+      "geonamesId": 1736929
+    },
+    {
+      "id": "my-sarawak-daro",
+      "name": "Daro",
+      "state": "Sarawak",
+      "latitude": 2.51688,
+      "longitude": 111.43002,
+      "category": "districtCentre",
+      "district": "Daro",
+      "geonamesId": 1736781
+    },
+    {
+      "id": "my-sarawak-julau",
+      "name": "Julau",
+      "state": "Sarawak",
+      "latitude": 2.01667,
+      "longitude": 111.91667,
+      "category": "districtCentre",
+      "district": "Julau",
+      "geonamesId": 1735889
+    },
+    {
+      "id": "my-sarawak-kabong",
+      "name": "Kabong",
+      "state": "Sarawak",
+      "latitude": 1.83333,
+      "longitude": 111.16667,
+      "category": "districtCentre",
+      "district": "Kabong",
+      "geonamesId": 1736719
+    },
+    {
+      "id": "my-sarawak-kanowit",
+      "name": "Kanowit",
+      "state": "Sarawak",
+      "latitude": 2.1,
+      "longitude": 112.15,
+      "category": "districtCentre",
+      "district": "Kanowit",
+      "geonamesId": 1736973
+    },
+    {
+      "id": "my-sarawak-kapit",
+      "name": "Kapit",
+      "state": "Sarawak",
+      "latitude": 1.99546,
+      "longitude": 112.93254,
+      "category": "districtCentre",
+      "district": "Kapit",
+      "geonamesId": 1737185
+    },
+    {
+      "id": "my-sarawak-kota-samarahan",
+      "name": "Kota Samarahan",
+      "state": "Sarawak",
+      "latitude": 1.46031,
+      "longitude": 110.48821,
+      "category": "districtCentre",
+      "district": "Samarahan",
+      "geonamesId": 13118054
+    },
+    {
+      "id": "my-sarawak-kuching",
+      "name": "Kuching",
+      "state": "Sarawak",
+      "latitude": 1.55,
+      "longitude": 110.36,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-sarawak-lawas",
+      "name": "Lawas",
+      "state": "Sarawak",
+      "latitude": 4.8604,
+      "longitude": 115.409,
+      "category": "districtCentre",
+      "district": "Lawas",
+      "geonamesId": 1737589
+    },
+    {
+      "id": "my-sarawak-limbang",
+      "name": "Limbang",
+      "state": "Sarawak",
+      "latitude": 4.75477,
+      "longitude": 115.01011,
+      "category": "districtCentre",
+      "district": "Limbang",
+      "geonamesId": 1737714
+    },
+    {
+      "id": "my-sarawak-long-lama",
+      "name": "Long Lama",
+      "state": "Sarawak",
+      "latitude": 3.76667,
+      "longitude": 114.4,
+      "category": "districtCentre",
+      "district": "Telang Usan",
+      "geonamesId": 1737957
+    },
+    {
+      "id": "my-sarawak-lubok-antu",
+      "name": "Lubok Antu",
+      "state": "Sarawak",
+      "latitude": 1.04186,
+      "longitude": 111.83398,
+      "category": "districtCentre",
+      "district": "Lubok Antu",
+      "geonamesId": 1736868
+    },
+    {
+      "id": "my-sarawak-lundu",
+      "name": "Lundu",
+      "state": "Sarawak",
+      "latitude": 1.67439,
+      "longitude": 109.85171,
+      "category": "districtCentre",
+      "district": "Lundu",
+      "geonamesId": 1737012
+    },
+    {
+      "id": "my-sarawak-marudi",
+      "name": "Marudi",
+      "state": "Sarawak",
+      "latitude": 4.18333,
+      "longitude": 114.31667,
+      "category": "districtCentre",
+      "district": "Marudi",
+      "geonamesId": 1737919
+    },
+    {
+      "id": "my-sarawak-matu",
+      "name": "Matu",
+      "state": "Sarawak",
+      "latitude": 2.68333,
+      "longitude": 111.53333,
+      "category": "districtCentre",
+      "district": "Matu",
+      "geonamesId": 1736834
+    },
+    {
+      "id": "my-sarawak-miri",
+      "name": "Miri",
+      "state": "Sarawak",
+      "latitude": 4.4,
+      "longitude": 113.99,
+      "category": "city"
+    },
+    {
+      "id": "my-sarawak-mukah",
+      "name": "Mukah",
+      "state": "Sarawak",
+      "latitude": 2.89435,
+      "longitude": 112.09145,
+      "category": "districtCentre",
+      "district": "Mukah",
+      "geonamesId": 1735339
+    },
+    {
+      "id": "my-sarawak-pakan",
+      "name": "Pakan",
+      "state": "Sarawak",
+      "latitude": 1.88333,
+      "longitude": 111.68333,
+      "category": "districtCentre",
+      "district": "Pakan",
+      "geonamesId": 1735963
+    },
+    {
+      "id": "my-sarawak-pusa",
+      "name": "Pusa",
+      "state": "Sarawak",
+      "latitude": 1.58333,
+      "longitude": 111.25,
+      "category": "districtCentre",
+      "district": "Pusa",
+      "geonamesId": 1736722
+    },
+    {
+      "id": "my-sarawak-saratok",
+      "name": "Saratok",
+      "state": "Sarawak",
+      "latitude": 1.73333,
+      "longitude": 111.33333,
+      "category": "districtCentre",
+      "district": "Saratok",
+      "geonamesId": 1736760
+    },
+    {
+      "id": "my-sarawak-sarikei",
+      "name": "Sarikei",
+      "state": "Sarawak",
+      "latitude": 2.11667,
+      "longitude": 111.51667,
+      "category": "districtCentre",
+      "district": "Sarikei",
+      "geonamesId": 1735837
+    },
+    {
+      "id": "my-sarawak-sebauh",
+      "name": "Sebauh",
+      "state": "Sarawak",
+      "latitude": 3.11667,
+      "longitude": 113.26667,
+      "category": "districtCentre",
+      "district": "Sebauh",
+      "geonamesId": 1737489
+    },
+    {
+      "id": "my-sarawak-selangau",
+      "name": "Selangau",
+      "state": "Sarawak",
+      "latitude": 2.52477,
+      "longitude": 112.32543,
+      "category": "districtCentre",
+      "district": "Selangau",
+      "geonamesId": 12547009
+    },
+    {
+      "id": "my-sarawak-serian",
+      "name": "Serian",
+      "state": "Sarawak",
+      "latitude": 1.16667,
+      "longitude": 110.56667,
+      "category": "districtCentre",
+      "district": "Serian",
+      "geonamesId": 1744288
+    },
+    {
+      "id": "my-sarawak-sibu",
+      "name": "Sibu",
+      "state": "Sarawak",
+      "latitude": 2.29,
+      "longitude": 111.83,
+      "category": "city"
+    },
+    {
+      "id": "my-sarawak-simunjan",
+      "name": "Simunjan",
+      "state": "Sarawak",
+      "latitude": 1.38333,
+      "longitude": 110.75,
+      "category": "districtCentre",
+      "district": "Simunjan",
+      "geonamesId": 1735681
+    },
+    {
+      "id": "my-sarawak-song",
+      "name": "Song",
+      "state": "Sarawak",
+      "latitude": 2.01667,
+      "longitude": 112.55,
+      "category": "districtCentre",
+      "district": "Song",
+      "geonamesId": 1737184
+    },
+    {
+      "id": "my-sarawak-sri-aman",
+      "name": "Sri Aman",
+      "state": "Sarawak",
+      "latitude": 1.24722,
+      "longitude": 111.45278,
+      "category": "districtCentre",
+      "district": "Sri Aman",
+      "geonamesId": 1735799
+    },
+    {
+      "id": "my-sarawak-tanjung-manis",
+      "name": "Tanjung Manis",
+      "state": "Sarawak",
+      "latitude": 2.23333,
+      "longitude": 111.21667,
+      "category": "districtCentre",
+      "district": "Tanjung Manis",
+      "geonamesId": 1735828
+    },
+    {
+      "id": "my-sarawak-tatau",
+      "name": "Tatau",
+      "state": "Sarawak",
+      "latitude": 2.88333,
+      "longitude": 112.85,
+      "category": "districtCentre",
+      "district": "Tatau",
+      "geonamesId": 1735404
+    },
+    {
+      "id": "my-sarawak-tebedu",
+      "name": "Tebedu",
+      "state": "Sarawak",
+      "latitude": 1.02656,
+      "longitude": 110.36331,
+      "category": "districtCentre",
+      "district": "Tebedu",
+      "geonamesId": 1734537
+    },
+    {
+      "id": "my-selangor-shah-alam",
+      "name": "Shah Alam",
+      "state": "Selangor",
+      "latitude": 3.07,
+      "longitude": 101.52,
+      "category": "majorCity"
+    },
+    {
+      "id": "my-terengganu-cukai",
+      "name": "Chukai",
+      "state": "Terengganu",
+      "latitude": 4.25,
+      "longitude": 103.41667,
+      "category": "districtCentre",
+      "district": "Kemaman",
+      "geonamesId": 1732945
+    },
+    {
+      "id": "my-terengganu-dungun",
+      "name": "Dungun",
+      "state": "Terengganu",
+      "latitude": 4.775,
+      "longitude": 103.4162,
+      "category": "districtCentre",
+      "district": "Dungun",
+      "geonamesId": 1734308
+    },
+    {
+      "id": "my-terengganu-jertih",
+      "name": "Jertih",
+      "state": "Terengganu",
+      "latitude": 5.7336,
+      "longitude": 102.4897,
+      "category": "districtCentre",
+      "district": "Besut",
+      "geonamesId": 1736405
+    },
+    {
+      "id": "my-terengganu-kuala-berang",
+      "name": "Kuala Berang",
+      "state": "Terengganu",
+      "latitude": 5.0734,
+      "longitude": 103.0114,
+      "category": "districtCentre",
+      "district": "Hulu Terengganu",
+      "geonamesId": 1734720
+    },
+    {
+      "id": "my-terengganu-kuala-nerus",
+      "name": "Kuala Nerus",
+      "state": "Terengganu",
+      "latitude": 5.37293,
+      "longitude": 103.02053,
+      "category": "districtCentre",
+      "district": "Kuala Nerus",
+      "geonamesId": 12534340
+    },
+    {
+      "id": "my-terengganu-kuala-terengganu",
+      "name": "Kuala Terengganu",
+      "state": "Terengganu",
+      "latitude": 5.33,
+      "longitude": 103.14,
+      "category": "city"
+    },
+    {
+      "id": "my-terengganu-marang",
+      "name": "Marang",
+      "state": "Terengganu",
+      "latitude": 5.2056,
+      "longitude": 103.2059,
+      "category": "districtCentre",
+      "district": "Marang",
+      "geonamesId": 1734715
+    },
+    {
+      "id": "my-terengganu-permaisuri",
+      "name": "Permaisuri",
+      "state": "Terengganu",
+      "latitude": 5.52241,
+      "longitude": 102.74854,
+      "category": "districtCentre",
+      "district": "Setiu",
+      "geonamesId": 6862363
+    }
+  ]
+}

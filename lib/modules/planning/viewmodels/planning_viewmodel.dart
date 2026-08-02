@@ -83,6 +83,13 @@ class PlanningViewModel extends ChangeNotifier {
       : _priorityAreas.fold<double>(
               0,
               (sum, area) => sum + area.coverageScore,
+          ) /
+          _priorityAreas.length;
+  double get averageLocalStationLocationCount => _priorityAreas.isEmpty
+      ? 0
+      : _priorityAreas.fold<double>(
+              0,
+              (sum, area) => sum + area.localStationLocationCount,
             ) /
           _priorityAreas.length;
   bool get hasAnalysisForSelectedState =>
@@ -147,18 +154,32 @@ class PlanningViewModel extends ChangeNotifier {
       final loadedStations = stationResults[1] as List<ChargingStation>;
       _regions = stationResults[2] as List<StateRegion>;
       final stationDataChanged = !_sameStationData(stations, loadedStations);
+      var analysisCacheInvalidated = false;
       if (stationDataChanged) {
+        _repository.invalidateStationDataCaches();
         stations = loadedStations;
         _analysisByState.clear();
         _priorityAreas = const [];
+        analysisCacheInvalidated = true;
         debugPrint(
           'PlanningViewModel cleared state-analysis cache because the '
           'complete station dataset changed.',
         );
       }
-      if (stationDataChanged || _stateOverviewSummaries.isEmpty) {
+      final rebuildStateCache =
+          stationDataChanged || _stateOverviewSummaries.isEmpty;
+      if (rebuildStateCache) {
         _cacheStationStates();
       }
+      final stationFingerprint =
+          _repository.prepareStationFingerprint(stations);
+      debugPrint(
+        'Station refresh audit: stationRowsFetched=${stations.length}, '
+        'stationFingerprint=$stationFingerprint, '
+        'stateCacheRebuilt=$rebuildStateCache, '
+        'analysisCacheInvalidated=$analysisCacheInvalidated, '
+        'markerCacheInvalidated=$stationDataChanged.',
+      );
       _applySelectedStateFilters();
 
       final loadedProposals = await _repository.getProposals(stations);
@@ -249,6 +270,7 @@ class PlanningViewModel extends ChangeNotifier {
       'analysisCacheHit=$cacheHit.',
     );
     if (cacheHit) {
+      _logSelectedStateConsistency(source: 'state-cache-hit');
       debugPrint(
         'State selection applied: state=$state, cameraFitted=pending, '
         'stationCount=${_selectedStations.length}, '
@@ -275,6 +297,7 @@ class PlanningViewModel extends ChangeNotifier {
       _analysisByState.remove(requestedState);
       _priorityAreas = const [];
       _rebuildStateOverviewSummaries();
+      _logSelectedStateConsistency(source: 'analysis-cache-invalidated');
     }
     final cacheLookupStopwatch = Stopwatch()..start();
     final cached = _analysisByState[requestedState];
@@ -286,6 +309,7 @@ class PlanningViewModel extends ChangeNotifier {
       analysisStatusMessage = _analysisReadyMessage(requestedState, cached);
       lastAnalysisCacheHit = true;
       notifyListeners();
+      _logSelectedStateConsistency(source: 'analysis-cache-hit');
       debugPrint(
         'PlanningViewModel state analysis cache hit: '
         'state=$requestedState, resultCount=${cached.length}, '
@@ -350,6 +374,7 @@ class PlanningViewModel extends ChangeNotifier {
       if (generation == _analysisGeneration &&
           requestedState == _selectedState) {
         analyzingGaps = false;
+        _logSelectedStateConsistency(source: 'analysis-complete');
         notifyListeners();
       }
     }
@@ -369,6 +394,7 @@ class PlanningViewModel extends ChangeNotifier {
       for (final region in _regions) region.name: 0,
     };
     var unassigned = 0;
+    final unassignedStations = <ChargingStation>[];
     for (final station in stations) {
       final state = _stateBoundaries.stateFor(
         station.latitude,
@@ -377,6 +403,7 @@ class PlanningViewModel extends ChangeNotifier {
       assignments[station.id] = state;
       if (state == null) {
         unassigned++;
+        unassignedStations.add(station);
       } else {
         counts[state] = (counts[state] ?? 0) + 1;
       }
@@ -384,10 +411,34 @@ class PlanningViewModel extends ChangeNotifier {
     _stationStateById = Map<String, String?>.unmodifiable(assignments);
     _stationCountByState = Map<String, int>.unmodifiable(counts);
     _rebuildStateOverviewSummaries();
-    debugPrint(
-      'Station state assignment cached: total=${stations.length}, '
-      'assigned=${stations.length - unassigned}, unassigned=$unassigned.',
+    final sortedCounts = Map<String, int>.fromEntries(
+      counts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
     );
+    debugPrint(
+      'Station state assignment cached: '
+      'boundaryDataset=$malaysiaStateBoundaryDatasetVersion, '
+      'total=${stations.length}, '
+      'assignedToState=${stations.length - unassigned}, '
+      'unassignedToState=$unassigned, '
+      'stateCountAudit=$sortedCounts.',
+    );
+    for (final station in unassignedStations.take(30)) {
+      final boundaryProximity = _stateBoundaries.nearestStateBoundary(
+        station.latitude,
+        station.longitude,
+      );
+      debugPrint(
+        'Unassigned station audit: stationId=${station.id}, '
+        'latitude=${station.latitude.toStringAsFixed(6)}, '
+        'longitude=${station.longitude.toStringAsFixed(6)}, '
+        'currentAssignedState=none, '
+        'nearbyState=${boundaryProximity?.state ?? 'undetermined'}, '
+        'nearStateBoundary=${boundaryProximity?.nearBoundary ?? false}, '
+        'boundaryDistanceKm=${boundaryProximity?.distanceKm.toStringAsFixed(2) ?? 'unknown'}, '
+        'coordinateValid=true, '
+        'possibleCause=outside-current-GeoJSON-polygons-or-offshore.',
+      );
+    }
   }
 
   void _cacheProposalStates() {
@@ -451,6 +502,22 @@ class PlanningViewModel extends ChangeNotifier {
       proposals.where(
         (proposal) => _proposalStateById[proposal.id] == _selectedState,
       ),
+    );
+  }
+
+  void _logSelectedStateConsistency({required String source}) {
+    final high =
+        _priorityAreas.where((area) => area.priority == 'High').length;
+    final medium =
+        _priorityAreas.where((area) => area.priority == 'Medium').length;
+    final low = _priorityAreas.where((area) => area.priority == 'Low').length;
+    debugPrint(
+      'Selected-state consistency audit: source=$source, '
+      'state=$_selectedState, stationCount=${_selectedStations.length}, '
+      'cachedStationCount=${_selectedState == malaysiaSelection ? stations.length : _stationCountByState[_selectedState] ?? 0}, '
+      'proposalCount=${_selectedProposals.length}, '
+      'gapCount=${_priorityAreas.length}, high=$high, medium=$medium, low=$low, '
+      'analyzing=$analyzingGaps.',
     );
   }
 
@@ -529,9 +596,18 @@ class PlanningViewModel extends ChangeNotifier {
       final b = incoming[index];
       if (a.id != b.id ||
           a.city != b.city ||
+          a.description != b.description ||
           a.status != b.status ||
+          a.area != b.area ||
+          a.charger != b.charger ||
+          a.demand != b.demand ||
           a.supports != b.supports ||
           a.reaction != b.reaction ||
+          a.locationLabel != b.locationLabel ||
+          a.state != b.state ||
+          a.nearestTown != b.nearestTown ||
+          a.createdAt != b.createdAt ||
+          a.createdBy != b.createdBy ||
           a.latitude != b.latitude ||
           a.longitude != b.longitude) {
         return false;

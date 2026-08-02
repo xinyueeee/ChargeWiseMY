@@ -4,6 +4,7 @@ import '../../../services/supabase_service.dart';
 import '../models/proposal.dart';
 import 'analysis_profile.dart';
 import 'coverage_gap_analyzer.dart';
+import 'proposal_location_service.dart';
 import 'state_boundary_service.dart';
 
 class PlanningRepository {
@@ -11,18 +12,38 @@ class PlanningRepository {
       : _supabase = supabaseService ?? SupabaseService();
   final SupabaseService _supabase;
   final CoverageGapAnalyzer _gapAnalyzer = const CoverageGapAnalyzer();
+  final ProposalLocationService _proposalLocations = ProposalLocationService();
   final Map<String, Future<List<GapArea>>> _gapCache = {};
   List<ChargingStation>? _fingerprintSource;
   List<ChargingStation> _fingerprintSortedStations = const [];
   String _cachedStationFingerprint = '';
   int _analyzerExecutionCount = 0;
 
+  String get stationFingerprint => _cachedStationFingerprint;
+
+  String prepareStationFingerprint(List<ChargingStation> stations) {
+    _prepareStationFingerprint(stations);
+    return _cachedStationFingerprint;
+  }
+
+  void invalidateStationDataCaches() {
+    final previousAnalysisCount = _gapCache.length;
+    _gapCache.clear();
+    _fingerprintSource = null;
+    _fingerprintSortedStations = const [];
+    _cachedStationFingerprint = '';
+    debugPrint(
+      'Station-data repository caches invalidated: '
+      'analysisEntries=$previousAnalysisCount, fingerprintCleared=true.',
+    );
+  }
+
   Future<List<Proposal>> getProposals(
     List<ChargingStation> stations,
   ) async {
     await _supabase.ensureMockUser();
     final rows = await _supabase.getProposalsWithReactions();
-    return rows.map((row) {
+    final proposals = rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
           row['proposal_reactions'] as List? ?? []);
       final likes =
@@ -43,6 +64,8 @@ class PlanningRepository {
         reaction: reaction,
       );
     }).toList();
+    await _proposalLocations.load();
+    return Future.wait(proposals.map(_proposalLocations.enrich));
   }
 
   Future<List<GapArea>> getGaps(
@@ -124,6 +147,7 @@ class PlanningRepository {
     stopwatch.stop();
     debugPrint(
       'Station fingerprint refreshed: count=${stations.length}, '
+      'stationFingerprint=$_cachedStationFingerprint, '
       'duration=${stopwatch.elapsedMilliseconds}ms.',
     );
   }
@@ -136,13 +160,18 @@ class PlanningRepository {
     return a.longitude.compareTo(b.longitude);
   }
 
-  String _stationFingerprint(List<ChargingStation> stations) => stations
-      .map(
-        (station) =>
-            '${station.id}|${station.latitude.toStringAsFixed(7)}|'
-            '${station.longitude.toStringAsFixed(7)}',
-      )
-      .join(';');
+  String _stationFingerprint(List<ChargingStation> stations) {
+    var hash = 0x811C9DC5;
+    for (final station in stations) {
+      final value = '${station.id}|${station.latitude.toStringAsFixed(7)}|'
+          '${station.longitude.toStringAsFixed(7)};';
+      for (final codeUnit in value.codeUnits) {
+        hash ^= codeUnit;
+        hash = (hash * 0x01000193) & 0xFFFFFFFF;
+      }
+    }
+    return '${stations.length}-${hash.toRadixString(16).padLeft(8, '0')}';
+  }
 
   Future<List<ChargingStation>> getStations() async {
     final fetchStopwatch = Stopwatch()..start();
@@ -161,10 +190,13 @@ class PlanningRepository {
     }
     parsingStopwatch.stop();
     debugPrint(
-      'Station loading diagnostics: fetch=${fetchStopwatch.elapsedMilliseconds}ms, '
+      'Station loading diagnostics: '
+      'stationRowsFetched=${rows.length}, '
+      'validCoordinateRows=${stations.length}, '
+      'invalidCoordinateRows=$invalidCoordinates, '
+      'fetch=${fetchStopwatch.elapsedMilliseconds}ms, '
       'parsing=${parsingStopwatch.elapsedMilliseconds}ms, '
-      'rows=${rows.length}, valid=${stations.length}, '
-      'invalid=$invalidCoordinates.',
+      'paginationComplete=true.',
     );
     return stations;
   }
@@ -179,7 +211,7 @@ class PlanningRepository {
       'user_id': SupabaseService.mockUserId,
       'title': proposal.city,
       'description': proposal.description,
-      'address': proposal.city,
+      'address': proposal.locationLabel,
       'latitude': proposal.latitude,
       'longitude': proposal.longitude,
       'charger_type': proposal.charger,
@@ -196,7 +228,7 @@ class PlanningRepository {
     await _supabase.updateProposal(proposal.id, {
       'title': proposal.city,
       'description': proposal.description,
-      'address': proposal.city,
+      'address': proposal.locationLabel,
       'latitude': proposal.latitude,
       'longitude': proposal.longitude,
       'charger_type': proposal.charger,

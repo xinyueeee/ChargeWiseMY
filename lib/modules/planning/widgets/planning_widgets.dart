@@ -1072,15 +1072,16 @@ class _MapPanelState extends State<MapPanel> {
         stationMarkersAfterLimit + _renderedProposalMarkers.length;
     debugPrint(
       'Dashboard marker virtualization: reason=$reason, '
+      'selectedState=${widget.selectedState}, '
       'zoom=${zoom.toStringAsFixed(2)}, tier=${tier.name}, '
-      'rawStations=${widget.stations.length}, '
+      'rawStateStations=${widget.stations.length}, '
       'visibleBeforeLimit=$visibleBeforeLimit, '
-      'stationMarkers=$stationMarkersAfterLimit, '
+      'stationMarkersAfterLimit=$stationMarkersAfterLimit, '
       'aggregateMarkers=$aggregateMarkers, '
       'clusterAssignedMarkers=$clusterAssignedMarkers, '
       'proposalMarkers=${_renderedProposalMarkers.length}, '
       'finalMarkers=$totalMarkers, spatialBuckets=$spatialBuckets, '
-      'duration=${durationMs}ms, applied=$applied'
+      'markerPreparationDurationMs=$durationMs, applied=$applied'
       '${skipReason == null ? '' : ', skipped=$skipReason'}, '
       'mountedMapPanels=$_mountedPanelCount, '
       'createdGoogleMapViews=$_createdPlatformViewCount.',
@@ -1126,8 +1127,8 @@ class _MapPanelState extends State<MapPanel> {
     final isStateDetail = widget.selectedState != malaysiaSelection;
     final polygons = <Polygon>{};
     for (final region in regions) {
-      for (var index = 0; index < region.polygons.length; index++) {
-        final rings = region.polygons[index];
+      for (var index = 0; index < region.displayPolygons.length; index++) {
+        final rings = region.displayPolygons[index];
         if (rings.isEmpty) continue;
         final selected = widget.selectedState == region.name;
         final strokeColor = selected

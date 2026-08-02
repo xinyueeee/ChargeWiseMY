@@ -60,7 +60,11 @@ class _ProposalListScreenState extends State<ProposalListScreen> {
           _status == 'All statuses' || proposal.status == _status;
       final matchesSearch = normalizedQuery.isEmpty ||
           proposal.city.toLowerCase().contains(normalizedQuery) ||
-          proposal.description.toLowerCase().contains(normalizedQuery);
+          proposal.description.toLowerCase().contains(normalizedQuery) ||
+          proposal.locationLabel.toLowerCase().contains(normalizedQuery) ||
+          (proposal.state?.toLowerCase().contains(normalizedQuery) ?? false) ||
+          (proposal.nearestTown?.toLowerCase().contains(normalizedQuery) ??
+              false);
       return matchesStatus && matchesSearch;
     }).toList()
       ..sort((a, b) {
@@ -224,10 +228,14 @@ class _ProposalListScreenState extends State<ProposalListScreen> {
                                 child: PlanningEmptyState(
                                   icon: Icons.ev_station_outlined,
                                   title: _source.isEmpty
-                                      ? 'No proposals yet'
+                                      ? viewModel.selectedState == 'Malaysia'
+                                          ? 'No proposals submitted yet'
+                                          : 'No proposals found for this state'
                                       : 'No matching proposals',
                                   message: _source.isEmpty
-                                      ? 'Create the first proposed charging-station location.'
+                                      ? viewModel.selectedState == 'Malaysia'
+                                          ? 'Create the first proposed charging-station location.'
+                                          : 'Try changing the selected state or create a new proposal.'
                                       : 'Try changing the search text or status filter.',
                                   action: _source.isEmpty
                                       ? ElevatedButton.icon(

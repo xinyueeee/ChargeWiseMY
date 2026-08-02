@@ -150,9 +150,19 @@ class _PriorityAreaMapScreenState extends State<PriorityAreaMapScreen> {
                               _FocusedMapMetric(
                                 icon: Icons.ev_station_outlined,
                                 value:
-                                    '${widget.area.nearbyStationCount} stations within 25 km',
+                                    '${widget.area.nearbyStationCount} station locations within '
+                                    '${widget.area.nearbyRadiusKm.toStringAsFixed(1)} km',
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.area.suitabilityNote,
+                            style: const TextStyle(
+                              color: planningMutedTextColor,
+                              fontSize: 11,
+                              height: 1.3,
+                            ),
                           ),
                         ],
                       ),
