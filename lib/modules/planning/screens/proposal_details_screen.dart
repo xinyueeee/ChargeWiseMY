@@ -25,7 +25,9 @@ class ProposalDetailsScreen extends StatefulWidget {
 
 class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
   bool _deleting = false;
-  bool _reacting = false;
+  bool? _pendingReaction;
+
+  bool get _reacting => _pendingReaction != null;
 
   Proposal get proposal => widget.proposal;
 
@@ -35,7 +37,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
       appBar: AppBar(
         title: const Text(
           'Proposal Details',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+          style: planningAppBarTitleStyle,
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -238,44 +240,55 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
               ),
             ],
             planningSectionGap,
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
+            _ResponsiveButtonPair(
+              first: OutlinedButton.icon(
                     onPressed: proposal.reaction == 0 && !_reacting
                         ? () => _react(like: true)
                         : null,
-                    icon: const Icon(Icons.thumb_up_alt_outlined),
+                    icon: _pendingReaction == true
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.thumb_up_alt_outlined),
                     label: Text(
-                      _reacting ? 'Saving…' : 'Support',
+                      _pendingReaction == true ? 'Saving…' : 'Support',
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
+              second: OutlinedButton.icon(
                     onPressed: proposal.reaction == 0 && !_reacting
                         ? () => _react(like: false)
                         : null,
-                    icon: const Icon(Icons.thumb_down_alt_outlined),
-                    label: const Text('Not suitable'),
+                    icon: _pendingReaction == false
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.thumb_down_alt_outlined),
+                    label: Text(
+                      _pendingReaction == false ? 'Saving…' : 'Not suitable',
+                    ),
                   ),
-                ),
-              ],
             ),
+            if (proposal.reaction != 0) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Your feedback has been recorded for this proposal.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: planningMutedTextColor,
+                  fontSize: 12,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
+            _ResponsiveButtonPair(
+              first: OutlinedButton.icon(
                     onPressed: _deleting ? null : _edit,
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit'),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
+              second: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                     ),
@@ -288,8 +301,6 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
                         : const Icon(Icons.delete_outline),
                     label: Text(_deleting ? 'Deleting…' : 'Delete'),
                   ),
-                ),
-              ],
             ),
           ],
         ),
@@ -343,7 +354,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
   }
 
   Future<void> _react({required bool like}) async {
-    setState(() => _reacting = true);
+    setState(() => _pendingReaction = like);
     try {
       await context.read<PlanningViewModel>().react(proposal, like);
       if (!mounted) return;
@@ -364,7 +375,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _reacting = false);
+      if (mounted) setState(() => _pendingReaction = null);
     }
   }
 
@@ -385,9 +396,9 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.warning_amber_rounded, color: Colors.red),
-        title: const Text('Permanently delete proposal?'),
+        title: const Text('Delete Proposal?'),
         content: Text(
-          '“${proposal.city}” will be removed from the proposal list. '
+          '“${proposal.city}” will be removed permanently. '
           'This action cannot be undone.',
         ),
         actions: [
@@ -398,7 +409,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete permanently'),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -412,7 +423,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text('Proposal deleted successfully.'),
+          content: Text('Proposal deleted.'),
         ),
       );
       Navigator.of(context).pop();
@@ -470,6 +481,41 @@ class _MetricTile extends StatelessWidget {
       );
 }
 
+class _ResponsiveButtonPair extends StatelessWidget {
+  const _ResponsiveButtonPair({
+    required this.first,
+    required this.second,
+  });
+
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final useVerticalLayout = constraints.maxWidth < 360 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.25;
+          if (useVerticalLayout) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                first,
+                const SizedBox(height: 10),
+                second,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: first),
+              const SizedBox(width: 10),
+              Expanded(child: second),
+            ],
+          );
+        },
+      );
+}
+
 class _InformationRow extends StatelessWidget {
   const _InformationRow(this.label, this.value);
 
@@ -493,6 +539,7 @@ class _InformationRow extends StatelessWidget {
               child: Text(
                 value,
                 textAlign: TextAlign.end,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
             ),

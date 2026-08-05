@@ -65,7 +65,7 @@ class PlanningViewModel extends ChangeNotifier {
   int get proposalCount => _selectedProposals.length;
   int get communitySupportCount => _selectedProposals.fold(
         0,
-        (sum, proposal) => sum + proposal.supports,
+        (sum, proposal) => sum + proposal.displayedSupports,
       );
   List<GapArea> get priorityAreas => _priorityAreas;
   int get highPriorityAreaCount =>
@@ -532,7 +532,7 @@ class PlanningViewModel extends ChangeNotifier {
   String recommendation(Proposal proposal) =>
       proposal.demand == 'High' &&
               proposal.distance > 5 &&
-              proposal.supports > 30
+              proposal.displayedSupports > 30
           ? 'Suitable Location'
           : 'Needs Further Review';
 
@@ -603,6 +603,7 @@ class PlanningViewModel extends ChangeNotifier {
           a.demand != b.demand ||
           a.supports != b.supports ||
           a.reaction != b.reaction ||
+          a.reactionIncludedInSupports != b.reactionIncludedInSupports ||
           a.locationLabel != b.locationLabel ||
           a.state != b.state ||
           a.nearestTown != b.nearestTown ||

@@ -27,7 +27,7 @@ class _ProposalLocationMapScreenState
     zoom: 5.5,
   );
 
-  final ProposalLocationService _locations = ProposalLocationService();
+  ProposalLocationService _locations = ProposalLocationService();
   ProposalLocationSelection? _selection;
   LatLng? _markerPosition;
   Set<Polygon> _boundaries = const {};
@@ -48,7 +48,15 @@ class _ProposalLocationMapScreenState
     _prepareMap();
   }
 
-  Future<void> _prepareMap() async {
+  Future<void> _prepareMap({bool retry = false}) async {
+    if (retry) {
+      _locations = ProposalLocationService();
+      setState(() {
+        _loading = true;
+        _boundaries = const {};
+        _validationMessage = null;
+      });
+    }
     try {
       await _locations.load();
       final polygons = <Polygon>{};
@@ -107,9 +115,14 @@ class _ProposalLocationMapScreenState
   @override
   Widget build(BuildContext context) {
     final initialTarget = _markerPosition;
+    final mapUnavailable =
+        !_loading && _boundaries.isEmpty && _validationMessage != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.readOnly ? 'Proposal Location' : 'Choose Location'),
+        title: Text(
+          widget.readOnly ? 'Proposal Location' : 'Choose Location',
+          style: planningAppBarTitleStyle,
+        ),
         centerTitle: true,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -121,9 +134,14 @@ class _ProposalLocationMapScreenState
             Expanded(
               child: _loading
                   ? const PlanningLoadingState(
-                      message: 'Preparing Malaysia map…',
+                      message: 'Preparing proposal location map…',
                     )
-                  : GoogleMap(
+                  : mapUnavailable
+                      ? PlanningErrorState(
+                          message: _validationMessage!,
+                          onRetry: () => _prepareMap(retry: true),
+                        )
+                      : GoogleMap(
                       initialCameraPosition: initialTarget == null
                           ? _malaysiaCamera
                           : CameraPosition(target: initialTarget, zoom: 13),
@@ -133,22 +151,29 @@ class _ProposalLocationMapScreenState
                       onTap: widget.readOnly || _resolving
                           ? null
                           : _selectLocation,
-                      zoomControlsEnabled: false,
+                      zoomControlsEnabled: true,
                       myLocationButtonEnabled: false,
                       compassEnabled: true,
                       mapToolbarEnabled: false,
+                      rotateGesturesEnabled: false,
+                      tiltGesturesEnabled: false,
                       onMapCreated: (_) => debugPrint(
                         'Proposal location map created: '
                         'readOnly=${widget.readOnly}, boundaries=${_boundaries.length}.',
                       ),
                     ),
             ),
+            if (!mapUnavailable)
             Material(
               elevation: 8,
               color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                child: Column(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * .46,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (widget.readOnly)
@@ -203,6 +228,7 @@ class _ProposalLocationMapScreenState
                       ),
                     ],
                   ],
+                  ),
                 ),
               ),
             ),

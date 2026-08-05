@@ -46,10 +46,7 @@ class GapAnalysisScreen extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
+              style: planningAppBarTitleStyle.copyWith(fontSize: 20),
             ),
             centerTitle: true,
             backgroundColor: Colors.white,
@@ -58,9 +55,14 @@ class GapAnalysisScreen extends StatelessWidget {
           ),
           body: viewModel.loading
               ? const PlanningLoadingState(
-                  message: 'Loading station locations…',
+                  message: 'Loading charging infrastructure…',
                 )
-              : SafeArea(
+              : viewModel.errorMessage != null
+                  ? PlanningErrorState(
+                      message: viewModel.errorMessage!,
+                      onRetry: viewModel.load,
+                    )
+                  : SafeArea(
                   child: CustomScrollView(
                     slivers: [
                       SliverPadding(
@@ -556,18 +558,25 @@ class _GapMetric extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 17, color: planningMutedTextColor),
-          const SizedBox(width: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              color: planningMutedTextColor,
-              fontSize: 13,
+  Widget build(BuildContext context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width - 72,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: planningMutedTextColor),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  color: planningMutedTextColor,
+                  fontSize: 13,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
 }

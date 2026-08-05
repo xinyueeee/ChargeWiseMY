@@ -14,6 +14,11 @@ const planningTextColor = Color(0xFF101B40);
 const planningMutedTextColor = Color(0xFF5F6B82);
 const planningPagePadding = EdgeInsets.symmetric(horizontal: 20, vertical: 16);
 const planningSectionGap = SizedBox(height: 20);
+const planningAppBarTitleStyle = TextStyle(
+  color: planningTextColor,
+  fontSize: 22,
+  fontWeight: FontWeight.w700,
+);
 
 class PlanningSectionTitle extends StatelessWidget {
   const PlanningSectionTitle(
@@ -445,7 +450,9 @@ class _MapPanelState extends State<MapPanel> {
   @override
   void dispose() {
     _stationDataGeneration++;
+    final controller = _mapController;
     _mapController = null;
+    controller?.dispose();
     if (_platformViewCreated) {
       _createdPlatformViewCount--;
     }
@@ -651,7 +658,9 @@ class _MapPanelState extends State<MapPanel> {
           icon: _icons!.proposal,
           infoWindow: InfoWindow(
             title: proposal.city,
-            snippet: 'Proposed station',
+            snippet: proposal.state == null
+                ? 'Proposed station · ${proposal.status}'
+                : '${proposal.status} · ${proposal.state}',
           ),
         ),
       );
@@ -1106,8 +1115,12 @@ class _MapPanelState extends State<MapPanel> {
           markerId: MarkerId('proposal_${proposal.id}'),
           position: LatLng(proposal.latitude!, proposal.longitude!),
           icon: _icons!.proposal,
-          infoWindow:
-              InfoWindow(title: proposal.city, snippet: 'Proposed station'),
+          infoWindow: InfoWindow(
+            title: proposal.city,
+            snippet: proposal.state == null
+                ? 'Proposed station · ${proposal.status}'
+                : '${proposal.status} · ${proposal.state}',
+          ),
         ),
       );
     }
@@ -1309,9 +1322,11 @@ class _MapPanelState extends State<MapPanel> {
                     () => EagerGestureRecognizer(),
                   ),
                 },
-                zoomControlsEnabled: false,
+                zoomControlsEnabled: true,
                 myLocationButtonEnabled: false,
                 mapToolbarEnabled: false,
+                rotateGesturesEnabled: false,
+                tiltGesturesEnabled: false,
                 padding: widget.mapPadding,
                 onTap: widget.onTap,
                 markers: markersPassedToGoogleMap,
@@ -1322,7 +1337,12 @@ class _MapPanelState extends State<MapPanel> {
                 onCameraIdle: _handleCameraIdle,
               ),
               if (_preparingMarkers)
-                const Center(child: CircularProgressIndicator.adaptive()),
+                const Center(
+                  child: Semantics(
+                    label: 'Preparing map markers',
+                    child: CircularProgressIndicator.adaptive(),
+                  ),
+                ),
               if (_mapError != null)
                 Positioned(
                   left: 12,

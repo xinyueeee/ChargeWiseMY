@@ -28,6 +28,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   late String _demand;
   late String _chargerType;
   ProposalLocationSelection? _selection;
+  String? _locationError;
   bool _preparingLocation = false;
   bool _submitting = false;
 
@@ -53,13 +54,20 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       if (!mounted) return;
       setState(() {
         _selection = selection;
+        _locationError = selection == null
+            ? 'The saved location is outside the supported Malaysia boundary. Choose a new location.'
+            : null;
         _preparingLocation = false;
       });
     } catch (error, stackTrace) {
       debugPrint('Saved proposal location preparation failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
-      setState(() => _preparingLocation = false);
+      setState(() {
+        _preparingLocation = false;
+        _locationError =
+            'Unable to prepare the saved location. Choose the location again.';
+      });
     }
   }
 
@@ -77,7 +85,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       appBar: AppBar(
         title: Text(
           _editing ? 'Edit Proposal' : 'New Proposal',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 24),
+          style: planningAppBarTitleStyle,
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -113,6 +121,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                       enabled: !_submitting,
                       textInputAction: TextInputAction.next,
                       textCapitalization: TextCapitalization.words,
+                      maxLength: 80,
                       decoration: const InputDecoration(
                         labelText: 'Proposal name *',
                         hintText: 'Example: Kampar community charger',
@@ -292,6 +301,16 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
             ],
           ),
           const SizedBox(height: 14),
+          if (_locationError != null) ...[
+            Text(
+              _locationError!,
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           OutlinedButton.icon(
             onPressed: _submitting ? null : _chooseLocation,
             icon: const Icon(Icons.map_outlined),
@@ -346,7 +365,10 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       ),
     );
     if (selected != null && mounted) {
-      setState(() => _selection = selected);
+      setState(() {
+        _selection = selected;
+        _locationError = null;
+      });
     }
   }
 

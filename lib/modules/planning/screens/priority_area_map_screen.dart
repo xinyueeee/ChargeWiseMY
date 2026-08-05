@@ -43,15 +43,21 @@ class _PriorityAreaMapScreenState extends State<PriorityAreaMapScreen> {
   Widget build(BuildContext context) {
     final latitude = widget.area.latitude ?? 4.2105;
     final longitude = widget.area.longitude ?? 101.9758;
+    final priorityColor = widget.area.priority == 'High'
+        ? Colors.red
+        : widget.area.priority == 'Medium'
+            ? Colors.orange
+            : green;
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Priority Area Map',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+          style: planningAppBarTitleStyle,
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
+        centerTitle: true,
       ),
       body: SafeArea(
         child: LayoutBuilder(
@@ -76,8 +82,12 @@ class _PriorityAreaMapScreenState extends State<PriorityAreaMapScreen> {
                 bottom: 20,
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: AppCard(
+                    constraints: BoxConstraints(
+                      maxWidth: 560,
+                      maxHeight: constraints.maxHeight * .55,
+                    ),
+                    child: SingleChildScrollView(
+                      child: AppCard(
                       padding: const EdgeInsets.all(12),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -86,9 +96,9 @@ class _PriorityAreaMapScreenState extends State<PriorityAreaMapScreen> {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.location_on,
-                                color: Colors.red,
+                                color: priorityColor,
                                 size: 22,
                               ),
                               const SizedBox(width: 8),
@@ -123,13 +133,13 @@ class _PriorityAreaMapScreenState extends State<PriorityAreaMapScreen> {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: .08),
+                                  color: priorityColor.withValues(alpha: .08),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
                                   'Score ${widget.area.priorityScore.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    color: Colors.red,
+                                  style: TextStyle(
+                                    color: priorityColor,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -165,6 +175,7 @@ class _PriorityAreaMapScreenState extends State<PriorityAreaMapScreen> {
                             ),
                           ),
                         ],
+                        ),
                       ),
                     ),
                   ),
@@ -188,18 +199,25 @@ class _FocusedMapMetric extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: planningMutedTextColor),
-          const SizedBox(width: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              color: planningMutedTextColor,
-              fontSize: 12,
+  Widget build(BuildContext context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width - 64,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: planningMutedTextColor),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  color: planningMutedTextColor,
+                  fontSize: 12,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
 }

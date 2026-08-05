@@ -17,6 +17,7 @@ class Proposal {
     this.latitude,
     this.longitude,
     this.reaction = 0,
+    this.reactionIncludedInSupports = false,
   });
   final String id, city, description, area, charger, demand;
   final String locationLabel;
@@ -30,6 +31,7 @@ class Proposal {
   final double? latitude;
   final double? longitude;
   int reaction;
+  final bool reactionIncludedInSupports;
   factory Proposal.fromJson(Map<String, dynamic> json) => Proposal(
         id: json['id'],
         city: json['city'],
@@ -80,6 +82,7 @@ class Proposal {
         latitude: CoordinateParser.latitude(row['latitude']),
         longitude: CoordinateParser.longitude(row['longitude']),
         reaction: reaction,
+        reactionIncludedInSupports: reaction == 1,
       );
 
   Proposal copyWithLocation({
@@ -105,6 +108,7 @@ class Proposal {
         latitude: latitude,
         longitude: longitude,
         reaction: reaction,
+        reactionIncludedInSupports: reactionIncludedInSupports,
       );
 
   static String _displayStatus(String? value) {
@@ -123,7 +127,8 @@ class Proposal {
     return 'Medium';
   }
 
-  int get displayedSupports => supports + (reaction == 1 ? 1 : 0);
+  int get displayedSupports =>
+      supports + (reaction == 1 && !reactionIncludedInSupports ? 1 : 0);
 }
 
 class GapArea {
