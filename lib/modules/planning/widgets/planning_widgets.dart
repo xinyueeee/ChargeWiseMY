@@ -1337,7 +1337,7 @@ class _MapPanelState extends State<MapPanel> {
                 onCameraIdle: _handleCameraIdle,
               ),
               if (_preparingMarkers)
-                const Center(
+                Center(
                   child: Semantics(
                     label: 'Preparing map markers',
                     child: CircularProgressIndicator.adaptive(),
