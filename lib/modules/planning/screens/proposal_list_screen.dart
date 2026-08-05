@@ -84,7 +84,7 @@ class _ProposalListScreenState extends State<ProposalListScreen> {
       appBar: AppBar(
         title: const Text(
           'Proposals',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+          style: planningAppBarTitleStyle,
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
