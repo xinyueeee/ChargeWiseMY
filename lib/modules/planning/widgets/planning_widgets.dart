@@ -1873,7 +1873,20 @@ class ProposalCard extends StatelessWidget {
 }
 
 class FloatingBottomNav extends StatelessWidget {
-  const FloatingBottomNav({super.key});
+  const FloatingBottomNav({
+    super.key,
+    this.currentTab = 'Planning',
+    this.onProfileTap,
+    this.onPlanningTap,
+  });
+
+  final String currentTab;
+
+  /// Home/Charging/Feedback don't have screens yet, so they stay inert;
+  /// Planning and Profile become tappable once a caller opts in.
+  final VoidCallback? onProfileTap;
+  final VoidCallback? onPlanningTap;
+
   @override
   Widget build(BuildContext c) => SafeArea(
       child: Container(
@@ -1887,15 +1900,49 @@ class FloatingBottomNav extends StatelessWidget {
               BoxShadow(color: Color(0x10000000), blurRadius: 8)
             ],
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Expanded(child: _Nav(Icons.home_outlined, 'Home')),
-              Expanded(child: _Nav(Icons.bolt_outlined, 'Charging')),
               Expanded(
-                child: _Nav(Icons.map_outlined, 'Planning', selected: true),
+                child: _Nav(
+                  Icons.home_outlined,
+                  'Home',
+                  selected: currentTab == 'Home',
+                ),
               ),
-              Expanded(child: _Nav(Icons.warning_amber_outlined, 'Feedback')),
-              Expanded(child: _Nav(Icons.person_outline, 'Profile')),
+              Expanded(
+                child: _Nav(
+                  Icons.bolt_outlined,
+                  'Charging',
+                  selected: currentTab == 'Charging',
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onPlanningTap,
+                  child: _Nav(
+                    Icons.map_outlined,
+                    'Planning',
+                    selected: currentTab == 'Planning',
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _Nav(
+                  Icons.warning_amber_outlined,
+                  'Feedback',
+                  selected: currentTab == 'Feedback',
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onProfileTap,
+                  child: _Nav(
+                    Icons.person_outline,
+                    'Profile',
+                    selected: currentTab == 'Profile',
+                  ),
+                ),
+              ),
             ],
           ),
         ),
