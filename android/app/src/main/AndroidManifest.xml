@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- For Module 3's GPS auto-capture (see LocationCaptureService) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="chargewise_my"
         android:name="${applicationName}"
@@ -6,7 +9,6 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDZAJVT8Xb3D48ULIJjgIEvywZ05xnvFQ8"/>
-    >
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../services/auth_service.dart';
 import '../widgets/profile_widgets.dart';
@@ -98,6 +99,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       bottomNavigationBar: FloatingBottomNav(
         currentTab: 'Profile',
         onPlanningTap: () => Navigator.of(context).pop(),
+        onFeedbackTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const FeedbackDashboardScreen(),
+          ),
+        ),
       ),
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>?>(

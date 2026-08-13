@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/navigation/app_route_observer.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import '../services/state_boundary_service.dart';
@@ -361,6 +362,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
       ),
       bottomNavigationBar: FloatingBottomNav(
         onProfileTap: () => _push(context, const ProfileScreen()),
+        onFeedbackTap: () => _push(context, const FeedbackDashboardScreen()),
       ),
     );
   }
