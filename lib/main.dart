@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/navigation/app_route_observer.dart';
 import 'modules/auth/screens/auth_gate.dart';
+import 'modules/feedback/services/feedback_repository.dart';
+import 'modules/feedback/viewmodels/feedback_viewmodel.dart';
 import 'modules/planning/screens/planning_dashboard_screen.dart';
 import 'modules/planning/services/planning_repository.dart';
 import 'modules/planning/viewmodels/planning_viewmodel.dart';
@@ -23,8 +25,15 @@ class ChargeWiseApp extends StatelessWidget {
   const ChargeWiseApp({super.key});
 
   @override
-  Widget build(BuildContext context) => ChangeNotifierProvider(
-        create: (_) => PlanningViewModel(PlanningRepository())..load(),
+  Widget build(BuildContext context) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => PlanningViewModel(PlanningRepository())..load(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => FeedbackViewModel(FeedbackRepository())..load(),
+          ),
+        ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'ChargeWise MY',
