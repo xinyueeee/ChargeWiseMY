@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/navigation/app_route_observer.dart';
+import 'modules/planning/admin/screens/admin_planning_dashboard_screen.dart';
+import 'modules/planning/admin/viewmodels/admin_planning_viewmodel.dart';
 import 'modules/planning/screens/planning_dashboard_screen.dart';
 import 'modules/planning/services/planning_repository.dart';
 import 'modules/planning/viewmodels/planning_viewmodel.dart';
@@ -71,7 +73,36 @@ class ChargeWiseApp extends StatelessWidget {
             ),
           ),
           navigatorObservers: [appRouteObserver],
-          home: const PlanningDashboardScreen(),
+          routes: {
+            '/admin': (_) => const _AdminPlanningEntry(),
+          },
+          home: const _PlanningEntry(),
         ),
+      );
+}
+
+class _PlanningEntry extends StatelessWidget {
+  const _PlanningEntry();
+
+  static const bool _adminMode = bool.fromEnvironment(
+    'CHARGEWISE_ADMIN',
+    defaultValue: false,
+  );
+
+  @override
+  Widget build(BuildContext context) => _adminMode
+      ? const _AdminPlanningEntry()
+      : const PlanningDashboardScreen();
+}
+
+class _AdminPlanningEntry extends StatelessWidget {
+  const _AdminPlanningEntry();
+
+  @override
+  Widget build(BuildContext context) => ChangeNotifierProvider(
+        create: (_) => AdminPlanningViewModel(
+          context.read<PlanningViewModel>(),
+        ),
+        child: const AdminPlanningDashboardScreen(),
       );
 }

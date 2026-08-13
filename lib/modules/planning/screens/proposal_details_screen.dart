@@ -6,7 +6,6 @@ import '../models/proposal.dart';
 import '../services/proposal_location_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
-import 'ai_planning_screen.dart';
 import 'new_proposal_screen.dart';
 import 'proposal_location_map_screen.dart';
 
@@ -43,18 +42,6 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
-        actions: [
-          IconButton(
-            tooltip: 'Open planning assessment',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => AiPlanningScreen(proposal: proposal),
-              ),
-            ),
-            icon: const Icon(Icons.analytics_outlined),
-          ),
-        ],
       ),
       body: SafeArea(
         child: ListView(
