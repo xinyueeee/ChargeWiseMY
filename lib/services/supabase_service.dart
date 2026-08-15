@@ -21,7 +21,10 @@ class SupabaseService {
       final pageStopwatch = Stopwatch()..start();
       final page = await client
           .from('charging_stations')
-          .select('station_id, station_name, latitude, longitude, charger_type')
+          .select(
+            'station_id, station_name, latitude, longitude, charger_type, '
+            'address, available_ports, status, indoor_outdoor',
+          )
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
       pageStopwatch.stop();

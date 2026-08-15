@@ -254,6 +254,10 @@ class ChargingStation {
     required this.latitude,
     required this.longitude,
     required this.chargerType,
+    this.address,
+    this.availablePorts,
+    this.status,
+    this.indoorOutdoor,
   });
 
   final String id;
@@ -261,6 +265,10 @@ class ChargingStation {
   final double latitude;
   final double longitude;
   final String chargerType;
+  final String? address;
+  final int? availablePorts;
+  final String? status;
+  final String? indoorOutdoor;
 
   static ChargingStation? fromSupabase(Map<String, dynamic> row) {
     final latitude = CoordinateParser.latitude(row['latitude']);
@@ -273,6 +281,10 @@ class ChargingStation {
       latitude: latitude,
       longitude: longitude,
       chargerType: row['charger_type']?.toString() ?? 'Charger',
+      address: row['address']?.toString(),
+      availablePorts: (row['available_ports'] as num?)?.toInt(),
+      status: row['status']?.toString(),
+      indoorOutdoor: row['indoor_outdoor']?.toString(),
     );
   }
 }
