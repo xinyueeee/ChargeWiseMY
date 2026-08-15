@@ -52,6 +52,8 @@ class PlanningViewModel extends ChangeNotifier {
   AnalysisProfileDefinition get selectedAnalysisProfile =>
       AnalysisProfileConfig.definitionFor(_selectedState);
 
+  String? stateForStation(String stationId) => _stationStateById[stationId];
+
   List<ChargingStation> get selectedStations => _selectedStations;
   List<Proposal> get selectedProposals => _selectedProposals;
   List<ChargingStation> get mapStations =>

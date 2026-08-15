@@ -332,6 +332,8 @@ class MapPanel extends StatefulWidget {
     this.mapPadding = const EdgeInsets.all(12),
     this.onTap,
     this.onStateSelected,
+    this.stationIconResolver,
+    this.onStationTap,
   });
   final double height;
   final bool gaps;
@@ -348,6 +350,17 @@ class MapPanel extends StatefulWidget {
   final EdgeInsets mapPadding;
   final ValueChanged<LatLng>? onTap;
   final StateSelectionCallback? onStateSelected;
+
+  /// Overrides the individual-station marker icon per station (e.g. to
+  /// color-code by charger type). Leave null to keep the default station
+  /// icon used by the national planning dashboard.
+  final BitmapDescriptor Function(ChargingStation station)?
+      stationIconResolver;
+
+  /// Called when an individual station marker is tapped (e.g. to show a
+  /// details sheet). Leave null to keep the default info-window-only
+  /// behavior used by the national planning dashboard.
+  final ValueChanged<ChargingStation>? onStationTap;
 
   @override
   State<MapPanel> createState() => _MapPanelState();
@@ -1056,8 +1069,11 @@ class _MapPanelState extends State<MapPanel> {
   Marker _createStationMarker(ChargingStation station) => Marker(
         markerId: MarkerId('station_${station.id}'),
         position: LatLng(station.latitude, station.longitude),
-        icon: _icons!.station,
+        icon: widget.stationIconResolver?.call(station) ?? _icons!.station,
         clusterManagerId: _existingStationsClusterId,
+        onTap: widget.onStationTap == null
+            ? null
+            : () => widget.onStationTap!(station),
         infoWindow: InfoWindow(
           title: station.name,
           snippet: station.chargerType,
@@ -1876,14 +1892,19 @@ class FloatingBottomNav extends StatelessWidget {
   const FloatingBottomNav({
     super.key,
     this.currentTab = 'Planning',
+    this.onHomeTap,
+    this.onChargingTap,
     this.onProfileTap,
     this.onPlanningTap,
   });
 
   final String currentTab;
 
-  /// Home/Charging/Feedback don't have screens yet, so they stay inert;
-  /// Planning and Profile become tappable once a caller opts in.
+  /// Feedback doesn't have a screen yet, so it stays inert;
+  /// Home, Charging, Planning and Profile become tappable once a caller
+  /// opts in.
+  final VoidCallback? onHomeTap;
+  final VoidCallback? onChargingTap;
   final VoidCallback? onProfileTap;
   final VoidCallback? onPlanningTap;
 
@@ -1903,17 +1924,23 @@ class FloatingBottomNav extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: _Nav(
-                  Icons.home_outlined,
-                  'Home',
-                  selected: currentTab == 'Home',
+                child: GestureDetector(
+                  onTap: onHomeTap,
+                  child: _Nav(
+                    Icons.home_outlined,
+                    'Home',
+                    selected: currentTab == 'Home',
+                  ),
                 ),
               ),
               Expanded(
-                child: _Nav(
-                  Icons.bolt_outlined,
-                  'Charging',
-                  selected: currentTab == 'Charging',
+                child: GestureDetector(
+                  onTap: onChargingTap,
+                  child: _Nav(
+                    Icons.bolt_outlined,
+                    'Charging',
+                    selected: currentTab == 'Charging',
+                  ),
                 ),
               ),
               Expanded(

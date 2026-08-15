@@ -4,9 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/navigation/app_route_observer.dart';
 import 'modules/auth/screens/auth_gate.dart';
-import 'modules/planning/screens/planning_dashboard_screen.dart';
+import 'modules/home/screens/home_screen.dart';
 import 'modules/planning/services/planning_repository.dart';
 import 'modules/planning/viewmodels/planning_viewmodel.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,7 @@ Future<void> main() async {
     url: 'https://ffqtkpoeuqjuihqdzmsc.supabase.co',
     publishableKey: 'sb_publishable_RZVErCEwcPADZuWBWqGtKg_BxkWHRj1',
   );
+  await NotificationService().init();
 
   runApp(const ChargeWiseApp());
 }
@@ -73,7 +75,7 @@ class ChargeWiseApp extends StatelessWidget {
           ),
           navigatorObservers: [appRouteObserver],
           home: const AuthGate(
-            authenticatedChild: PlanningDashboardScreen(),
+            authenticatedChild: HomeScreen(),
           ),
         ),
       );

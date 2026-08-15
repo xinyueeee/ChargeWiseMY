@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../widgets/auth_widgets.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -82,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: (value) {
                     final text = value?.trim() ?? '';
                     if (text.isEmpty) return 'Email is required';
-                    if (!text.contains('@')) return 'Enter a valid email';
+                    if (!emailRegex.hasMatch(text)) return 'Enter a valid email';
                     return null;
                   },
                 ),
@@ -116,11 +117,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextButton(
                     onPressed: _submitting
                         ? null
-                        : () => ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Password reset is coming soon.',
-                                ),
+                        : () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const ForgotPasswordScreen(),
                               ),
                             ),
                     child: const Text('Forgot Password?'),

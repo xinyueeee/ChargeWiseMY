@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/navigation/app_route_observer.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../charging/screens/charging_screen.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import '../services/state_boundary_service.dart';
@@ -360,7 +361,12 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
         },
       ),
       bottomNavigationBar: FloatingBottomNav(
-        onProfileTap: () => _push(context, const ProfileScreen()),
+        currentTab: 'Planning',
+        onHomeTap: () => Navigator.of(context).popUntil(
+          (route) => route.isFirst,
+        ),
+        onChargingTap: () => _switchTo(context, const ChargingScreen()),
+        onProfileTap: () => _switchTo(context, const ProfileScreen()),
       ),
     );
   }
@@ -368,6 +374,13 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
   void _push(BuildContext context, Widget page) {
     Navigator.push(
       context,
+      MaterialPageRoute<void>(builder: (_) => page),
+    );
+  }
+
+  void _switchTo(BuildContext context, Widget page) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => page),
     );
   }

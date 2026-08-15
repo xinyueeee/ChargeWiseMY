@@ -95,8 +95,78 @@ class AuthService {
     await _client.from('vehicles').delete().eq('id', vehicleId);
   }
 
+  Future<Set<String>> fetchSavedStationIds() async {
+    final userId = currentUser?.id;
+    if (userId == null) return {};
+    final rows = await _client
+        .from('saved_stations')
+        .select('station_id')
+        .eq('user_id', userId);
+    return {
+      for (final row in List<Map<String, dynamic>>.from(rows))
+        row['station_id'].toString(),
+    };
+  }
+
+  Future<void> saveStation(String stationId) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+    await _client.from('saved_stations').insert({
+      'user_id': userId,
+      'station_id': stationId,
+    });
+  }
+
+  Future<void> unsaveStation(String stationId) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+    await _client
+        .from('saved_stations')
+        .delete()
+        .eq('user_id', userId)
+        .eq('station_id', stationId);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSavedStationsWithDetails() async {
+    final userId = currentUser?.id;
+    if (userId == null) return [];
+    final rows = await _client
+        .from('saved_stations')
+        .select('station_id, charging_stations(station_id, station_name, '
+            'address, charger_type, latitude, longitude)')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
   Future<void> updatePassword(String newPassword) async {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+  /// Sends a 6-digit recovery code to [email] via Supabase's built-in
+  /// password-reset email. Only reaches the user if that address is a real,
+  /// accessible inbox.
+  Future<void> requestPasswordReset(String email) async {
+    await _client.auth.resetPasswordForEmail(email.trim());
+  }
+
+  /// Verifies the code from that email, then sets [newPassword]. Signs the
+  /// user back out afterwards so they log in deliberately with the new
+  /// password, same as after register().
+  Future<void> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _client.auth.verifyOTP(
+      type: OtpType.recovery,
+      email: email.trim(),
+      token: code.trim(),
+    );
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+    if (_client.auth.currentSession != null) {
+      await _client.auth.signOut();
+    }
   }
 
   Future<String?> uploadAvatar(XFile file) async {
