@@ -120,7 +120,6 @@ String formatDuration(int totalMinutes) {
   return '${hours}h ${minutes}m';
 }
 
-/// A tappable field that opens a scroll-wheel picker for hours/minutes.
 class DurationPickerField extends StatelessWidget {
   const DurationPickerField({
     super.key,

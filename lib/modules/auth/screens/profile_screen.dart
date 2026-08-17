@@ -80,9 +80,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await _authService.logout();
-    // AuthGate swaps its content back to Login once signed out, but that
-    // happens on the root route underneath this pushed screen. Pop back to
-    // it so the user actually sees Login instead of staying on this page.
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
