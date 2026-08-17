@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
-  // Temporary identity until Supabase Auth is introduced.
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
 
   Future<List<Map<String, dynamic>>> getChargingStations() async {
@@ -69,10 +68,6 @@ class SupabaseService {
   }
 
   Future<void> ensureMockUser() async {
-    // Once a real Supabase Auth session exists, requests run as the
-    // `authenticated` role and RLS only allows writing your own row, so
-    // this hardcoded placeholder upsert would be rejected. Only needed
-    // for pre-auth/anonymous testing.
     if (client.auth.currentSession != null) return;
     await client.from('users').upsert({
       'id': mockUserId,

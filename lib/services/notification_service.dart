@@ -7,8 +7,6 @@ const _remindersChannelName = 'Charging Reminders';
 const _remindersChannelDescription = 'Reminders to charge your EV';
 const _reminderTaskName = 'chargingReminderTask';
 
-/// Runs in a background isolate whenever a WorkManager task fires (app
-/// foreground, background, or fully killed). Must stay a top-level function.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
@@ -68,16 +66,6 @@ class NotificationService {
 
   int notificationIdFor(String reminderId) => reminderId.hashCode & 0x7FFFFFFF;
 
-  /// Schedules a one-time reminder notification for [dateTime].
-  ///
-  /// Delivery goes through WorkManager (JobScheduler) rather than a raw
-  /// AlarmManager broadcast + BroadcastReceiver. On some Samsung devices the
-  /// OS accepts an AlarmManager broadcast and logs it as delivered but never
-  /// actually dispatches it to the receiver (confirmed via `dumpsys activity
-  /// broadcasts`: dispatchClockTime never advances past epoch), so the
-  /// notification silently never fires. JobScheduler-backed work is honored
-  /// reliably on the same device. The tradeoff is that delivery is
-  /// best-effort/approximate rather than exact-to-the-second.
   Future<void> scheduleReminder({
     required String reminderId,
     required String title,

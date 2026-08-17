@@ -96,7 +96,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
         _userLocation = LatLng(position.latitude, position.longitude);
       });
     } catch (_) {
-      // No location available; recommendation falls back to Kuala Lumpur.
+
     }
   }
 

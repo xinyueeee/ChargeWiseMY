@@ -121,8 +121,7 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
       return;
     }
 
-    // The reminder itself is saved at this point. A notification-scheduling
-    // failure shouldn't hide that or block the user from seeing it saved.
+
     final enabled = widget.existing == null
         ? true
         : widget.existing!['enabled'] as bool? ?? true;

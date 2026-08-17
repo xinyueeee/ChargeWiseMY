@@ -125,7 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _userLocation = LatLng(position.latitude, position.longitude);
       });
     } catch (_) {
-      // No location available; stats fall back to Kuala Lumpur.
     }
   }
 

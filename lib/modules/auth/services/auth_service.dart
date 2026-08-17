@@ -39,9 +39,7 @@ class AuthService {
       });
     }
 
-    // With email confirmation off, signUp() logs the user in immediately.
-    // Sign back out so they land on Login and authenticate deliberately,
-    // instead of being dropped straight into the app.
+
     if (_client.auth.currentSession != null) {
       await _client.auth.signOut();
     }
@@ -53,6 +51,17 @@ class AuthService {
     final userId = currentUser?.id;
     if (userId == null) return null;
     return await _client.from('users').select().eq('id', userId).maybeSingle();
+  }
+
+  Future<String?> fetchRole() async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+    final row = await _client
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+    return row?['role'] as String?;
   }
 
   Future<void> updateProfile({
@@ -143,16 +152,11 @@ class AuthService {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
-  /// Sends a 6-digit recovery code to [email] via Supabase's built-in
-  /// password-reset email. Only reaches the user if that address is a real,
-  /// accessible inbox.
+
   Future<void> requestPasswordReset(String email) async {
     await _client.auth.resetPasswordForEmail(email.trim());
   }
 
-  /// Verifies the code from that email, then sets [newPassword]. Signs the
-  /// user back out afterwards so they log in deliberately with the new
-  /// password, same as after register().
   Future<void> confirmPasswordReset({
     required String email,
     required String code,
