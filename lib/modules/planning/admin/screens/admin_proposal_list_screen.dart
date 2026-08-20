@@ -78,7 +78,7 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final stateFilter = DropdownButtonFormField<String>(
-                            value: viewModel.selectedState,
+                            initialValue: viewModel.selectedState,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'State',
@@ -99,7 +99,7 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                             },
                           );
                           final statusFilter = DropdownButtonFormField<String>(
-                            value: viewModel.selectedStatus,
+                            initialValue: viewModel.selectedStatus,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Status',

@@ -14,6 +14,7 @@ class Proposal {
     this.nearestTown,
     this.createdAt,
     this.createdBy = 'Community member',
+    this.ownerUserId,
     this.latitude,
     this.longitude,
     this.reaction = 0,
@@ -25,6 +26,7 @@ class Proposal {
   final String? nearestTown;
   final DateTime? createdAt;
   final String createdBy;
+  final String? ownerUserId;
   String status;
   final int supports;
   final double distance;
@@ -47,6 +49,7 @@ class Proposal {
         nearestTown: json['nearestTown'] as String?,
         createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
         createdBy: json['createdBy'] as String? ?? 'Community member',
+        ownerUserId: json['ownerUserId'] as String?,
         latitude: CoordinateParser.latitude(json['latitude']),
         longitude: CoordinateParser.longitude(json['longitude']),
       );
@@ -79,6 +82,7 @@ class Proposal {
             row['user_id'] == '00000000-0000-4000-8000-000000000001'
                 ? 'ChargeWise Demo User'
                 : 'Community member',
+        ownerUserId: row['user_id']?.toString(),
         latitude: CoordinateParser.latitude(row['latitude']),
         longitude: CoordinateParser.longitude(row['longitude']),
         reaction: reaction,
@@ -105,6 +109,7 @@ class Proposal {
         nearestTown: nearestTown,
         createdAt: createdAt,
         createdBy: createdBy,
+        ownerUserId: ownerUserId,
         latitude: latitude,
         longitude: longitude,
         reaction: reaction,
@@ -254,6 +259,10 @@ class ChargingStation {
     required this.latitude,
     required this.longitude,
     required this.chargerType,
+    this.address,
+    this.availablePorts,
+    this.status,
+    this.indoorOutdoor,
   });
 
   final String id;
@@ -261,6 +270,10 @@ class ChargingStation {
   final double latitude;
   final double longitude;
   final String chargerType;
+  final String? address;
+  final int? availablePorts;
+  final String? status;
+  final String? indoorOutdoor;
 
   static ChargingStation? fromSupabase(Map<String, dynamic> row) {
     final latitude = CoordinateParser.latitude(row['latitude']);
@@ -273,6 +286,10 @@ class ChargingStation {
       latitude: latitude,
       longitude: longitude,
       chargerType: row['charger_type']?.toString() ?? 'Charger',
+      address: row['address']?.toString(),
+      availablePorts: (row['available_ports'] as num?)?.toInt(),
+      status: row['status']?.toString(),
+      indoorOutdoor: row['indoor_outdoor']?.toString(),
     );
   }
 }

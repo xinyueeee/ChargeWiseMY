@@ -52,6 +52,8 @@ class PlanningViewModel extends ChangeNotifier {
   AnalysisProfileDefinition get selectedAnalysisProfile =>
       AnalysisProfileConfig.definitionFor(_selectedState);
 
+  String? stateForStation(String stationId) => _stationStateById[stationId];
+
   List<ChargingStation> get selectedStations => _selectedStations;
   List<Proposal> get selectedProposals => _selectedProposals;
   List<ChargingStation> get mapStations =>
@@ -529,6 +531,8 @@ class PlanningViewModel extends ChangeNotifier {
     }
   }
 
+  bool ownsProposal(Proposal proposal) => _repository.ownsProposal(proposal);
+
   String recommendation(Proposal proposal) =>
       proposal.demand == 'High' &&
               proposal.distance > 5 &&
@@ -608,7 +612,8 @@ class PlanningViewModel extends ChangeNotifier {
           a.state != b.state ||
           a.nearestTown != b.nearestTown ||
           a.createdAt != b.createdAt ||
-          a.createdBy != b.createdBy ||
+           a.createdBy != b.createdBy ||
+          a.ownerUserId != b.ownerUserId ||
           a.latitude != b.latitude ||
           a.longitude != b.longitude) {
         return false;

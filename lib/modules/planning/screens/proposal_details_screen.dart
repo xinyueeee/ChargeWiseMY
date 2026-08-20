@@ -32,6 +32,9 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canManageProposal = context.select<PlanningViewModel, bool>(
+      (viewModel) => viewModel.ownsProposal(proposal),
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -268,27 +271,29 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 10),
-            _ResponsiveButtonPair(
-              first: OutlinedButton.icon(
-                    onPressed: _deleting ? null : _edit,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Edit'),
-                  ),
-              second: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
+            if (canManageProposal) ...[
+              const SizedBox(height: 10),
+              _ResponsiveButtonPair(
+                first: OutlinedButton.icon(
+                      onPressed: _deleting ? null : _edit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit'),
                     ),
-                    onPressed: _deleting ? null : _confirmDelete,
-                    icon: _deleting
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.delete_outline),
-                    label: Text(_deleting ? 'Deleting…' : 'Delete'),
-                  ),
-            ),
+                second: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                      ),
+                      onPressed: _deleting ? null : _confirmDelete,
+                      icon: _deleting
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.delete_outline),
+                      label: Text(_deleting ? 'Deleting…' : 'Delete'),
+                    ),
+              ),
+            ],
           ],
         ),
       ),
