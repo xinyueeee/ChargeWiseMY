@@ -4,8 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
-  // Temporary identity until Supabase Auth is introduced.
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
+
+  String get actingUserId => client.auth.currentUser?.id ?? mockUserId;
 
   Future<List<Map<String, dynamic>>> getChargingStations() async {
     const pageSize = 1000;
@@ -21,7 +22,10 @@ class SupabaseService {
       final pageStopwatch = Stopwatch()..start();
       final page = await client
           .from('charging_stations')
-          .select('station_id, station_name, latitude, longitude, charger_type')
+          .select(
+            'station_id, station_name, latitude, longitude, charger_type, '
+            'address, available_ports, status, indoor_outdoor',
+          )
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
       pageStopwatch.stop();
@@ -66,6 +70,7 @@ class SupabaseService {
   }
 
   Future<void> ensureMockUser() async {
+    if (client.auth.currentSession != null) return;
     await client.from('users').upsert({
       'id': mockUserId,
       'full_name': 'ChargeWise Demo User',
@@ -74,11 +79,17 @@ class SupabaseService {
     });
   }
 
+  Future<String> ensureActingUser() async {
+    await ensureMockUser();
+    return actingUserId;
+  }
+
   Future<void> addReaction(
       {required String proposalId, required String reaction}) async {
+    final userId = await ensureActingUser();
     await client.from('proposal_reactions').insert({
       'proposal_id': proposalId,
-      'user_id': mockUserId,
+      'user_id': userId,
       'reaction': reaction,
     });
   }
@@ -94,16 +105,20 @@ class SupabaseService {
     String proposalId,
     Map<String, dynamic> values,
   ) async {
-    await client.from('proposals').update(values).eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    await client
+        .from('proposals')
+        .update(values)
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId);
   }
 
   Future<void> deleteProposal(String proposalId) async {
-    await client.from('proposals').delete().eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    await client
+        .from('proposals')
+        .delete()
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId);
   }
 }

@@ -41,7 +41,7 @@ class PlanningRepository {
   Future<List<Proposal>> getProposals(
     List<ChargingStation> stations,
   ) async {
-    await _supabase.ensureMockUser();
+    final actingUserId = await _supabase.ensureActingUser();
     final rows = await _supabase.getProposalsWithReactions();
     final proposals = rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
@@ -49,7 +49,7 @@ class PlanningRepository {
       final likes =
           reactions.where((item) => item['reaction'] == 'like').length;
       final myReactions = reactions
-          .where((item) => item['user_id'] == SupabaseService.mockUserId)
+          .where((item) => item['user_id'] == actingUserId)
           .toList();
       final mine = myReactions.isEmpty ? null : myReactions.first;
       final reaction = mine == null
@@ -206,9 +206,9 @@ class PlanningRepository {
   }
 
   Future<void> submitProposal(Proposal proposal) async {
-    await _supabase.ensureMockUser();
+    final actingUserId = await _supabase.ensureActingUser();
     await _supabase.client.from('proposals').insert({
-      'user_id': SupabaseService.mockUserId,
+      'user_id': actingUserId,
       'title': proposal.city,
       'description': proposal.description,
       'address': proposal.locationLabel,
@@ -251,6 +251,10 @@ class PlanningRepository {
 
   Future<void> updateStatus(String id, String status) =>
       _supabase.updateProposalStatus(id, status);
+
+  bool ownsProposal(Proposal proposal) =>
+      proposal.ownerUserId != null &&
+      proposal.ownerUserId == _supabase.actingUserId;
 
   double _nearestStationKm(
     Map<String, dynamic> proposal,

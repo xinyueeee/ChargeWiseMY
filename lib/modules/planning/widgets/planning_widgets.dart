@@ -332,6 +332,8 @@ class MapPanel extends StatefulWidget {
     this.mapPadding = const EdgeInsets.all(12),
     this.onTap,
     this.onStateSelected,
+    this.stationIconResolver,
+    this.onStationTap,
   });
   final double height;
   final bool gaps;
@@ -348,6 +350,17 @@ class MapPanel extends StatefulWidget {
   final EdgeInsets mapPadding;
   final ValueChanged<LatLng>? onTap;
   final StateSelectionCallback? onStateSelected;
+
+  /// Overrides the individual-station marker icon per station (e.g. to
+  /// color-code by charger type). Leave null to keep the default station
+  /// icon used by the national planning dashboard.
+  final BitmapDescriptor Function(ChargingStation station)?
+      stationIconResolver;
+
+  /// Called when an individual station marker is tapped (e.g. to show a
+  /// details sheet). Leave null to keep the default info-window-only
+  /// behavior used by the national planning dashboard.
+  final ValueChanged<ChargingStation>? onStationTap;
 
   @override
   State<MapPanel> createState() => _MapPanelState();
@@ -1056,8 +1069,11 @@ class _MapPanelState extends State<MapPanel> {
   Marker _createStationMarker(ChargingStation station) => Marker(
         markerId: MarkerId('station_${station.id}'),
         position: LatLng(station.latitude, station.longitude),
-        icon: _icons!.station,
+        icon: widget.stationIconResolver?.call(station) ?? _icons!.station,
         clusterManagerId: _existingStationsClusterId,
+        onTap: widget.onStationTap == null
+            ? null
+            : () => widget.onStationTap!(station),
         infoWindow: InfoWindow(
           title: station.name,
           snippet: station.chargerType,
@@ -1873,7 +1889,25 @@ class ProposalCard extends StatelessWidget {
 }
 
 class FloatingBottomNav extends StatelessWidget {
-  const FloatingBottomNav({super.key});
+  const FloatingBottomNav({
+    super.key,
+    this.currentTab = 'Planning',
+    this.onHomeTap,
+    this.onChargingTap,
+    this.onProfileTap,
+    this.onPlanningTap,
+  });
+
+  final String currentTab;
+
+  /// Feedback doesn't have a screen yet, so it stays inert;
+  /// Home, Charging, Planning and Profile become tappable once a caller
+  /// opts in.
+  final VoidCallback? onHomeTap;
+  final VoidCallback? onChargingTap;
+  final VoidCallback? onProfileTap;
+  final VoidCallback? onPlanningTap;
+
   @override
   Widget build(BuildContext c) => SafeArea(
       child: Container(
@@ -1887,15 +1921,55 @@ class FloatingBottomNav extends StatelessWidget {
               BoxShadow(color: Color(0x10000000), blurRadius: 8)
             ],
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Expanded(child: _Nav(Icons.home_outlined, 'Home')),
-              Expanded(child: _Nav(Icons.bolt_outlined, 'Charging')),
               Expanded(
-                child: _Nav(Icons.map_outlined, 'Planning', selected: true),
+                child: GestureDetector(
+                  onTap: onHomeTap,
+                  child: _Nav(
+                    Icons.home_outlined,
+                    'Home',
+                    selected: currentTab == 'Home',
+                  ),
+                ),
               ),
-              Expanded(child: _Nav(Icons.warning_amber_outlined, 'Feedback')),
-              Expanded(child: _Nav(Icons.person_outline, 'Profile')),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onChargingTap,
+                  child: _Nav(
+                    Icons.bolt_outlined,
+                    'Charging',
+                    selected: currentTab == 'Charging',
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onPlanningTap,
+                  child: _Nav(
+                    Icons.map_outlined,
+                    'Planning',
+                    selected: currentTab == 'Planning',
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _Nav(
+                  Icons.warning_amber_outlined,
+                  'Feedback',
+                  selected: currentTab == 'Feedback',
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onProfileTap,
+                  child: _Nav(
+                    Icons.person_outline,
+                    'Profile',
+                    selected: currentTab == 'Profile',
+                  ),
+                ),
+              ),
             ],
           ),
         ),

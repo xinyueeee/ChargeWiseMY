@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -6,7 +5,7 @@ import '../../models/proposal.dart';
 import '../../widgets/planning_widgets.dart';
 
 class AdminProposalLocationMapScreen extends StatefulWidget {
-  const AdminProposalLocationMapScreen({
+  AdminProposalLocationMapScreen({
     super.key,
     required this.proposal,
     required this.nearbyStations,

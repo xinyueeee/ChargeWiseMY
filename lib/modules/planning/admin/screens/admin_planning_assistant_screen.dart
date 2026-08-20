@@ -24,6 +24,7 @@ class _AdminPlanningAssistantScreenState
     'Why recommended?',
     'Main risks',
     'Infrastructure coverage',
+    'Coverage-gap relationship',
     'Nearby proposals',
     'What should I verify?',
   ];
@@ -39,7 +40,7 @@ class _AdminPlanningAssistantScreenState
     _messages.add(
       const AdminAssistantMessage(
         text:
-            'I’m the grounded Admin Planning Assistant. I use only the proposal, rule-based assessment, nearby infrastructure, current coverage-gap results, settlement context, and community support available in ChargeWise.',
+            'I’m the grounded local Planning Assistant fallback. No external AI service is connected. I use only the proposal, rule-based assessment, nearby infrastructure, current coverage-gap results, settlement context, and community support available in ChargeWise.',
         fromAdministrator: false,
       ),
     );
@@ -59,7 +60,7 @@ class _AdminPlanningAssistantScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          proposal?.city ?? 'Planning Assistant',
+          proposal?.city ?? 'Planning Assistant (Local)',
           overflow: TextOverflow.ellipsis,
           style: planningAppBarTitleStyle,
         ),
@@ -84,6 +85,24 @@ class _AdminPlanningAssistantScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.offline_bolt_outlined,
+                                size: 16, color: green),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Grounded local fallback · no external AI call',
+                                style: TextStyle(
+                                  color: green,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
                         const Text(
                           'Suggested questions',
                           style: TextStyle(

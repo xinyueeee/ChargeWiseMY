@@ -41,6 +41,7 @@ class AdminPlanningAssistantService {
       return 'The rule-based assessment is ${assessment.outcome.label} at '
           '${assessment.score}/100. The strongest available evidence is '
           '${evidence.isEmpty ? 'not sufficient to identify a strong factor' : evidence}. '
+          'The current administrative status is ${proposal.status}. '
           'Administrative approval remains a separate decision.';
     }
 
@@ -100,9 +101,13 @@ class AdminPlanningAssistantService {
 
     if (normalized.contains('verify') ||
         normalized.contains('before approving')) {
-      return 'Before deciding, verify road accessibility, land ownership, zoning, electrical capacity, traffic conditions, construction feasibility, and cost. These items are not available in the current dataset. Also review the submitted description, location, infrastructure measurements, nearby proposals, and community support.';
+      return 'Before deciding, verify road accessibility, land ownership, parking availability, zoning, electrical capacity, traffic conditions, construction feasibility, and cost. These items are not available in the current dataset. Also review the submitted description, location, infrastructure measurements, nearby proposals, and community support.';
     }
 
-    return 'I can answer grounded questions about this proposal’s rule-based score, infrastructure coverage, coverage-gap relationship, nearby proposals, community support, and known limitations. Road access, land ownership, electrical capacity, population, traffic, zoning, cost, and future demand are not available in the current dataset.';
+    if (normalized.contains('status')) {
+      return 'The current administrative status is ${proposal.status}. The independent system assessment is ${assessment.outcome.label} at ${assessment.score}/100. Changing administrative status does not change the assessment score.';
+    }
+
+    return 'I can answer grounded questions about this proposal’s rule-based score, infrastructure coverage, coverage-gap relationship, nearby proposals, community support, current administrative status, and known limitations. Road access, land ownership, parking availability, electrical capacity, population, traffic, zoning, cost, and future EV demand are not available in the current dataset.';
   }
 }
