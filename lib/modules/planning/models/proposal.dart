@@ -260,7 +260,12 @@ class ChargingStation {
     required this.longitude,
     required this.chargerType,
     this.address,
-    this.availablePorts,
+    this.chargerCount,
+    this.acChargerCount,
+    this.dcChargerCount,
+    this.state,
+    this.pbt,
+    this.category,
     this.status,
     this.indoorOutdoor,
   });
@@ -271,9 +276,31 @@ class ChargingStation {
   final double longitude;
   final String chargerType;
   final String? address;
-  final int? availablePorts;
+  final int? chargerCount;
+  final int? acChargerCount;
+  final int? dcChargerCount;
+  final String? state;
+  final String? pbt;
+  final String? category;
   final String? status;
   final String? indoorOutdoor;
+
+  /// A database row represents one physical charging location. Installed
+  /// charger counts are descriptive metadata and are never expanded into
+  /// extra locations, markers, or coverage-analysis inputs.
+  String get planningInfoWindowSnippet {
+    final context = <String>[
+      if (pbt?.trim().isNotEmpty == true) pbt!.trim(),
+      if (state?.trim().isNotEmpty == true) state!.trim(),
+    ].join(', ');
+    return <String>[
+      chargerType,
+      'Installed Chargers: ${chargerCount?.toString() ?? 'Not available'}',
+      'AC: ${acChargerCount?.toString() ?? 'Not available'} · '
+          'DC: ${dcChargerCount?.toString() ?? 'Not available'}',
+      if (context.isNotEmpty) context,
+    ].join('\n');
+  }
 
   static ChargingStation? fromSupabase(Map<String, dynamic> row) {
     final latitude = CoordinateParser.latitude(row['latitude']);
@@ -287,10 +314,22 @@ class ChargingStation {
       longitude: longitude,
       chargerType: row['charger_type']?.toString() ?? 'Charger',
       address: row['address']?.toString(),
-      availablePorts: (row['available_ports'] as num?)?.toInt(),
+      chargerCount: _nullableCount(row['charger_count']),
+      acChargerCount: _nullableCount(row['ac_charger_count']),
+      dcChargerCount: _nullableCount(row['dc_charger_count']),
+      state: row['state']?.toString(),
+      pbt: row['pbt']?.toString(),
+      category: row['category']?.toString(),
       status: row['status']?.toString(),
       indoorOutdoor: row['indoor_outdoor']?.toString(),
     );
+  }
+
+  static int? _nullableCount(dynamic value) {
+    final parsed = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString().trim() ?? '');
+    return parsed == null || parsed < 0 ? null : parsed;
   }
 }
 

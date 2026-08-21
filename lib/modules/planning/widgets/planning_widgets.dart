@@ -322,6 +322,7 @@ class MapPanel extends StatefulWidget {
     this.stations = const [],
     this.proposals = const [],
     this.priorityAreas = const [],
+    this.selectedPriorityAreaId,
     this.stateRegions = const [],
     this.stateOverviews = const [],
     this.selectedState = malaysiaSelection,
@@ -340,6 +341,7 @@ class MapPanel extends StatefulWidget {
   final List<ChargingStation> stations;
   final List<Proposal> proposals;
   final List<GapArea> priorityAreas;
+  final String? selectedPriorityAreaId;
   final List<StateRegion> stateRegions;
   final List<StateOverviewSummary> stateOverviews;
   final String selectedState;
@@ -499,8 +501,16 @@ class _MapPanelState extends State<MapPanel> {
     }
     if (widget.gaps) {
       _markers = const {};
-      if (!identical(oldWidget.priorityAreas, widget.priorityAreas)) {
+      final selectedPriorityChanged =
+          oldWidget.selectedPriorityAreaId != widget.selectedPriorityAreaId;
+      if (!identical(oldWidget.priorityAreas, widget.priorityAreas) ||
+          selectedPriorityChanged) {
         _priorityCircles = _buildPriorityCircles();
+      }
+      if (selectedPriorityChanged) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _focusSelectedPriorityArea();
+        });
       }
       return;
     }
@@ -609,7 +619,9 @@ class _MapPanelState extends State<MapPanel> {
                 zIndexInt: 5,
                 infoWindow: InfoWindow(
                   title: summary.name,
-                  snippet: '${summary.existingStationCount} existing stations · '
+                  snippet: '${summary.existingStationCount} charging locations · '
+                      '${summary.installedChargerCount} installed chargers\n'
+                      'AC: ${summary.acChargerCount} · DC: ${summary.dcChargerCount}\n'
                       '${summary.proposedStationCount} proposed\n'
                       '${summary.priorityAreaCount == null ? 'Priority analysis not run' : '${summary.priorityAreaCount} priority areas'}\n'
                       'Tap to explore this state',
@@ -950,7 +962,7 @@ class _MapPanelState extends State<MapPanel> {
           position: LatLng(aggregate.latitude, aggregate.longitude),
           icon: _icons!.aggregateForCount(aggregate.count),
           infoWindow: InfoWindow(
-            title: '${aggregate.count} existing stations',
+            title: '${aggregate.count} charging locations',
             snippet: tier == _StationPresentationTier.national
                 ? 'National overview'
                 : 'Regional overview',
@@ -1076,7 +1088,7 @@ class _MapPanelState extends State<MapPanel> {
             : () => widget.onStationTap!(station),
         infoWindow: InfoWindow(
           title: station.name,
-          snippet: station.chargerType,
+          snippet: station.planningInfoWindowSnippet,
         ),
       );
 
@@ -1247,14 +1259,15 @@ class _MapPanelState extends State<MapPanel> {
           : area.priority == 'Medium'
               ? Colors.orange
               : Colors.green;
+      final selected = area.id == widget.selectedPriorityAreaId;
       circles.add(
         Circle(
           circleId: CircleId('priority_${area.id}'),
           center: LatLng(area.latitude!, area.longitude!),
-          radius: 4000,
-          fillColor: color.withValues(alpha: .16),
+          radius: selected ? 4800 : 4000,
+          fillColor: color.withValues(alpha: selected ? .28 : .16),
           strokeColor: color.withValues(alpha: .9),
-          strokeWidth: 2,
+          strokeWidth: selected ? 4 : 2,
         ),
       );
     }
@@ -1265,6 +1278,29 @@ class _MapPanelState extends State<MapPanel> {
       'invalid=$invalidCoordinates.',
     );
     return Set.unmodifiable(circles);
+  }
+
+  Future<void> _focusSelectedPriorityArea() async {
+    final controller = _mapController;
+    final selectedId = widget.selectedPriorityAreaId;
+    if (!mounted || controller == null || selectedId == null) return;
+    GapArea? selected;
+    for (final area in widget.priorityAreas) {
+      if (area.id == selectedId) {
+        selected = area;
+        break;
+      }
+    }
+    if (selected?.latitude == null || selected?.longitude == null) return;
+    try {
+      await controller.animateCamera(CameraUpdate.newLatLngZoom(
+        LatLng(selected!.latitude!, selected.longitude!),
+        11,
+      ));
+    } catch (error, stackTrace) {
+      debugPrint('Priority-area camera focus failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   void _handleMapCreated(GoogleMapController controller) {
@@ -1288,8 +1324,9 @@ class _MapPanelState extends State<MapPanel> {
         _requestVisibleStationRefresh(reason: 'map-created');
       });
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusSelectedRegion(reason: 'map-created');
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _focusSelectedRegion(reason: 'map-created');
+      if (widget.gaps) await _focusSelectedPriorityArea();
     });
   }
 

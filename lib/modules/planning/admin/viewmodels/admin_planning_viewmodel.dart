@@ -54,6 +54,12 @@ class AdminPlanningViewModel extends ChangeNotifier {
           assessment.outcome ==
           ProposalAssessmentOutcome.furtherReviewRequired)
       .length;
+  int get recommendedAssessmentCount => _assessments.values
+      .where(
+        (assessment) =>
+            assessment.outcome == ProposalAssessmentOutcome.recommended,
+      )
+      .length;
 
   List<String> get stateOptions {
     final states = _planning.proposals

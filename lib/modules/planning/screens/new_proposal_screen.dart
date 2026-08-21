@@ -12,9 +12,13 @@ class NewProposalScreen extends StatefulWidget {
   const NewProposalScreen({
     super.key,
     this.proposal,
+    this.sourceGap,
+    this.sourceGapDisplayName,
   });
 
   final Proposal? proposal;
+  final GapArea? sourceGap;
+  final String? sourceGapDisplayName;
 
   @override
   State<NewProposalScreen> createState() => _NewProposalScreenState();
@@ -38,13 +42,28 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   void initState() {
     super.initState();
     final proposal = widget.proposal;
-    _nameController = TextEditingController(text: proposal?.city);
-    _reasonController = TextEditingController(text: proposal?.description);
+    final gap = widget.sourceGap;
+    _nameController = TextEditingController(
+      text: proposal?.city ??
+          (gap == null
+              ? null
+              : '${widget.sourceGapDisplayName ?? gap.name} charging location'),
+    );
+    _reasonController = TextEditingController(
+      text: proposal?.description ??
+          (gap == null
+              ? null
+              : 'Coverage-gap analysis identified this as a ${gap.priority.toLowerCase()} priority area. '
+                  'The nearest charging location is ${gap.distance.toStringAsFixed(1)} km away.'),
+    );
     _demand = proposal?.demand ?? 'Medium';
     _chargerType = proposal?.charger ?? 'AC Charger';
     if (proposal?.latitude != null && proposal?.longitude != null) {
       _preparingLocation = true;
       _resolveSavedLocation(proposal!.latitude!, proposal.longitude!);
+    } else if (gap?.latitude != null && gap?.longitude != null) {
+      _preparingLocation = true;
+      _resolveSavedLocation(gap!.latitude!, gap.longitude!);
     }
   }
 

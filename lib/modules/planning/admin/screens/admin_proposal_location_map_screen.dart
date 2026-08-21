@@ -143,7 +143,7 @@ class _AdminProposalLocationMapScreenState
           ),
           infoWindow: InfoWindow(
             title: station.name,
-            snippet: station.chargerType,
+            snippet: station.planningInfoWindowSnippet,
           ),
         ),
     });
