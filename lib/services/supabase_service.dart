@@ -24,7 +24,8 @@ class SupabaseService {
           .from('charging_stations')
           .select(
             'station_id, station_name, latitude, longitude, charger_type, '
-            'address, available_ports, status, indoor_outdoor',
+            'address, charger_count, ac_charger_count, dc_charger_count, '
+            'state, pbt, category, status, indoor_outdoor',
           )
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);

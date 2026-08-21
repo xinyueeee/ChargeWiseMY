@@ -24,6 +24,9 @@ class PlanningViewModel extends ChangeNotifier {
   Map<String, String?> _stationStateById = const {};
   Map<String, String?> _proposalStateById = const {};
   Map<String, int> _stationCountByState = const {};
+  Map<String, int> _installedChargerCountByState = const {};
+  Map<String, int> _acChargerCountByState = const {};
+  Map<String, int> _dcChargerCountByState = const {};
   Map<String, int> _proposalCountByState = const {};
   List<StateOverviewSummary> _stateOverviewSummaries = const [];
   final Map<String, List<GapArea>> _analysisByState = {};
@@ -64,6 +67,18 @@ class PlanningViewModel extends ChangeNotifier {
       _selectedState == malaysiaSelection ? const [] : _priorityAreas;
 
   int get selectedStationCount => _selectedStations.length;
+  int get selectedInstalledChargerCount => _selectedStations.fold(
+        0,
+        (sum, station) => sum + (station.chargerCount ?? 0),
+      );
+  int get selectedAcChargerCount => _selectedStations.fold(
+        0,
+        (sum, station) => sum + (station.acChargerCount ?? 0),
+      );
+  int get selectedDcChargerCount => _selectedStations.fold(
+        0,
+        (sum, station) => sum + (station.dcChargerCount ?? 0),
+      );
   int get proposalCount => _selectedProposals.length;
   int get communitySupportCount => _selectedProposals.fold(
         0,
@@ -395,6 +410,15 @@ class PlanningViewModel extends ChangeNotifier {
     final counts = <String, int>{
       for (final region in _regions) region.name: 0,
     };
+    final installedChargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final acChargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final dcChargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
     var unassigned = 0;
     final unassignedStations = <ChargingStation>[];
     for (final station in stations) {
@@ -408,10 +432,20 @@ class PlanningViewModel extends ChangeNotifier {
         unassignedStations.add(station);
       } else {
         counts[state] = (counts[state] ?? 0) + 1;
+        installedChargerCounts[state] =
+            (installedChargerCounts[state] ?? 0) + (station.chargerCount ?? 0);
+        acChargerCounts[state] =
+            (acChargerCounts[state] ?? 0) + (station.acChargerCount ?? 0);
+        dcChargerCounts[state] =
+            (dcChargerCounts[state] ?? 0) + (station.dcChargerCount ?? 0);
       }
     }
     _stationStateById = Map<String, String?>.unmodifiable(assignments);
     _stationCountByState = Map<String, int>.unmodifiable(counts);
+    _installedChargerCountByState =
+        Map<String, int>.unmodifiable(installedChargerCounts);
+    _acChargerCountByState = Map<String, int>.unmodifiable(acChargerCounts);
+    _dcChargerCountByState = Map<String, int>.unmodifiable(dcChargerCounts);
     _rebuildStateOverviewSummaries();
     final sortedCounts = Map<String, int>.fromEntries(
       counts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
@@ -478,6 +512,10 @@ class PlanningViewModel extends ChangeNotifier {
           name: region.name,
           labelPoint: region.labelPoint,
           existingStationCount: _stationCountByState[region.name] ?? 0,
+          installedChargerCount:
+              _installedChargerCountByState[region.name] ?? 0,
+          acChargerCount: _acChargerCountByState[region.name] ?? 0,
+          dcChargerCount: _dcChargerCountByState[region.name] ?? 0,
           proposedStationCount: _proposalCountByState[region.name] ?? 0,
           priorityAreaCount: _analysisByState[region.name]?.length,
         ),

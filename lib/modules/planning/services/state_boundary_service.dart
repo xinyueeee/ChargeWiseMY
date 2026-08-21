@@ -95,6 +95,9 @@ class StateOverviewSummary {
     required this.name,
     required this.labelPoint,
     required this.existingStationCount,
+    required this.installedChargerCount,
+    required this.acChargerCount,
+    required this.dcChargerCount,
     required this.proposedStationCount,
     required this.priorityAreaCount,
   });
@@ -102,6 +105,9 @@ class StateOverviewSummary {
   final String name;
   final GeoCoordinate labelPoint;
   final int existingStationCount;
+  final int installedChargerCount;
+  final int acChargerCount;
+  final int dcChargerCount;
   final int proposedStationCount;
   final int? priorityAreaCount;
 }

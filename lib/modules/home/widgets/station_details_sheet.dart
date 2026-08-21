@@ -91,6 +91,13 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
   Widget build(BuildContext context) {
     final station = widget.station;
     final address = station.address?.trim();
+    final pbt = station.pbt?.trim();
+    final state = station.state?.trim();
+    final locationContext = <String>[
+      if (pbt != null && pbt.isNotEmpty) pbt,
+      if (state != null && state.isNotEmpty) state,
+    ].join(', ');
+    final hasAddress = address != null && address.isNotEmpty;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
@@ -162,14 +169,25 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
             const SizedBox(height: 16),
             _DetailRow(
               icon: Icons.location_on_outlined,
-              label: 'Address',
-              value: address == null || address.isEmpty ? 'Not available' : address,
+              label: hasAddress ? 'Address' : 'Location context',
+              value: hasAddress
+                  ? address
+                  : locationContext.isEmpty
+                  ? 'Not available'
+                  : locationContext,
             ),
             _DetailRow(
               icon: Icons.power_outlined,
-              label: 'Available Ports',
-              value: station.availablePorts?.toString() ?? 'Not available',
+              label: 'Installed Chargers',
+              value: station.chargerCount?.toString() ?? 'Not available',
             ),
+            if (station.acChargerCount != null || station.dcChargerCount != null)
+              _DetailRow(
+                icon: Icons.electrical_services_outlined,
+                label: 'Charger mix',
+                value:
+                    'AC: ${station.acChargerCount ?? 0} · DC: ${station.dcChargerCount ?? 0}',
+              ),
             _DetailRow(
               icon: Icons.info_outline,
               label: 'Status',

@@ -322,24 +322,26 @@ class _HomeScreenState extends State<HomeScreen> {
                                     final option = list[index];
                                     final isState =
                                         option.type == _SuggestionType.state;
-                                    return ListTile(
-                                      dense: true,
-                                      leading: Icon(
-                                        isState
-                                            ? Icons.map_outlined
-                                            : Icons.ev_station_outlined,
-                                        color: isState ? green : blue,
-                                        size: 20,
+                                    return Material(
+                                      color: Colors.white,
+                                      child: ListTile(
+                                        dense: true,
+                                        leading: Icon(
+                                          isState
+                                              ? Icons.map_outlined
+                                              : Icons.ev_station_outlined,
+                                          color: isState ? green : blue,
+                                          size: 20,
+                                        ),
+                                        title: Text(option.label),
+                                        subtitle: isState
+                                            ? null
+                                            : Text(
+                                                option.station!.chargerType,
+                                                style: const TextStyle(fontSize: 12),
+                                              ),
+                                        onTap: () => onSelected(option),
                                       ),
-                                      title: Text(option.label),
-                                      subtitle: isState
-                                          ? null
-                                          : Text(
-                                              option.station!.chargerType,
-                                              style:
-                                                  const TextStyle(fontSize: 12),
-                                            ),
-                                      onTap: () => onSelected(option),
                                     );
                                   },
                                 ),

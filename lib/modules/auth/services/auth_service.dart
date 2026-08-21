@@ -1,5 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+class RegistrationResult {
+  const RegistrationResult({required this.requiresEmailVerification});
+
+  final bool requiresEmailVerification;
+}
 
 class AuthService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -12,13 +19,16 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    await _client.auth.signInWithPassword(
+    final response = await _client.auth.signInWithPassword(
       email: email.trim(),
       password: password,
     );
+    if (response.session != null) {
+      await _ensureProfileExistsForAuthenticatedUser();
+    }
   }
 
-  Future<void> register({
+  Future<RegistrationResult> register({
     required String fullName,
     required String email,
     required String password,
@@ -29,20 +39,55 @@ class AuthService {
       data: {'full_name': fullName.trim()},
     );
 
-    final userId = response.user?.id;
-    if (userId != null) {
-      await _client.from('users').upsert({
-        'id': userId,
-        'full_name': fullName.trim(),
-        'email': email.trim(),
-        'role': 'driver',
-      });
+    final requiresEmailVerification = response.session == null;
+    if (!requiresEmailVerification) {
+      await _ensureProfileExistsForAuthenticatedUser(
+        fullName: fullName,
+        email: email,
+      );
     }
-
 
     if (_client.auth.currentSession != null) {
       await _client.auth.signOut();
     }
+
+    return RegistrationResult(
+      requiresEmailVerification: requiresEmailVerification,
+    );
+  }
+
+  Future<void> _ensureProfileExistsForAuthenticatedUser({
+    String? fullName,
+    String? email,
+  }) async {
+    final session = _client.auth.currentSession;
+    if (session == null) {
+      debugPrint('AuthService: skipped profile creation without a session.');
+      return;
+    }
+
+    final user = session.user;
+    final existingProfile = await _client
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (existingProfile != null) return;
+
+    final metadataName = user.userMetadata?['full_name']?.toString().trim();
+    await _client.from('users').insert({
+      'id': user.id,
+      'full_name': fullName?.trim().isNotEmpty == true
+          ? fullName!.trim()
+          : metadataName?.isNotEmpty == true
+          ? metadataName
+          : 'ChargeWise Driver',
+      'email': email?.trim().isNotEmpty == true
+          ? email!.trim()
+          : user.email ?? '',
+      'role': 'driver',
+    });
+    debugPrint('AuthService: created profile for authenticated user ${user.id}.');
   }
 
   Future<void> logout() => _client.auth.signOut();

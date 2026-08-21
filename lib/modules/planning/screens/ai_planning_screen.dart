@@ -52,7 +52,7 @@ class _AiPlanningScreenState extends State<AiPlanningScreen> {
         ? 'Limited nearby coverage'
         : proposal.distance >= 5
             ? 'Moderate nearby coverage'
-            : 'Existing station nearby';
+            : 'Existing charging location nearby';
     final settlementRelevance = proposal.nearestTown == null
         ? 'Settlement reference unavailable'
         : 'Near ${proposal.nearestTown}, ${proposal.state ?? 'Malaysia'}';
@@ -122,7 +122,7 @@ class _AiPlanningScreenState extends State<AiPlanningScreen> {
               child: Column(
                 children: [
                   _AssessmentRow(
-                    'Nearest existing station',
+                    'Nearest charging location',
                     '${proposal.distance.toStringAsFixed(1)} km',
                   ),
                   const Divider(height: 1),
