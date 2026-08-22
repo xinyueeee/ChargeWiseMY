@@ -1,20 +1,28 @@
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models/proposal.dart';
 import '../services/proposal_location_service.dart';
+import '../services/proposal_photo_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import '../widgets/proposal_photo_widgets.dart';
 import 'proposal_location_map_screen.dart';
 
 class NewProposalScreen extends StatefulWidget {
   const NewProposalScreen({
     super.key,
     this.proposal,
+    this.sourceGap,
+    this.sourceGapDisplayName,
   });
 
   final Proposal? proposal;
+  final GapArea? sourceGap;
+  final String? sourceGapDisplayName;
 
   @override
   State<NewProposalScreen> createState() => _NewProposalScreenState();
@@ -23,6 +31,7 @@ class NewProposalScreen extends StatefulWidget {
 class _NewProposalScreenState extends State<NewProposalScreen> {
   final _formKey = GlobalKey<FormState>();
   final ProposalLocationService _locations = ProposalLocationService();
+  final ImagePicker _imagePicker = ImagePicker();
   late final TextEditingController _nameController;
   late final TextEditingController _reasonController;
   late String _demand;
@@ -31,6 +40,14 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   String? _locationError;
   bool _preparingLocation = false;
   bool _submitting = false;
+  bool _uploadingPhoto = false;
+  Uint8List? _selectedPhotoBytes;
+  String? _selectedPhotoExtension;
+  String? _selectedPhotoContentType;
+  bool _removeExistingPhoto = false;
+  String? _acknowledgedPlannedWarningKey;
+
+  static const int _maximumPhotoBytes = 5 * 1024 * 1024;
 
   bool get _editing => widget.proposal != null;
 
@@ -38,13 +55,28 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   void initState() {
     super.initState();
     final proposal = widget.proposal;
-    _nameController = TextEditingController(text: proposal?.city);
-    _reasonController = TextEditingController(text: proposal?.description);
+    final gap = widget.sourceGap;
+    _nameController = TextEditingController(
+      text: proposal?.city ??
+          (gap == null
+              ? null
+              : '${widget.sourceGapDisplayName ?? gap.name} charging location'),
+    );
+    _reasonController = TextEditingController(
+      text: proposal?.description ??
+          (gap == null
+              ? null
+              : 'Coverage-gap analysis identified this as a ${gap.priority.toLowerCase()} priority area. '
+                  'The nearest charging location is ${gap.distance.toStringAsFixed(1)} km away.'),
+    );
     _demand = proposal?.demand ?? 'Medium';
     _chargerType = proposal?.charger ?? 'AC Charger';
     if (proposal?.latitude != null && proposal?.longitude != null) {
       _preparingLocation = true;
       _resolveSavedLocation(proposal!.latitude!, proposal.longitude!);
+    } else if (gap?.latitude != null && gap?.longitude != null) {
+      _preparingLocation = true;
+      _resolveSavedLocation(gap!.latitude!, gap.longitude!);
     }
   }
 
@@ -96,174 +128,442 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
         child: Form(
           key: _formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: ListView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + keyboardInset),
-            children: [
-              Text(
-                _editing
-                    ? 'Update the proposed charging-station information.'
-                    : 'Submit a charging-station proposal for community review.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: planningMutedTextColor),
-              ),
-              planningSectionGap,
-              const PlanningSectionTitle(
-                'Proposal details',
-                subtitle: 'Required fields are marked with *',
-              ),
-              const SizedBox(height: 10),
-              AppCard(
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      enabled: !_submitting,
-                      textInputAction: TextInputAction.next,
-                      textCapitalization: TextCapitalization.words,
-                      maxLength: 80,
-                      decoration: const InputDecoration(
-                        labelText: 'Proposal name *',
-                        hintText: 'Example: Kampar community charger',
-                        prefixIcon: Icon(Icons.edit_location_alt_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        final name = value?.trim() ?? '';
-                        if (name.isEmpty) return 'Enter a proposal name.';
-                        if (name.length < 3) {
-                          return 'Use at least 3 characters.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: _chargerType,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Proposal category *',
-                        prefixIcon: Icon(Icons.electrical_services_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'AC Charger',
-                          child: Text('AC Charger'),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 760;
+              return ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + keyboardInset),
+                children: [
+                  Text(
+                    _editing
+                        ? 'Update the proposed charging-station information.'
+                        : 'Submit a charging-station proposal for community review.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: planningMutedTextColor),
+                  ),
+                  planningSectionGap,
+                  if (wide)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 6,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildProposalDetailsSection(),
+                              planningSectionGap,
+                              _buildLocationSection(),
+                            ],
+                          ),
                         ),
-                        DropdownMenuItem(
-                          value: 'DC Fast Charger',
-                          child: Text('DC Fast Charger'),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildUsageSection(),
+                              planningSectionGap,
+                              _buildPhotoPlaceholder(),
+                              const SizedBox(height: 18),
+                              _buildSubmitButton(),
+                            ],
+                          ),
                         ),
                       ],
-                      onChanged: _submitting
-                          ? null
-                          : (value) => setState(() => _chargerType = value!),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _reasonController,
-                      enabled: !_submitting,
-                      minLines: 4,
-                      maxLines: 6,
-                      maxLength: 300,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Description *',
-                        hintText:
-                            'Explain the infrastructure limitation at this location.',
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        final reason = value?.trim() ?? '';
-                        if (reason.isEmpty) {
-                          return 'Describe why this location needs a station.';
-                        }
-                        if (reason.length < 20) {
-                          return 'Provide at least 20 characters of context.';
-                        }
-                        return null;
-                      },
-                    ),
+                    )
+                  else ...[
+                    _buildProposalDetailsSection(),
+                    planningSectionGap,
+                    _buildLocationSection(),
+                    planningSectionGap,
+                    _buildUsageSection(),
+                    planningSectionGap,
+                    _buildPhotoPlaceholder(),
+                    const SizedBox(height: 20),
+                    _buildSubmitButton(),
                   ],
-                ),
-              ),
-              planningSectionGap,
-              const PlanningSectionTitle('Location'),
-              const SizedBox(height: 10),
-              AppCard(child: _buildLocationContent()),
-              planningSectionGap,
-              const PlanningSectionTitle(
-                'Expected usage',
-                subtitle: 'Choose the expected charging usage level',
-              ),
-              const SizedBox(height: 10),
-              AppCard(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final value in const ['Low', 'Medium', 'High'])
-                      ChoiceChip(
-                        label: Text(value),
-                        selected: _demand == value,
-                        selectedColor: green.withValues(alpha: .18),
-                        onSelected: _submitting
-                            ? null
-                            : (_) => setState(() => _demand = value),
-                      ),
-                  ],
-                ),
-              ),
-              planningSectionGap,
-              AppCard(
-                child: const Row(
-                  children: [
-                    Icon(Icons.photo_outlined, color: planningMutedTextColor),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Photo upload is not available yet. You can submit the proposal without a photo.',
-                        style: TextStyle(color: planningMutedTextColor),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: green,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: _submitting ? null : _submit,
-                icon: _submitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Icon(_editing ? Icons.save_outlined : Icons.send_outlined),
-                label: Text(
-                  _submitting
-                      ? 'Saving…'
-                      : _editing
-                          ? 'Save Changes'
-                          : 'Submit Proposal',
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
       bottomNavigationBar: const FloatingBottomNav(),
+    );
+  }
+
+  Widget _buildProposalDetailsSection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PlanningSectionTitle(
+            'Proposal details',
+            subtitle: 'Required fields are marked with *',
+          ),
+          const SizedBox(height: 10),
+          AppCard(
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _nameController,
+                  enabled: !_submitting,
+                  textInputAction: TextInputAction.next,
+                  textCapitalization: TextCapitalization.words,
+                  maxLength: 80,
+                  decoration: const InputDecoration(
+                    labelText: 'Proposal name *',
+                    hintText: 'Example: Kampar community charger',
+                    prefixIcon: Icon(Icons.edit_location_alt_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    final name = value?.trim() ?? '';
+                    if (name.isEmpty) return 'Enter a proposal name.';
+                    if (name.length < 3) return 'Use at least 3 characters.';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _chargerType,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Proposal category *',
+                    prefixIcon: Icon(Icons.electrical_services_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'AC Charger',
+                      child: Text('AC Charger'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'DC Fast Charger',
+                      child: Text('DC Fast Charger'),
+                    ),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _chargerType = value!),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _reasonController,
+                  enabled: !_submitting,
+                  minLines: 4,
+                  maxLines: 6,
+                  maxLength: 300,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Description *',
+                    hintText:
+                        'Explain the infrastructure limitation at this location.',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    final reason = value?.trim() ?? '';
+                    if (reason.isEmpty) {
+                      return 'Describe why this location needs a station.';
+                    }
+                    if (reason.length < 20) {
+                      return 'Provide at least 20 characters of context.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _buildLocationSection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PlanningSectionTitle('Location'),
+          const SizedBox(height: 10),
+          AppCard(child: _buildLocationContent()),
+        ],
+      );
+
+  Widget _buildUsageSection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PlanningSectionTitle(
+            'Expected usage',
+            subtitle: 'Choose the expected charging usage level',
+          ),
+          const SizedBox(height: 10),
+          AppCard(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final value in const ['Low', 'Medium', 'High'])
+                  ChoiceChip(
+                    label: Text(value),
+                    selected: _demand == value,
+                    selectedColor: green.withValues(alpha: .18),
+                    onSelected: _submitting
+                        ? null
+                        : (_) => setState(() => _demand = value),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _buildPhotoPlaceholder() => AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.photo_camera_outlined, color: green),
+                SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    'Site Photo',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  'Optional',
+                  style: TextStyle(
+                    color: planningMutedTextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (_selectedPhotoBytes != null)
+              LocalProposalPhotoPreview(bytes: _selectedPhotoBytes!)
+            else if (widget.proposal?.sitePhotoPath != null &&
+                !_removeExistingPhoto)
+              ProposalSitePhoto(
+                storagePath: widget.proposal!.sitePhotoPath!,
+                height: 150,
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 18,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF6F8FA),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE1E6EC)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: planningMutedTextColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _removeExistingPhoto
+                            ? 'The existing photo will be removed when you save.'
+                            : 'Add one clear photo of the proposed site.',
+                        style: const TextStyle(
+                          color: planningMutedTextColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _submitting ? null : _choosePhotoSource,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: Text(
+                    _selectedPhotoBytes != null ||
+                            (widget.proposal?.sitePhotoPath != null &&
+                                !_removeExistingPhoto)
+                        ? 'Change Photo'
+                        : 'Add Photo',
+                  ),
+                ),
+                if (_selectedPhotoBytes != null ||
+                    (widget.proposal?.sitePhotoPath != null &&
+                        !_removeExistingPhoto))
+                  TextButton.icon(
+                    onPressed: _submitting ? null : _removePhotoSelection,
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Remove'),
+                  ),
+                if (_removeExistingPhoto && _selectedPhotoBytes == null)
+                  TextButton(
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() => _removeExistingPhoto = false),
+                    child: const Text('Undo'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'JPEG, PNG or WebP · maximum 5 MB',
+              style: TextStyle(color: planningMutedTextColor, fontSize: 11),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildSubmitButton() => ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: green,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: _submitting ? null : _submit,
+        icon: _submitting
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(_editing ? Icons.save_outlined : Icons.send_outlined),
+        label: Text(
+          _uploadingPhoto
+              ? 'Uploading site photo…'
+              : _submitting
+                  ? (_editing ? 'Saving changes…' : 'Creating proposal…')
+                  : _editing
+                      ? 'Save Changes'
+                      : 'Submit Proposal',
+        ),
+      );
+
+  Future<void> _choosePhotoSource() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    try {
+      final file = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 82,
+        requestFullMetadata: false,
+      );
+      if (file == null) return;
+      final extension = _photoExtension(file.name);
+      if (extension == null) {
+        _showPhotoMessage('Please choose a JPEG, PNG or WebP image.');
+        return;
+      }
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty || !_matchesImageSignature(bytes, extension)) {
+        _showPhotoMessage('The selected file is not a supported image.');
+        return;
+      }
+      if (bytes.length > _maximumPhotoBytes) {
+        _showPhotoMessage('Please choose an image smaller than 5 MB.');
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _selectedPhotoBytes = bytes;
+        _selectedPhotoExtension = extension;
+        _selectedPhotoContentType = switch (extension) {
+          'png' => 'image/png',
+          'webp' => 'image/webp',
+          _ => 'image/jpeg',
+        };
+        _removeExistingPhoto = false;
+      });
+    } catch (error, stackTrace) {
+      debugPrint('Proposal site photo selection failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        _showPhotoMessage(
+          'Unable to access that photo. Check permission and try again.',
+        );
+      }
+    }
+  }
+
+  String? _photoExtension(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length - 1) return null;
+    final extension = fileName.substring(dot + 1).toLowerCase();
+    if (extension == 'jpg' || extension == 'jpeg') return 'jpg';
+    if (extension == 'png' || extension == 'webp') return extension;
+    return null;
+  }
+
+  bool _matchesImageSignature(Uint8List bytes, String extension) {
+    if (extension == 'jpg') {
+      return bytes.length >= 3 &&
+          bytes[0] == 0xFF &&
+          bytes[1] == 0xD8 &&
+          bytes[2] == 0xFF;
+    }
+    if (extension == 'png') {
+      const signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      if (bytes.length < signature.length) return false;
+      for (var index = 0; index < signature.length; index++) {
+        if (bytes[index] != signature[index]) return false;
+      }
+      return true;
+    }
+    return bytes.length >= 12 &&
+        String.fromCharCodes(bytes.sublist(0, 4)) == 'RIFF' &&
+        String.fromCharCodes(bytes.sublist(8, 12)) == 'WEBP';
+  }
+
+  void _removePhotoSelection() => setState(() {
+        _selectedPhotoBytes = null;
+        _selectedPhotoExtension = null;
+        _selectedPhotoContentType = null;
+        _removeExistingPhoto = widget.proposal?.sitePhotoPath != null;
+      });
+
+  void _showPhotoMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(message),
+      ),
     );
   }
 
@@ -402,6 +702,43 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       return;
     }
 
+    final warningKey = '${selection.latitude.toStringAsFixed(5)}|'
+        '${selection.longitude.toStringAsFixed(5)}';
+    final planned = viewModel.plannedContextAt(
+      selection.latitude,
+      selection.longitude,
+      radiusKm: 2,
+    );
+    if (_acknowledgedPlannedWarningKey != warningKey &&
+        planned.nearestDistanceKm != null &&
+        planned.nearestDistanceKm! <= 2) {
+      final continueAnyway = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Planned infrastructure nearby'),
+          content: Text(
+            'MEVnet identifies “${planned.nearestLocation!.name}” as an '
+            'official proposed charging location approximately '
+            '${planned.nearestDistanceKm!.toStringAsFixed(1)} km from this '
+            'site. It is not operational infrastructure. Review the planned '
+            'location before submitting a potentially overlapping proposal.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Review Location'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Continue Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (continueAnyway != true || !mounted) return;
+      _acknowledgedPlannedWarningKey = warningKey;
+    }
+
     FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
     final existing = widget.proposal;
@@ -419,27 +756,66 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       state: selection.state,
       nearestTown: selection.nearestTown,
       createdAt: existing?.createdAt,
-      createdBy: existing?.createdBy ?? 'ChargeWise Demo User',
+      createdBy: existing?.createdBy ?? 'Current user',
+      ownerUserId: existing?.ownerUserId,
+      sitePhotoPath: existing?.sitePhotoPath,
       latitude: selection.latitude,
       longitude: selection.longitude,
       reaction: existing?.reaction ?? 0,
     );
 
     try {
+      late final String proposalId;
       if (_editing) {
         await viewModel.updateProposal(proposal);
+        proposalId = proposal.id;
       } else {
-        await viewModel.submitProposal(proposal);
+        proposalId = await viewModel.submitProposal(proposal);
+      }
+      String? photoWarning;
+      if (_selectedPhotoBytes != null ||
+          (_removeExistingPhoto && existing?.sitePhotoPath != null)) {
+        if (mounted) {
+          setState(() => _uploadingPhoto = true);
+        }
+        try {
+          if (_selectedPhotoBytes != null) {
+            await viewModel.uploadProposalPhoto(
+              proposalId: proposalId,
+              upload: ProposalPhotoUpload(
+                bytes: _selectedPhotoBytes!,
+                extension: _selectedPhotoExtension!,
+                contentType: _selectedPhotoContentType!,
+              ),
+              previousPath: existing?.sitePhotoPath,
+            );
+          } else {
+            await viewModel.removeProposalPhoto(
+              proposalId: proposalId,
+              path: existing!.sitePhotoPath!,
+            );
+          }
+        } catch (error, stackTrace) {
+          debugPrint('Optional proposal site photo save failed: $error');
+          debugPrintStack(stackTrace: stackTrace);
+          photoWarning = _editing
+              ? 'Proposal changes were saved, but the site photo could not be updated. Try again from Edit Proposal.'
+              : 'Proposal created, but the optional site photo could not be uploaded. Add it later from Edit Proposal.';
+        }
       }
       if (!mounted) return;
-      setState(() => _submitting = false);
+      setState(() {
+        _submitting = false;
+        _uploadingPhoto = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           content: Text(
-            _editing
-                ? 'Proposal updated successfully.'
-                : 'Proposal submitted successfully.',
+            photoWarning ??
+                (_editing
+                    ? 'Proposal updated successfully.'
+                    : 'Proposal submitted successfully.'),
           ),
         ),
       );
@@ -448,7 +824,10 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       debugPrint('Proposal save failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
-      setState(() => _submitting = false);
+      setState(() {
+        _submitting = false;
+        _uploadingPhoto = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           behavior: SnackBarBehavior.floating,

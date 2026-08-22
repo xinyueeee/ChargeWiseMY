@@ -5,10 +5,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
-  // Temporary identity until Supabase Auth is introduced.
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
 
-  Future<List<Map<String, dynamic>>> getChargingStations() async {
+  String get actingUserId => client.auth.currentUser?.id ?? mockUserId;
+
+  Future<List<Map<String, dynamic>>> getChargingStations(
+      {String? status}) async {
     const pageSize = 1000;
     final stations = <Map<String, dynamic>>[];
     var offset = 0;
@@ -20,9 +22,15 @@ class SupabaseService {
     while (true) {
       pageNumber++;
       final pageStopwatch = Stopwatch()..start();
-      final page = await client
-          .from('charging_stations')
-          .select('station_id, station_name, latitude, longitude, charger_type')
+      final query = client.from('charging_stations').select(
+            'station_id, station_name, latitude, longitude, charger_type, '
+            'address, charger_count, ac_charger_count, dc_charger_count, '
+            'proposed_charger_count, state, pbt, category, status, '
+            'indoor_outdoor, mevnet_object_id, source, source_url, data_date, '
+            'imported_at',
+          );
+      final filteredQuery = status == null ? query : query.eq('status', status);
+      final page = await filteredQuery
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
       pageStopwatch.stop();
@@ -36,7 +44,8 @@ class SupabaseService {
       stations.addAll(rows);
       debugPrint(
         'Supabase station pagination: page=$pageNumber, '
-        'rows=${rows.length}, duration=${pageStopwatch.elapsedMilliseconds}ms.',
+        'status=${status ?? 'all'}, rows=${rows.length}, '
+        'duration=${pageStopwatch.elapsedMilliseconds}ms.',
       );
       if (rows.length < pageSize) break;
       offset += pageSize;
@@ -44,7 +53,7 @@ class SupabaseService {
     totalStopwatch.stop();
     debugPrint(
       'Supabase station pagination complete: pages=$pageNumber, '
-      'rows=${stations.length}, sequential=true, '
+      'rows=${stations.length}, status=${status ?? 'all'}, sequential=true, '
       'uniqueStationIds=${seenStationIds.length}, '
       'duplicatePageRows=$duplicateRows, '
       'duration=${totalStopwatch.elapsedMilliseconds}ms.',
@@ -80,11 +89,17 @@ class SupabaseService {
     });
   }
 
+  Future<String> ensureActingUser() async {
+    await ensureMockUser();
+    return actingUserId;
+  }
+
   Future<void> addReaction(
       {required String proposalId, required String reaction}) async {
+    final userId = await ensureActingUser();
     await client.from('proposal_reactions').insert({
       'proposal_id': proposalId,
-      'user_id': mockUserId,
+      'user_id': userId,
       'reaction': reaction,
     });
   }
@@ -100,17 +115,26 @@ class SupabaseService {
     String proposalId,
     Map<String, dynamic> values,
   ) async {
-    await client.from('proposals').update(values).eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    await client
+        .from('proposals')
+        .update(values)
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId);
   }
 
   Future<void> deleteProposal(String proposalId) async {
-    await client.from('proposals').delete().eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    final deleted = await client
+        .from('proposals')
+        .delete()
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (deleted == null) {
+      throw StateError('Proposal was not deleted by its owner.');
+    }
   }
 
   // --- Module 3: fault reports (driver-facing) ---------------------------

@@ -5,12 +5,17 @@ import '../models/proposal.dart';
 import 'analysis_profile.dart';
 import 'coverage_gap_analyzer.dart';
 import 'proposal_location_service.dart';
+import 'proposal_photo_service.dart';
 import 'state_boundary_service.dart';
 
 class PlanningRepository {
-  PlanningRepository({SupabaseService? supabaseService})
-      : _supabase = supabaseService ?? SupabaseService();
+  PlanningRepository({
+    SupabaseService? supabaseService,
+    ProposalPhotoService? photoService,
+  })  : _supabase = supabaseService ?? SupabaseService(),
+        _photoService = photoService ?? ProposalPhotoService();
   final SupabaseService _supabase;
+  final ProposalPhotoService _photoService;
   final CoverageGapAnalyzer _gapAnalyzer = const CoverageGapAnalyzer();
   final ProposalLocationService _proposalLocations = ProposalLocationService();
   final Map<String, Future<List<GapArea>>> _gapCache = {};
@@ -41,16 +46,15 @@ class PlanningRepository {
   Future<List<Proposal>> getProposals(
     List<ChargingStation> stations,
   ) async {
-    await _supabase.ensureMockUser();
+    final actingUserId = await _supabase.ensureActingUser();
     final rows = await _supabase.getProposalsWithReactions();
     final proposals = rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
           row['proposal_reactions'] as List? ?? []);
       final likes =
           reactions.where((item) => item['reaction'] == 'like').length;
-      final myReactions = reactions
-          .where((item) => item['user_id'] == SupabaseService.mockUserId)
-          .toList();
+      final myReactions =
+          reactions.where((item) => item['user_id'] == actingUserId).toList();
       final mine = myReactions.isEmpty ? null : myReactions.first;
       final reaction = mine == null
           ? 0
@@ -173,9 +177,9 @@ class PlanningRepository {
     return '${stations.length}-${hash.toRadixString(16).padLeft(8, '0')}';
   }
 
-  Future<List<ChargingStation>> getStations() async {
+  Future<List<ChargingStation>> getStations({String? status}) async {
     final fetchStopwatch = Stopwatch()..start();
-    final rows = await _supabase.getChargingStations();
+    final rows = await _supabase.getChargingStations(status: status);
     fetchStopwatch.stop();
     final parsingStopwatch = Stopwatch()..start();
     final stations = <ChargingStation>[];
@@ -191,6 +195,7 @@ class PlanningRepository {
     parsingStopwatch.stop();
     debugPrint(
       'Station loading diagnostics: '
+      'status=${status ?? 'all'}, '
       'stationRowsFetched=${rows.length}, '
       'validCoordinateRows=${stations.length}, '
       'invalidCoordinateRows=$invalidCoordinates, '
@@ -205,23 +210,28 @@ class PlanningRepository {
     return _supabase.getChargingStationCount();
   }
 
-  Future<void> submitProposal(Proposal proposal) async {
-    await _supabase.ensureMockUser();
-    await _supabase.client.from('proposals').insert({
-      'user_id': SupabaseService.mockUserId,
-      'title': proposal.city,
-      'description': proposal.description,
-      'address': proposal.locationLabel,
-      'latitude': proposal.latitude,
-      'longitude': proposal.longitude,
-      'charger_type': proposal.charger,
-      'expected_demand': proposal.demand == 'High'
-          ? 3
-          : proposal.demand == 'Low'
-              ? 1
-              : 2,
-      'status': 'pending',
-    });
+  Future<String> submitProposal(Proposal proposal) async {
+    final actingUserId = await _supabase.ensureActingUser();
+    final inserted = await _supabase.client
+        .from('proposals')
+        .insert({
+          'user_id': actingUserId,
+          'title': proposal.city,
+          'description': proposal.description,
+          'address': proposal.locationLabel,
+          'latitude': proposal.latitude,
+          'longitude': proposal.longitude,
+          'charger_type': proposal.charger,
+          'expected_demand': proposal.demand == 'High'
+              ? 3
+              : proposal.demand == 'Low'
+                  ? 1
+                  : 2,
+          'status': 'pending',
+        })
+        .select('proposal_id')
+        .single();
+    return inserted['proposal_id'] as String;
   }
 
   Future<void> updateProposal(Proposal proposal) async {
@@ -240,8 +250,33 @@ class PlanningRepository {
     });
   }
 
-  Future<void> deleteProposal(String proposalId) =>
-      _supabase.deleteProposal(proposalId);
+  Future<String> uploadProposalPhoto({
+    required String proposalId,
+    required ProposalPhotoUpload upload,
+    String? previousPath,
+  }) =>
+      _photoService.uploadAndAttach(
+        proposalId: proposalId,
+        upload: upload,
+        previousPath: previousPath,
+      );
+
+  Future<void> removeProposalPhoto({
+    required String proposalId,
+    required String path,
+  }) =>
+      _photoService.removeAndDetach(proposalId: proposalId, path: path);
+
+  Future<void> deleteProposal(Proposal proposal) async {
+    await _supabase.deleteProposal(proposal.id);
+    final path = proposal.sitePhotoPath;
+    if (path != null) {
+      await _photoService.cleanupAfterProposalDeletion(
+        proposalId: proposal.id,
+        path: path,
+      );
+    }
+  }
 
   Future<void> reactToProposal(Proposal proposal, bool like) =>
       _supabase.addReaction(
@@ -251,6 +286,10 @@ class PlanningRepository {
 
   Future<void> updateStatus(String id, String status) =>
       _supabase.updateProposalStatus(id, status);
+
+  bool ownsProposal(Proposal proposal) =>
+      proposal.ownerUserId != null &&
+      proposal.ownerUserId == _supabase.actingUserId;
 
   double _nearestStationKm(
     Map<String, dynamic> proposal,
