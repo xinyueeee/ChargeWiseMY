@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/navigation/app_route_observer.dart';
-import 'modules/admin/screens/admin_shell.dart';
 import 'modules/auth/screens/auth_gate.dart';
-import 'modules/home/screens/home_screen.dart';
-import 'modules/planning/admin/viewmodels/admin_planning_viewmodel.dart';
+import 'modules/feedback/services/feedback_repository.dart';
+import 'modules/feedback/viewmodels/feedback_viewmodel.dart';
+import 'modules/planning/screens/planning_dashboard_screen.dart';
 import 'modules/planning/services/planning_repository.dart';
 import 'modules/planning/viewmodels/planning_viewmodel.dart';
 import 'services/notification_service.dart';
@@ -27,12 +27,24 @@ class ChargeWiseApp extends StatelessWidget {
   const ChargeWiseApp({super.key});
 
   @override
-  Widget build(BuildContext context) => ChangeNotifierProvider(
-        create: (_) => PlanningViewModel(PlanningRepository())..load(),
-        child: Builder(
-          builder: (planningContext) => ChangeNotifierProvider(
-            create: (_) => AdminPlanningViewModel(
-              planningContext.read<PlanningViewModel>(),
+  Widget build(BuildContext context) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => PlanningViewModel(PlanningRepository())..load(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => FeedbackViewModel(FeedbackRepository())..load(),
+          ),
+        ],
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'ChargeWise MY',
+          theme: ThemeData(
+            useMaterial3: false,
+            scaffoldBackgroundColor: Colors.white,
+            fontFamily: 'Arial',
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF00B894),
             ),
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
@@ -86,6 +98,10 @@ class ChargeWiseApp extends StatelessWidget {
                 adminChild: AdminShell(),
               ),
             ),
+          ),
+          navigatorObservers: [appRouteObserver],
+          home: const AuthGate(
+            authenticatedChild: PlanningDashboardScreen(),
           ),
         ),
       );

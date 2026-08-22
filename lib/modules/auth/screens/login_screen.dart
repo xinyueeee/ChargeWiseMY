@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../widgets/auth_widgets.dart';
-import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -39,9 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       // Navigation on success is handled by the auth-state listener in
       // AuthGate, so nothing further to do here.
-    } catch (error, stackTrace) {
-      debugPrint('Login error: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_friendlyError(error))),
@@ -85,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: (value) {
                     final text = value?.trim() ?? '';
                     if (text.isEmpty) return 'Email is required';
-                    if (!emailRegex.hasMatch(text)) return 'Enter a valid email';
+                    if (!text.contains('@')) return 'Enter a valid email';
                     return null;
                   },
                 ),
@@ -119,9 +116,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextButton(
                     onPressed: _submitting
                         ? null
-                        : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const ForgotPasswordScreen(),
+                        : () => ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Password reset is coming soon.',
+                                ),
                               ),
                             ),
                     child: const Text('Forgot Password?'),
