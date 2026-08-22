@@ -1,12 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-class RegistrationResult {
-  const RegistrationResult({required this.requiresEmailVerification});
-
-  final bool requiresEmailVerification;
-}
 
 class AuthService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -19,16 +12,13 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final response = await _client.auth.signInWithPassword(
+    await _client.auth.signInWithPassword(
       email: email.trim(),
       password: password,
     );
-    if (response.session != null) {
-      await _ensureProfileExistsForAuthenticatedUser();
-    }
   }
 
-  Future<RegistrationResult> register({
+  Future<void> register({
     required String fullName,
     required String email,
     required String password,
@@ -39,55 +29,22 @@ class AuthService {
       data: {'full_name': fullName.trim()},
     );
 
-    final requiresEmailVerification = response.session == null;
-    if (!requiresEmailVerification) {
-      await _ensureProfileExistsForAuthenticatedUser(
-        fullName: fullName,
-        email: email,
-      );
+    final userId = response.user?.id;
+    if (userId != null) {
+      await _client.from('users').upsert({
+        'id': userId,
+        'full_name': fullName.trim(),
+        'email': email.trim(),
+        'role': 'driver',
+      });
     }
 
+    // With email confirmation off, signUp() logs the user in immediately.
+    // Sign back out so they land on Login and authenticate deliberately,
+    // instead of being dropped straight into the app.
     if (_client.auth.currentSession != null) {
       await _client.auth.signOut();
     }
-
-    return RegistrationResult(
-      requiresEmailVerification: requiresEmailVerification,
-    );
-  }
-
-  Future<void> _ensureProfileExistsForAuthenticatedUser({
-    String? fullName,
-    String? email,
-  }) async {
-    final session = _client.auth.currentSession;
-    if (session == null) {
-      debugPrint('AuthService: skipped profile creation without a session.');
-      return;
-    }
-
-    final user = session.user;
-    final existingProfile = await _client
-        .from('users')
-        .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
-    if (existingProfile != null) return;
-
-    final metadataName = user.userMetadata?['full_name']?.toString().trim();
-    await _client.from('users').insert({
-      'id': user.id,
-      'full_name': fullName?.trim().isNotEmpty == true
-          ? fullName!.trim()
-          : metadataName?.isNotEmpty == true
-          ? metadataName
-          : 'ChargeWise Driver',
-      'email': email?.trim().isNotEmpty == true
-          ? email!.trim()
-          : user.email ?? '',
-      'role': 'driver',
-    });
-    debugPrint('AuthService: created profile for authenticated user ${user.id}.');
   }
 
   Future<void> logout() => _client.auth.signOut();
@@ -96,17 +53,6 @@ class AuthService {
     final userId = currentUser?.id;
     if (userId == null) return null;
     return await _client.from('users').select().eq('id', userId).maybeSingle();
-  }
-
-  Future<String?> fetchRole() async {
-    final userId = currentUser?.id;
-    if (userId == null) return null;
-    final row = await _client
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-    return row?['role'] as String?;
   }
 
   Future<void> updateProfile({
@@ -149,73 +95,8 @@ class AuthService {
     await _client.from('vehicles').delete().eq('id', vehicleId);
   }
 
-  Future<Set<String>> fetchSavedStationIds() async {
-    final userId = currentUser?.id;
-    if (userId == null) return {};
-    final rows = await _client
-        .from('saved_stations')
-        .select('station_id')
-        .eq('user_id', userId);
-    return {
-      for (final row in List<Map<String, dynamic>>.from(rows))
-        row['station_id'].toString(),
-    };
-  }
-
-  Future<void> saveStation(String stationId) async {
-    final userId = currentUser?.id;
-    if (userId == null) return;
-    await _client.from('saved_stations').insert({
-      'user_id': userId,
-      'station_id': stationId,
-    });
-  }
-
-  Future<void> unsaveStation(String stationId) async {
-    final userId = currentUser?.id;
-    if (userId == null) return;
-    await _client
-        .from('saved_stations')
-        .delete()
-        .eq('user_id', userId)
-        .eq('station_id', stationId);
-  }
-
-  Future<List<Map<String, dynamic>>> fetchSavedStationsWithDetails() async {
-    final userId = currentUser?.id;
-    if (userId == null) return [];
-    final rows = await _client
-        .from('saved_stations')
-        .select('station_id, charging_stations(station_id, station_name, '
-            'address, charger_type, latitude, longitude)')
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(rows);
-  }
-
   Future<void> updatePassword(String newPassword) async {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
-  }
-
-
-  Future<void> requestPasswordReset(String email) async {
-    await _client.auth.resetPasswordForEmail(email.trim());
-  }
-
-  Future<void> confirmPasswordReset({
-    required String email,
-    required String code,
-    required String newPassword,
-  }) async {
-    await _client.auth.verifyOTP(
-      type: OtpType.recovery,
-      email: email.trim(),
-      token: code.trim(),
-    );
-    await _client.auth.updateUser(UserAttributes(password: newPassword));
-    if (_client.auth.currentSession != null) {
-      await _client.auth.signOut();
-    }
   }
 
   Future<String?> uploadAvatar(XFile file) async {

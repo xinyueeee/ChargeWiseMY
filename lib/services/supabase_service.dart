@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -75,6 +76,10 @@ class SupabaseService {
   }
 
   Future<void> ensureMockUser() async {
+    // Once a real Supabase Auth session exists, requests run as the
+    // `authenticated` role and RLS only allows writing your own row, so
+    // this hardcoded placeholder upsert would be rejected. Only needed
+    // for pre-auth/anonymous testing.
     if (client.auth.currentSession != null) return;
     await client.from('users').upsert({
       'id': mockUserId,
@@ -130,5 +135,65 @@ class SupabaseService {
     if (deleted == null) {
       throw StateError('Proposal was not deleted by its owner.');
     }
+  }
+
+  // --- Module 3: fault reports (driver-facing) ---------------------------
+
+  Future<List<Map<String, dynamic>>> getFaultReports() async {
+    final response = await client
+        .from('fault_reports')
+        .select()
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Inserts a report and returns its generated `report_id` — needed by
+  /// [FeedbackRepository] to upload the photo under the right storage path
+  /// once the row exists (see `uploadFaultReportPhoto`).
+  Future<String> insertFaultReport(Map<String, dynamic> values) async {
+    final row = await client
+        .from('fault_reports')
+        .insert(values)
+        .select('report_id')
+        .single();
+    return row['report_id'] as String;
+  }
+
+  Future<void> updateFaultReport(
+    String reportId,
+    Map<String, dynamic> values,
+  ) async {
+    await client.from('fault_reports').update(values).eq(
+          'report_id',
+          reportId,
+        );
+  }
+
+  Future<void> deleteFaultReport(String reportId) async {
+    await client.from('fault_reports').delete().eq(
+          'report_id',
+          reportId,
+        );
+  }
+
+  /// Uploads one photo of a report (up to `kFaultReportMaxPhotos` total,
+  /// distinguished by [index]) and returns its public URL.
+  Future<String> uploadFaultReportPhoto(
+    String reportId,
+    XFile file, {
+    required int index,
+  }) async {
+    final userId = client.auth.currentUser?.id ?? mockUserId;
+    final bytes = await file.readAsBytes();
+    final extension = file.name.contains('.')
+        ? file.name.split('.').last.toLowerCase()
+        : 'jpg';
+    final path = '$userId/$reportId/$index.$extension';
+    await client.storage.from('fault_report_photos').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: file.mimeType),
+        );
+    return client.storage.from('fault_report_photos').getPublicUrl(path);
   }
 }

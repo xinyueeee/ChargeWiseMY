@@ -36,25 +36,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _submitting = true);
     try {
-      final registration = await _authService.register(
+      await _authService.register(
         fullName: _fullNameController.text,
         email: _emailController.text,
         password: _passwordController.text,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            registration.requiresEmailVerification
-                ? 'Registration successful. Please verify your email before signing in.'
-                : 'Account created! You can now log in.',
-          ),
-        ),
+        const SnackBar(content: Text('Account created! You can now log in.')),
       );
       Navigator.of(context).pop();
-    } catch (error, stackTrace) {
+    } catch (error) {
       debugPrint('Registration error: $error');
-      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_friendlyError(error))),
@@ -116,7 +109,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       validator: (value) {
                         final text = value?.trim() ?? '';
                         if (text.isEmpty) return 'Email is required';
-                        if (!emailRegex.hasMatch(text)) return 'Enter a valid email';
+                        if (!text.contains('@')) return 'Enter a valid email';
                         return null;
                       },
                     ),

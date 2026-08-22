@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/navigation/app_route_observer.dart';
 import '../../auth/screens/profile_screen.dart';
-import '../../charging/screens/charging_screen.dart';
-import '../models/proposal.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import '../services/state_boundary_service.dart';
@@ -190,122 +189,9 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
         },
       ),
       bottomNavigationBar: FloatingBottomNav(
-        currentTab: 'Planning',
-        onHomeTap: () => Navigator.of(context).popUntil(
-          (route) => route.isFirst,
-        ),
-        onChargingTap: () => _switchTo(context, const ChargingScreen()),
-        onProfileTap: () => _switchTo(context, const ProfileScreen()),
+        onProfileTap: () => _push(context, const ProfileScreen()),
+        onFeedbackTap: () => _push(context, const FeedbackDashboardScreen()),
       ),
-    );
-  }
-
-  Widget _buildLandscapeDashboard(
-    BuildContext context,
-    PlanningViewModel vm,
-    Size size,
-  ) {
-    final pending = _proposalStatusCount(vm.selectedProposals, 'pending');
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-          child: PlanningSectionTitle(
-            'Infrastructure Planning',
-            subtitle: 'Plan smarter. Build better. Power the future.',
-            trailing: IconButton(
-              tooltip: 'Refresh planning data',
-              onPressed: vm.load,
-              icon: const Icon(Icons.refresh),
-            ),
-          ),
-        ),
-        if (vm.errorMessage != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _InlinePlanningError(
-              message: vm.errorMessage!,
-              onRetry: vm.load,
-            ),
-          ),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: size.width * .39,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 14, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildPlanningRegionCard(vm),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Infrastructure Summary',
-                        style: TextStyle(
-                          color: planningTextColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      _InfrastructureSummaryCard(
-                        locations: vm.selectedStationCount,
-                        chargers: vm.selectedInstalledChargerCount,
-                        acChargers: vm.selectedAcChargerCount,
-                        dcChargers: vm.selectedDcChargerCount,
-                        plannedLocations: vm.selectedPlannedLocationCount,
-                        plannedChargers: vm.selectedPlannedChargerCount,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Planning Activity',
-                        style: TextStyle(
-                          color: planningTextColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      _PlanningActivityCard(
-                        pendingProposals: pending,
-                        approvedProposals:
-                            _proposalStatusCount(vm.selectedProposals, 'approved'),
-                        highPriorityAreas: vm.highPriorityAreaCount,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildQuickActions(context),
-                      const SizedBox(height: 12),
-                      _PlanningInsightsCard(
-                        highPriorityAreas: vm.highPriorityAreaCount,
-                        pendingProposals: pending,
-                        averageGapDistance: vm.averageGapDistance,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const VerticalDivider(width: 1, color: Color(0xFFE6EAF0)),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 20, 16),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      // Reserve room for the section heading, context strip,
-                      // spacing, and the optional national-map hint. The map
-                      // then consumes only the height this panel truly owns.
-                      final chromeHeight =
-                          vm.selectedState == malaysiaSelection ? 132.0 : 106.0;
-                      final mapHeight =
-                          (constraints.maxHeight - chromeHeight).clamp(96.0, 480.0);
-                      return _buildMapExplorer(vm, height: mapHeight);
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
