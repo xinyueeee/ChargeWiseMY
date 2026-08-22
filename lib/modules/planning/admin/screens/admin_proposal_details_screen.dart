@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../models/proposal.dart';
 import '../../widgets/planning_widgets.dart';
+import '../../widgets/proposal_photo_widgets.dart';
 import '../models/proposal_assessment.dart';
+import '../services/admin_proposal_ai_review_service.dart';
 import '../viewmodels/admin_planning_viewmodel.dart';
 import 'admin_planning_assistant_screen.dart';
 import 'admin_proposal_location_map_screen.dart';
@@ -32,6 +34,12 @@ class AdminProposalDetailsScreen extends StatelessWidget {
           );
         }
         final assessment = viewModel.assessmentFor(proposal);
+        final planned = proposal.latitude == null || proposal.longitude == null
+            ? null
+            : viewModel.plannedContextAt(
+                proposal.latitude!,
+                proposal.longitude!,
+              );
         return Scaffold(
           appBar: _appBar(),
           body: SafeArea(
@@ -45,15 +53,13 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                 AppCard(
                   child: Column(
                     children: [
-                      _InformationRow('Description',
+                      _InformationRow(
+                          'Description',
                           proposal.description.trim().isEmpty
                               ? 'Not provided'
                               : proposal.description),
                       const Divider(height: 18),
-                      const _InformationRow(
-                        'Category',
-                        'Unavailable in the current schema',
-                      ),
+                      _InformationRow('Proposed charger', proposal.charger),
                       const Divider(height: 18),
                       _InformationRow('Expected usage', proposal.demand),
                       const Divider(height: 18),
@@ -68,13 +74,36 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                   ),
                 ),
                 planningSectionGap,
-                const PlanningSectionTitle('Location information'),
+                const PlanningSectionTitle(
+                  'Official Planned Infrastructure',
+                  subtitle: 'MEVnet / PLANMalaysia future planning context',
+                ),
                 const SizedBox(height: 10),
                 AppCard(
                   child: Column(
                     children: [
                       _InformationRow(
-                          'State', proposal.state ?? 'Unavailable'),
+                        'Nearest MEVnet Proposed',
+                        planned?.nearestDistanceKm == null
+                            ? 'Unavailable'
+                            : '${planned!.nearestDistanceKm!.toStringAsFixed(1)} km',
+                      ),
+                      const Divider(height: 18),
+                      _InformationRow('Proposed locations nearby',
+                          '${planned?.nearbyLocationCount ?? 0}'),
+                      const Divider(height: 18),
+                      _InformationRow('Proposed EVCB nearby',
+                          '${planned?.nearbyProposedChargerCount ?? 0}'),
+                    ],
+                  ),
+                ),
+                planningSectionGap,
+                const PlanningSectionTitle('Location information'),
+                const SizedBox(height: 10),
+                AppCard(
+                  child: Column(
+                    children: [
+                      _InformationRow('State', proposal.state ?? 'Unavailable'),
                       const Divider(height: 18),
                       _InformationRow('Nearest settlement',
                           proposal.nearestTown ?? 'Unavailable'),
@@ -104,6 +133,36 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                ),
+                planningSectionGap,
+                const PlanningSectionTitle(
+                  'Site Photo',
+                  subtitle: 'Optional supporting evidence from the proposer',
+                ),
+                const SizedBox(height: 10),
+                AppCard(
+                  child: proposal.sitePhotoPath == null
+                      ? const Row(
+                          children: [
+                            Icon(
+                              Icons.image_not_supported_outlined,
+                              color: planningMutedTextColor,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'No site photo was provided.',
+                                style: TextStyle(
+                                  color: planningMutedTextColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : ProposalSitePhoto(
+                          storagePath: proposal.sitePhotoPath!,
+                          height: 180,
+                        ),
                 ),
                 planningSectionGap,
                 const PlanningSectionTitle('Infrastructure context'),
@@ -162,12 +221,9 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                       const Divider(height: 18),
                       _InformationRow(
                         'Assessment score',
-                        assessment == null ? 'Assessing' : '${assessment.score}/100',
-                      ),
-                      const Divider(height: 18),
-                      const _InformationRow(
-                        'Status history',
-                        'Unavailable in the current schema',
+                        assessment == null
+                            ? 'Assessing'
+                            : '${assessment.score}/100',
                       ),
                     ],
                   ),
@@ -182,10 +238,11 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                       Expanded(
                         child: Text(
                           'The system assessment is independent from the administrative status. An administrator remains responsible for the final decision.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: planningMutedTextColor,
-                                height: 1.4,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: planningMutedTextColor,
+                                    height: 1.4,
+                                  ),
                         ),
                       ),
                     ],
@@ -212,6 +269,16 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                     ),
                   ),
                 planningSectionGap,
+                if (assessment != null) ...[
+                  _AdminAiReviewCard(
+                    key:
+                        ValueKey('admin-ai-${proposal.id}-${assessment.score}'),
+                    proposal: proposal,
+                    assessment: assessment,
+                    plannedInfrastructure: planned,
+                  ),
+                  planningSectionGap,
+                ],
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -224,8 +291,8 @@ class AdminProposalDetailsScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    label: const Text('Open AI Planning Assistant'),
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Open Planning Evidence Assistant'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -398,6 +465,154 @@ class _ProposalHeader extends StatelessWidget {
   }
 }
 
+class _AdminAiReviewCard extends StatefulWidget {
+  const _AdminAiReviewCard({
+    super.key,
+    required this.proposal,
+    required this.assessment,
+    required this.plannedInfrastructure,
+  });
+
+  final Proposal proposal;
+  final ProposalAssessment assessment;
+  final PlannedInfrastructureContext? plannedInfrastructure;
+
+  @override
+  State<_AdminAiReviewCard> createState() => _AdminAiReviewCardState();
+}
+
+class _AdminAiReviewCardState extends State<_AdminAiReviewCard> {
+  AdminProposalAiReview? _review;
+  AdminAiReviewFailureReason? _failure;
+  bool _loading = false;
+
+  Future<void> _generate() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _failure = null;
+      _review = null;
+    });
+    try {
+      final review = await const AdminProposalAiReviewService().generate(
+        proposal: widget.proposal,
+        assessment: widget.assessment,
+        plannedInfrastructure: widget.plannedInfrastructure,
+      );
+      if (!mounted) return;
+      setState(() => _review = review);
+    } on AdminAiReviewException catch (error) {
+      if (!mounted) return;
+      setState(() => _failure = error.reason);
+    } on FormatException {
+      if (!mounted) return;
+      setState(() => _failure = AdminAiReviewFailureReason.unavailable);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final review = _review;
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_awesome_outlined, color: green, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'AI Proposal Review',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Optional interpretation of the verified proposal and rule-based assessment. It does not make the administrative decision.',
+            style: TextStyle(color: planningMutedTextColor, height: 1.35),
+          ),
+          if (_loading) ...[
+            const SizedBox(height: 14),
+            const Row(
+              children: [
+                SizedBox.square(
+                  dimension: 19,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 10),
+                Expanded(child: Text('Generating grounded proposal review…')),
+              ],
+            ),
+          ] else if (review != null) ...[
+            const SizedBox(height: 14),
+            Text(review.summary),
+            const SizedBox(height: 12),
+            const Text('Strengths',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            for (final item in review.strengths) Text('• $item'),
+            const SizedBox(height: 10),
+            const Text(
+              'Concerns / verification required',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            for (final item in review.concerns) Text('• $item'),
+            const SizedBox(height: 10),
+            const Text(
+              'Suggested Admin follow-up',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text(review.suggestedFollowUp),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _generate,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Regenerate Review'),
+            ),
+          ] else if (_failure != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _failureMessage(_failure!),
+              style: const TextStyle(color: planningMutedTextColor),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _generate,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Try Again'),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _generate,
+              icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+              label: const Text('Generate AI Review'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _failureMessage(AdminAiReviewFailureReason reason) => switch (reason) {
+        AdminAiReviewFailureReason.rateLimited =>
+          'AI service is temporarily busy. Please try again shortly.',
+        AdminAiReviewFailureReason.timeout =>
+          'AI review took too long. Please try again.',
+        AdminAiReviewFailureReason.authentication =>
+          'Sign in again before generating an Admin AI review.',
+        AdminAiReviewFailureReason.forbidden =>
+          'An authenticated administrator profile is required for AI review.',
+        AdminAiReviewFailureReason.unavailable =>
+          "AI review couldn't be generated right now.",
+      };
+}
+
 class _AssessmentSummary extends StatelessWidget {
   const _AssessmentSummary({required this.assessment});
   final ProposalAssessment assessment;
@@ -406,8 +621,7 @@ class _AssessmentSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = assessment.outcome == ProposalAssessmentOutcome.recommended
         ? green
-        : assessment.outcome ==
-                ProposalAssessmentOutcome.furtherReviewRequired
+        : assessment.outcome == ProposalAssessmentOutcome.furtherReviewRequired
             ? const Color(0xFFF39C12)
             : const Color(0xFFE74C3C);
     return AppCard(
@@ -464,10 +678,15 @@ class _AssessmentFactorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      padding: EdgeInsets.zero,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          title: Row(
             children: [
               Expanded(
                 child: Text(
@@ -490,20 +709,25 @@ class _AssessmentFactorCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 7),
-          Text(
+          subtitle: Text(
             factor.observedValue,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 6),
-          Text(
-            factor.explanation,
-            style: const TextStyle(
-              color: planningMutedTextColor,
-              height: 1.4,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                factor.explanation,
+                style: const TextStyle(
+                  color: planningMutedTextColor,
+                  height: 1.4,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -518,7 +742,8 @@ class _InformationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 420 || MediaQuery.textScalerOf(context).scale(1) > 1.25) {
+        if (constraints.maxWidth < 420 ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.25) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -607,8 +832,18 @@ class _DecisionButtons extends StatelessWidget {
 String _formatDate(DateTime? date) {
   if (date == null) return 'Unavailable';
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
   ];
   return '${date.day} ${months[date.month - 1]} ${date.year}';
 }

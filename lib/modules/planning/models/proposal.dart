@@ -15,6 +15,7 @@ class Proposal {
     this.createdAt,
     this.createdBy = 'Community member',
     this.ownerUserId,
+    this.sitePhotoPath,
     this.latitude,
     this.longitude,
     this.reaction = 0,
@@ -27,6 +28,7 @@ class Proposal {
   final DateTime? createdAt;
   final String createdBy;
   final String? ownerUserId;
+  final String? sitePhotoPath;
   String status;
   final int supports;
   final double distance;
@@ -50,6 +52,7 @@ class Proposal {
         createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
         createdBy: json['createdBy'] as String? ?? 'Community member',
         ownerUserId: json['ownerUserId'] as String?,
+        sitePhotoPath: json['sitePhotoPath'] as String?,
         latitude: CoordinateParser.latitude(json['latitude']),
         longitude: CoordinateParser.longitude(json['longitude']),
       );
@@ -78,11 +81,14 @@ class Proposal {
             ? (row['address'] as String).trim()
             : (row['title'] as String? ?? 'Selected location'),
         createdAt: DateTime.tryParse('${row['created_at'] ?? ''}'),
-        createdBy:
-            row['user_id'] == '00000000-0000-4000-8000-000000000001'
-                ? 'ChargeWise Demo User'
-                : 'Community member',
+        createdBy: row['user_id'] == '00000000-0000-4000-8000-000000000001'
+            ? 'ChargeWise Demo User'
+            : 'Community member',
         ownerUserId: row['user_id']?.toString(),
+        sitePhotoPath:
+            (row['site_photo_path'] as String?)?.trim().isNotEmpty == true
+                ? (row['site_photo_path'] as String).trim()
+                : null,
         latitude: CoordinateParser.latitude(row['latitude']),
         longitude: CoordinateParser.longitude(row['longitude']),
         reaction: reaction,
@@ -110,6 +116,7 @@ class Proposal {
         createdAt: createdAt,
         createdBy: createdBy,
         ownerUserId: ownerUserId,
+        sitePhotoPath: sitePhotoPath,
         latitude: latitude,
         longitude: longitude,
         reaction: reaction,
@@ -213,8 +220,7 @@ class GapArea {
             data['localStationLocationCount'] as int? ?? 0,
         neighbouringCellAverage:
             (data['neighbouringCellAverage'] as num?)?.toDouble() ?? 0,
-        analysisProfileId:
-            data['analysisProfileId'] as String? ?? 'regional',
+        analysisProfileId: data['analysisProfileId'] as String? ?? 'regional',
         roadAccessibilityValidated:
             data['roadAccessibilityValidated'] as bool? ?? false,
         coordinateAdjusted: data['coordinateAdjusted'] as bool? ?? false,
@@ -224,8 +230,7 @@ class GapArea {
             'Road-access validation is unavailable for this analysis.',
         nearestSettlementId: data['nearestSettlementId'] as String?,
         nearestSettlementName: data['nearestSettlementName'] as String?,
-        nearestSettlementCategory:
-            data['nearestSettlementCategory'] as String?,
+        nearestSettlementCategory: data['nearestSettlementCategory'] as String?,
         distanceToSettlementKm:
             (data['distanceToSettlementKm'] as num?)?.toDouble(),
         settlementEligibilityValidated:
@@ -263,6 +268,12 @@ class ChargingStation {
     this.chargerCount,
     this.acChargerCount,
     this.dcChargerCount,
+    this.proposedChargerCount = 0,
+    this.mevnetObjectId,
+    this.source,
+    this.sourceUrl,
+    this.dataDate,
+    this.importedAt,
     this.state,
     this.pbt,
     this.category,
@@ -279,21 +290,36 @@ class ChargingStation {
   final int? chargerCount;
   final int? acChargerCount;
   final int? dcChargerCount;
+  final int proposedChargerCount;
+  final int? mevnetObjectId;
+  final String? source;
+  final String? sourceUrl;
+  final DateTime? dataDate;
+  final DateTime? importedAt;
   final String? state;
   final String? pbt;
   final String? category;
   final String? status;
   final String? indoorOutdoor;
 
-  /// A database row represents one physical charging location. Installed
-  /// charger counts are descriptive metadata and are never expanded into
-  /// extra locations, markers, or coverage-analysis inputs.
+  /// A database row represents one physical MEVnet location. The ViewModel
+  /// admits only `Existing` rows to coverage analysis; `Newly Proposed` rows
+  /// remain separate planning context. Counts never expand into extra markers.
   String get planningInfoWindowSnippet {
     final context = <String>[
       if (pbt?.trim().isNotEmpty == true) pbt!.trim(),
       if (state?.trim().isNotEmpty == true) state!.trim(),
     ].join(', ');
+    if (status == 'MEVnet Proposed') {
+      return <String>[
+        'Status: MEVnet Proposed',
+        'Proposed EVCB: $proposedChargerCount',
+        'Existing EVCB: 0',
+        if (context.isNotEmpty) context,
+      ].join('\n');
+    }
     return <String>[
+      'Status: ${status ?? 'Existing'}',
       chargerType,
       'Installed Chargers: ${chargerCount?.toString() ?? 'Not available'}',
       'AC: ${acChargerCount?.toString() ?? 'Not available'} · '
@@ -317,6 +343,12 @@ class ChargingStation {
       chargerCount: _nullableCount(row['charger_count']),
       acChargerCount: _nullableCount(row['ac_charger_count']),
       dcChargerCount: _nullableCount(row['dc_charger_count']),
+      proposedChargerCount: _nullableCount(row['proposed_charger_count']) ?? 0,
+      mevnetObjectId: _nullableCount(row['mevnet_object_id']),
+      source: row['source']?.toString(),
+      sourceUrl: row['source_url']?.toString(),
+      dataDate: DateTime.tryParse('${row['data_date'] ?? ''}'),
+      importedAt: DateTime.tryParse('${row['imported_at'] ?? ''}'),
       state: row['state']?.toString(),
       pbt: row['pbt']?.toString(),
       category: row['category']?.toString(),
@@ -331,6 +363,82 @@ class ChargingStation {
         : int.tryParse(value?.toString().trim() ?? '');
     return parsed == null || parsed < 0 ? null : parsed;
   }
+}
+
+/// One official future charging location published by PLANMalaysia MEVnet.
+/// This is planning context only and must never be passed to current-coverage
+/// calculations as an operational [ChargingStation].
+class PlannedChargingLocation {
+  const PlannedChargingLocation({
+    required this.id,
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.proposedChargerCount,
+    required this.status,
+    this.state,
+    this.pbt,
+    this.category,
+    this.indoorOutdoor,
+    this.mevnetObjectId,
+  });
+
+  final String id;
+  final String name;
+  final double latitude;
+  final double longitude;
+  final int proposedChargerCount;
+  final String status;
+  final String? state;
+  final String? pbt;
+  final String? category;
+  final String? indoorOutdoor;
+  final int? mevnetObjectId;
+
+  factory PlannedChargingLocation.fromStation(ChargingStation station) =>
+      PlannedChargingLocation(
+        id: station.id,
+        name: station.name,
+        latitude: station.latitude,
+        longitude: station.longitude,
+        proposedChargerCount: station.proposedChargerCount,
+        status: station.status ?? 'Newly Proposed',
+        state: station.state,
+        pbt: station.pbt,
+        category: station.category,
+        indoorOutdoor: station.indoorOutdoor,
+        mevnetObjectId: station.mevnetObjectId,
+      );
+
+  ChargingStation get mapLocation => ChargingStation(
+        id: 'mevnet_planned_$id',
+        name: name,
+        latitude: latitude,
+        longitude: longitude,
+        chargerType: 'MEVnet Proposed',
+        proposedChargerCount: proposedChargerCount,
+        state: state,
+        pbt: pbt,
+        category: category,
+        status: 'MEVnet Proposed',
+        indoorOutdoor: indoorOutdoor,
+      );
+}
+
+class PlannedInfrastructureContext {
+  const PlannedInfrastructureContext({
+    required this.nearestDistanceKm,
+    required this.nearbyLocationCount,
+    required this.nearbyProposedChargerCount,
+    required this.radiusKm,
+    this.nearestLocation,
+  });
+
+  final double? nearestDistanceKm;
+  final int nearbyLocationCount;
+  final int nearbyProposedChargerCount;
+  final double radiusKm;
+  final PlannedChargingLocation? nearestLocation;
 }
 
 class CoordinateParser {

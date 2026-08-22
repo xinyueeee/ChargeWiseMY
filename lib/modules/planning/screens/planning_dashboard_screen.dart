@@ -24,6 +24,14 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
   PageRoute<dynamic>? _subscribedRoute;
   bool _mapMounted = true;
   bool _legendExpanded = false;
+  bool _showExisting = true;
+  bool _showMevnetProposed = true;
+  bool _showCommunityProposals = true;
+  List<ChargingStation>? _lastExistingMapSource;
+  List<ChargingStation>? _lastPlannedMapSource;
+  bool? _lastShowExisting;
+  bool? _lastShowPlanned;
+  List<ChargingStation> _cachedInfrastructureMapLocations = const [];
 
   @override
   void initState() {
@@ -141,6 +149,8 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                         chargers: vm.selectedInstalledChargerCount,
                         acChargers: vm.selectedAcChargerCount,
                         dcChargers: vm.selectedDcChargerCount,
+                        plannedLocations: vm.selectedPlannedLocationCount,
+                        plannedChargers: vm.selectedPlannedChargerCount,
                       ),
                       planningSectionGap,
                       PlanningSectionTitle(
@@ -244,6 +254,8 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                         chargers: vm.selectedInstalledChargerCount,
                         acChargers: vm.selectedAcChargerCount,
                         dcChargers: vm.selectedDcChargerCount,
+                        plannedLocations: vm.selectedPlannedLocationCount,
+                        plannedChargers: vm.selectedPlannedChargerCount,
                       ),
                       const SizedBox(height: 12),
                       const Text(
@@ -311,7 +323,8 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: vm.selectedState,
+              key: ValueKey('dashboard-state-${vm.selectedState}'),
+              initialValue: vm.selectedState,
               isExpanded: true,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.map_outlined),
@@ -439,8 +452,9 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
               children: [
                 MapPanel(
                   height: height,
-                  stations: vm.mapStations,
-                  proposals: vm.mapProposals,
+                  stations: _infrastructureMapLocations(vm),
+                  proposals:
+                      _showCommunityProposals ? vm.mapProposals : const [],
                   priorityAreas: vm.mapPriorityAreas,
                   stateRegions: vm.stateRegions,
                   stateOverviews: vm.stateOverviewSummaries,
@@ -461,6 +475,15 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                       onToggle: () => setState(
                         () => _legendExpanded = !_legendExpanded,
                       ),
+                      showExisting: _showExisting,
+                      showMevnetProposed: _showMevnetProposed,
+                      showCommunityProposals: _showCommunityProposals,
+                      onExistingChanged: (value) =>
+                          setState(() => _showExisting = value),
+                      onMevnetProposedChanged: (value) =>
+                          setState(() => _showMevnetProposed = value),
+                      onCommunityProposalsChanged: (value) =>
+                          setState(() => _showCommunityProposals = value),
                     ),
                   ),
               ],
@@ -473,6 +496,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
             chargers: vm.selectedInstalledChargerCount,
             activeProposals: _proposalStatusCount(vm.selectedProposals, 'pending'),
             priorityAreas: vm.highPriorityAreaCount,
+            plannedLocations: vm.selectedPlannedLocationCount,
           ),
           if (vm.selectedState == malaysiaSelection) ...[
             const SizedBox(height: 6),
@@ -500,6 +524,26 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           ],
         ],
       );
+
+  List<ChargingStation> _infrastructureMapLocations(PlanningViewModel vm) {
+    final existing = vm.mapStations;
+    final planned = vm.mapPlannedLocations;
+    if (identical(existing, _lastExistingMapSource) &&
+        identical(planned, _lastPlannedMapSource) &&
+        _showExisting == _lastShowExisting &&
+        _showMevnetProposed == _lastShowPlanned) {
+      return _cachedInfrastructureMapLocations;
+    }
+    _lastExistingMapSource = existing;
+    _lastPlannedMapSource = planned;
+    _lastShowExisting = _showExisting;
+    _lastShowPlanned = _showMevnetProposed;
+    _cachedInfrastructureMapLocations = List.unmodifiable([
+      if (_showExisting) ...existing,
+      if (_showMevnetProposed) ...planned,
+    ]);
+    return _cachedInfrastructureMapLocations;
+  }
 
   void _push(BuildContext context, Widget page) {
     Navigator.push(
@@ -554,12 +598,16 @@ class _InfrastructureSummaryCard extends StatelessWidget {
     required this.chargers,
     required this.acChargers,
     required this.dcChargers,
+    required this.plannedLocations,
+    required this.plannedChargers,
   });
 
   final int locations;
   final int chargers;
   final int acChargers;
   final int dcChargers;
+  final int plannedLocations;
+  final int plannedChargers;
 
   @override
   Widget build(BuildContext context) => AppCard(
@@ -625,6 +673,25 @@ class _InfrastructureSummaryCard extends StatelessWidget {
                     color: planningMutedTextColor,
                     fontWeight: FontWeight.w600,
                   ),
+                ),
+                const Divider(height: 24, color: Color(0xFFE6EAF0)),
+                Row(
+                  children: [
+                    const Icon(Icons.add_location_alt_outlined,
+                        color: Color(0xFF4F6EF7)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'MEVnet Proposed\n$plannedLocations locations · '
+                        '$plannedChargers proposed EVCB',
+                        style: const TextStyle(
+                          color: planningTextColor,
+                          height: 1.35,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             );
@@ -767,12 +834,14 @@ class _MapContextCard extends StatelessWidget {
     required this.chargers,
     required this.activeProposals,
     required this.priorityAreas,
+    required this.plannedLocations,
   });
 
   final int locations;
   final int chargers;
   final int activeProposals;
   final int priorityAreas;
+  final int plannedLocations;
 
   @override
   Widget build(BuildContext context) => AppCard(
@@ -785,6 +854,10 @@ class _MapContextCard extends StatelessWidget {
             _MapContextMetric(value: '$chargers', label: 'installed chargers'),
             _MapContextMetric(value: '$activeProposals', label: 'active proposals'),
             _MapContextMetric(value: '$priorityAreas', label: 'priority areas'),
+            _MapContextMetric(
+              value: '$plannedLocations',
+              label: 'MEVnet planned',
+            ),
           ],
         ),
       );
@@ -890,10 +963,22 @@ class _CompactMapLegend extends StatelessWidget {
   const _CompactMapLegend({
     required this.expanded,
     required this.onToggle,
+    required this.showExisting,
+    required this.showMevnetProposed,
+    required this.showCommunityProposals,
+    required this.onExistingChanged,
+    required this.onMevnetProposedChanged,
+    required this.onCommunityProposalsChanged,
   });
 
   final bool expanded;
   final VoidCallback onToggle;
+  final bool showExisting;
+  final bool showMevnetProposed;
+  final bool showCommunityProposals;
+  final ValueChanged<bool> onExistingChanged;
+  final ValueChanged<bool> onMevnetProposedChanged;
+  final ValueChanged<bool> onCommunityProposalsChanged;
 
   @override
   Widget build(BuildContext context) => AppCard(
@@ -926,24 +1011,31 @@ class _CompactMapLegend extends StatelessWidget {
             ),
             if (expanded) ...[
               const Divider(height: 10),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(6, 2, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _MapLegendItem(
+                    _MapLayerToggle(
                       asset: 'assets/icons/station_lightning.png',
-                      label: 'Charging locations',
+                      label: 'Existing',
+                      value: showExisting,
+                      onChanged: onExistingChanged,
                     ),
                     SizedBox(height: 7),
-                    _MapLegendItem(
+                    _MapLayerToggle(
+                      icon: Icons.location_on_outlined,
+                      iconColor: Color(0xFF4F6EF7),
+                      label: 'MEVnet Proposed',
+                      value: showMevnetProposed,
+                      onChanged: onMevnetProposedChanged,
+                    ),
+                    SizedBox(height: 7),
+                    _MapLayerToggle(
                       asset: 'assets/icons/proposed_station.png',
-                      label: 'Proposed',
-                    ),
-                    SizedBox(height: 7),
-                    _MapLegendItem(
-                      asset: 'assets/icons/high_priority.png',
-                      label: 'Priority gap',
+                      label: 'Community Proposals',
+                      value: showCommunityProposals,
+                      onChanged: onCommunityProposalsChanged,
                     ),
                   ],
                 ),
@@ -954,19 +1046,46 @@ class _CompactMapLegend extends StatelessWidget {
       );
 }
 
-class _MapLegendItem extends StatelessWidget {
-  const _MapLegendItem({required this.asset, required this.label});
+class _MapLayerToggle extends StatelessWidget {
+  const _MapLayerToggle({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.asset,
+    this.icon,
+    this.iconColor,
+  });
 
-  final String asset;
   final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String? asset;
+  final IconData? icon;
+  final Color? iconColor;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(asset, width: 18, height: 18),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
+  Widget build(BuildContext context) => InkWell(
+        onTap: () => onChanged(!value),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 20,
+              child: Checkbox(
+                value: value,
+                visualDensity: VisualDensity.compact,
+                onChanged: (next) => onChanged(next ?? value),
+              ),
+            ),
+            const SizedBox(width: 5),
+            if (asset != null)
+              Image.asset(asset!, width: 17, height: 17)
+            else
+              Icon(icon, size: 17, color: iconColor),
+            const SizedBox(width: 5),
+            Text(label, style: const TextStyle(fontSize: 11)),
+          ],
+        ),
       );
+
 }

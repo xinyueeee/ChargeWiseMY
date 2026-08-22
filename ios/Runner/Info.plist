@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ChargeWise MY uses the camera to attach an optional site photo to your charging-location proposal.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ChargeWise MY uses your photo library to attach an optional site photo to your charging-location proposal.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

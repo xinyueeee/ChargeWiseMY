@@ -31,6 +31,7 @@ class AdminPlanningViewModel extends ChangeNotifier {
   String _searchQuery = '';
   String _selectedState = 'All States';
   String _selectedStatus = 'All Statuses';
+  String _selectedAssessment = 'All Assessments';
   final Set<String> _updatingProposalIds = {};
   String? statusErrorMessage;
 
@@ -39,11 +40,27 @@ class AdminPlanningViewModel extends ChangeNotifier {
   List<Proposal> get proposals => List<Proposal>.unmodifiable(_planning.proposals);
   List<ChargingStation> get stations =>
       List<ChargingStation>.unmodifiable(_planning.stations);
+  List<PlannedChargingLocation> get plannedLocations =>
+      List<PlannedChargingLocation>.unmodifiable(_planning.plannedLocations);
+  PlannedInfrastructureContext plannedContextAt(
+    double latitude,
+    double longitude, {
+    double radiusKm = 25,
+  }) =>
+      _planning.plannedContextAt(latitude, longitude, radiusKm: radiusKm);
   List<GapArea> get currentGapAreas =>
       List<GapArea>.unmodifiable(_planning.priorityAreas);
   String get searchQuery => _searchQuery;
   String get selectedState => _selectedState;
   String get selectedStatus => _selectedStatus;
+  String get selectedAssessment => _selectedAssessment;
+
+  List<String> get assessmentOptions => const [
+        'All Assessments',
+        'Recommended',
+        'Further Review Required',
+        'Not Recommended',
+      ];
 
   int get totalProposalCount => _planning.proposals.length;
   int get pendingProposalCount => _statusCount('pending');
@@ -88,13 +105,16 @@ class AdminPlanningViewModel extends ChangeNotifier {
           proposal.state == _selectedState;
       final matchesStatus = _selectedStatus == 'All Statuses' ||
           proposal.status.toLowerCase() == _selectedStatus.toLowerCase();
+      final assessment = _assessments[proposal.id];
+      final matchesAssessment = _selectedAssessment == 'All Assessments' ||
+          assessment?.outcome.label == _selectedAssessment;
       final matchesSearch = query.isEmpty ||
           proposal.city.toLowerCase().contains(query) ||
           proposal.description.toLowerCase().contains(query) ||
           proposal.locationLabel.toLowerCase().contains(query) ||
           (proposal.state?.toLowerCase().contains(query) ?? false) ||
           (proposal.nearestTown?.toLowerCase().contains(query) ?? false);
-      return matchesState && matchesStatus && matchesSearch;
+      return matchesState && matchesStatus && matchesAssessment && matchesSearch;
     }).toList()
       ..sort((a, b) {
         final dateComparison = (b.createdAt ?? DateTime(1970))
@@ -135,10 +155,17 @@ class AdminPlanningViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setAssessmentFilter(String value) {
+    if (_selectedAssessment == value) return;
+    _selectedAssessment = value;
+    notifyListeners();
+  }
+
   void showPendingProposals() {
     _searchQuery = '';
     _selectedState = 'All States';
     _selectedStatus = 'Pending';
+    _selectedAssessment = 'All Assessments';
     notifyListeners();
   }
 
@@ -146,6 +173,7 @@ class AdminPlanningViewModel extends ChangeNotifier {
     _searchQuery = '';
     _selectedState = 'All States';
     _selectedStatus = 'All Statuses';
+    _selectedAssessment = 'All Assessments';
     notifyListeners();
   }
 

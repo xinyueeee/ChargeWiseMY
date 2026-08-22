@@ -99,6 +99,8 @@ class StateOverviewSummary {
     required this.acChargerCount,
     required this.dcChargerCount,
     required this.proposedStationCount,
+    required this.mevnetProposedLocationCount,
+    required this.mevnetProposedChargerCount,
     required this.priorityAreaCount,
   });
 
@@ -109,6 +111,8 @@ class StateOverviewSummary {
   final int acChargerCount;
   final int dcChargerCount;
   final int proposedStationCount;
+  final int mevnetProposedLocationCount;
+  final int mevnetProposedChargerCount;
   final int? priorityAreaCount;
 }
 

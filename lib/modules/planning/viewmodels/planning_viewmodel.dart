@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/proposal.dart';
 import '../services/analysis_profile.dart';
 import '../services/planning_repository.dart';
+import '../services/proposal_photo_service.dart';
 import '../services/state_boundary_service.dart';
 
 class PlanningViewModel extends ChangeNotifier {
@@ -16,23 +19,33 @@ class PlanningViewModel extends ChangeNotifier {
   final StateBoundaryService _stateBoundaries = StateBoundaryService();
 
   List<Proposal> proposals = [];
+  List<ChargingStation> allMevnetLocations = [];
+  // Existing-only by design. Coverage analysis and teammate consumers that
+  // depend on `stations` must never receive Newly Proposed locations.
   List<ChargingStation> stations = [];
+  List<PlannedChargingLocation> plannedLocations = [];
   List<ChargingStation> _selectedStations = const [];
+  List<PlannedChargingLocation> _selectedPlannedLocations = const [];
+  List<ChargingStation> _selectedPlannedMapLocations = const [];
   List<Proposal> _selectedProposals = const [];
   List<GapArea> _priorityAreas = const [];
   List<StateRegion> _regions = const [];
   Map<String, String?> _stationStateById = const {};
   Map<String, String?> _proposalStateById = const {};
+  Map<String, String?> _plannedStateById = const {};
   Map<String, int> _stationCountByState = const {};
   Map<String, int> _installedChargerCountByState = const {};
   Map<String, int> _acChargerCountByState = const {};
   Map<String, int> _dcChargerCountByState = const {};
   Map<String, int> _proposalCountByState = const {};
+  Map<String, int> _plannedLocationCountByState = const {};
+  Map<String, int> _plannedChargerCountByState = const {};
   List<StateOverviewSummary> _stateOverviewSummaries = const [];
   final Map<String, List<GapArea>> _analysisByState = {};
 
   int stationCount = 0;
   bool loading = true;
+  bool homeInfrastructureReady = false;
   bool analyzingGaps = false;
   String? errorMessage;
   String? analysisErrorMessage;
@@ -48,8 +61,7 @@ class PlanningViewModel extends ChangeNotifier {
   List<StateRegion> get stateRegions => _regions;
   List<StateOverviewSummary> get stateOverviewSummaries =>
       _stateOverviewSummaries;
-  StateRegion? get selectedRegion =>
-      _stateBoundaries.regionFor(_selectedState);
+  StateRegion? get selectedRegion => _stateBoundaries.regionFor(_selectedState);
   GeoBounds? get selectedMapBounds =>
       selectedRegion?.bounds ?? _stateBoundaries.malaysiaBounds;
   AnalysisProfileDefinition get selectedAnalysisProfile =>
@@ -58,11 +70,18 @@ class PlanningViewModel extends ChangeNotifier {
   String? stateForStation(String stationId) => _stationStateById[stationId];
 
   List<ChargingStation> get selectedStations => _selectedStations;
+  List<PlannedChargingLocation> get selectedPlannedLocations =>
+      _selectedPlannedLocations;
   List<Proposal> get selectedProposals => _selectedProposals;
-  List<ChargingStation> get mapStations =>
-      _selectedState == malaysiaSelection ? const [] : _selectedStations;
+  // Existing-only source. MapPanel decides whether national consumers render
+  // these locations or replace them with Planning summary badges.
+  List<ChargingStation> get mapStations => _selectedStations;
   List<Proposal> get mapProposals =>
       _selectedState == malaysiaSelection ? const [] : _selectedProposals;
+  List<ChargingStation> get mapPlannedLocations =>
+      _selectedState == malaysiaSelection
+          ? const []
+          : _selectedPlannedMapLocations;
   List<GapArea> get mapPriorityAreas =>
       _selectedState == malaysiaSelection ? const [] : _priorityAreas;
 
@@ -79,6 +98,46 @@ class PlanningViewModel extends ChangeNotifier {
         0,
         (sum, station) => sum + (station.dcChargerCount ?? 0),
       );
+  int get selectedPlannedLocationCount => _selectedPlannedLocations.length;
+  int get selectedPlannedChargerCount => _selectedPlannedLocations.fold(
+        0,
+        (sum, location) => sum + location.proposedChargerCount,
+      );
+
+  PlannedInfrastructureContext plannedContextAt(
+    double latitude,
+    double longitude, {
+    double radiusKm = 25,
+  }) {
+    PlannedChargingLocation? nearest;
+    var nearestKm = double.infinity;
+    var nearbyCount = 0;
+    var nearbyChargers = 0;
+    for (final location in plannedLocations) {
+      final distance = _distanceKm(
+        latitude,
+        longitude,
+        location.latitude,
+        location.longitude,
+      );
+      if (distance < nearestKm) {
+        nearestKm = distance;
+        nearest = location;
+      }
+      if (distance <= radiusKm) {
+        nearbyCount++;
+        nearbyChargers += location.proposedChargerCount;
+      }
+    }
+    return PlannedInfrastructureContext(
+      nearestDistanceKm: nearest == null ? null : nearestKm,
+      nearbyLocationCount: nearbyCount,
+      nearbyProposedChargerCount: nearbyChargers,
+      radiusKm: radiusKm,
+      nearestLocation: nearest,
+    );
+  }
+
   int get proposalCount => _selectedProposals.length;
   int get communitySupportCount => _selectedProposals.fold(
         0,
@@ -98,16 +157,16 @@ class PlanningViewModel extends ChangeNotifier {
   double get averageCoverageScore => _priorityAreas.isEmpty
       ? 0
       : _priorityAreas.fold<double>(
-              0,
-              (sum, area) => sum + area.coverageScore,
+            0,
+            (sum, area) => sum + area.coverageScore,
           ) /
           _priorityAreas.length;
   double get averageLocalStationLocationCount => _priorityAreas.isEmpty
       ? 0
       : _priorityAreas.fold<double>(
-              0,
-              (sum, area) => sum + area.localStationLocationCount,
-            ) /
+            0,
+            (sum, area) => sum + area.localStationLocationCount,
+          ) /
           _priorityAreas.length;
   bool get hasAnalysisForSelectedState =>
       _analysisByState.containsKey(_selectedState);
@@ -124,8 +183,7 @@ class PlanningViewModel extends ChangeNotifier {
     }
     final highAreas =
         _priorityAreas.where((area) => area.priority == 'High').toList();
-    final moreThanTenKm =
-        highAreas.where((area) => area.distance > 10).length;
+    final moreThanTenKm = highAreas.where((area) => area.distance > 10).length;
     if (highAreas.isNotEmpty && moreThanTenKm * 2 >= highAreas.length) {
       return '$moreThanTenKm of ${highAreas.length} high-priority areas '
           'are more than 10 km from an existing charging station.';
@@ -153,6 +211,7 @@ class PlanningViewModel extends ChangeNotifier {
     final generation = ++_loadGeneration;
     _analysisGeneration++;
     loading = true;
+    homeInfrastructureReady = stations.isNotEmpty;
     analyzingGaps = false;
     errorMessage = null;
     analysisErrorMessage = null;
@@ -160,16 +219,18 @@ class PlanningViewModel extends ChangeNotifier {
     lastAnalysisCacheHit = null;
     notifyListeners();
     try {
+      final homeDataStopwatch = Stopwatch()..start();
       final stationResults = await Future.wait([
-        _repository.getStationCount(),
-        _repository.getStations(),
+        _repository.getStations(status: 'Existing'),
         _stateBoundaries.load(),
       ]);
       if (generation != _loadGeneration) return;
 
-      stationCount = stationResults[0] as int;
-      final loadedStations = stationResults[1] as List<ChargingStation>;
-      _regions = stationResults[2] as List<StateRegion>;
+      final loadedStations = List<ChargingStation>.unmodifiable(
+        stationResults[0] as List<ChargingStation>,
+      );
+      _regions = stationResults[1] as List<StateRegion>;
+      stationCount = loadedStations.length;
       final stationDataChanged = !_sameStationData(stations, loadedStations);
       var analysisCacheInvalidated = false;
       if (stationDataChanged) {
@@ -187,6 +248,40 @@ class PlanningViewModel extends ChangeNotifier {
           stationDataChanged || _stateOverviewSummaries.isEmpty;
       if (rebuildStateCache) {
         _cacheStationStates();
+      }
+      _applySelectedStateFilters();
+      homeInfrastructureReady = true;
+      homeDataStopwatch.stop();
+      debugPrint(
+        'Home infrastructure ready: existing=${stations.length}, '
+        'duration=${homeDataStopwatch.elapsedMilliseconds}ms, '
+        'planningInitializationContinues=true.',
+      );
+      notifyListeners();
+
+      final plannedLoadStopwatch = Stopwatch()..start();
+      final loadedPlannedRows = await _repository.getStations(
+        status: 'Newly Proposed',
+      );
+      if (generation != _loadGeneration) return;
+      final loadedPlanned = List<PlannedChargingLocation>.unmodifiable(
+        loadedPlannedRows.map(PlannedChargingLocation.fromStation),
+      );
+      allMevnetLocations = List<ChargingStation>.unmodifiable([
+        ...loadedStations,
+        ...loadedPlannedRows,
+      ]);
+      plannedLoadStopwatch.stop();
+      debugPrint(
+        'MEVnet runtime partition: total=${allMevnetLocations.length}, '
+        'existing=${loadedStations.length}, planned=${loadedPlanned.length}, '
+        'other=0, plannedFetchAndParse='
+        '${plannedLoadStopwatch.elapsedMilliseconds}ms.',
+      );
+      if (!_samePlannedData(plannedLocations, loadedPlanned) ||
+          _plannedStateById.isEmpty) {
+        plannedLocations = loadedPlanned;
+        _cachePlannedStates();
       }
       final stationFingerprint =
           _repository.prepareStationFingerprint(stations);
@@ -378,8 +473,7 @@ class PlanningViewModel extends ChangeNotifier {
           requestedState != _selectedState) {
         return;
       }
-      analysisErrorMessage =
-          'Unable to analyze $requestedState. Retry.';
+      analysisErrorMessage = 'Unable to analyze $requestedState. Retry.';
       analysisStatusMessage = analysisErrorMessage;
       analysisStopwatch.stop();
       debugPrint(
@@ -505,6 +599,43 @@ class PlanningViewModel extends ChangeNotifier {
     );
   }
 
+  void _cachePlannedStates() {
+    final assignments = <String, String?>{};
+    final locationCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final chargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    var unassigned = 0;
+    var sourceStateDifferences = 0;
+    for (final location in plannedLocations) {
+      final state = _stateBoundaries.stateFor(
+        location.latitude,
+        location.longitude,
+      );
+      assignments[location.id] = state;
+      if (state == null) {
+        unassigned++;
+      } else {
+        locationCounts[state] = (locationCounts[state] ?? 0) + 1;
+        chargerCounts[state] =
+            (chargerCounts[state] ?? 0) + location.proposedChargerCount;
+        if (location.state != null && location.state != state) {
+          sourceStateDifferences++;
+        }
+      }
+    }
+    _plannedStateById = Map.unmodifiable(assignments);
+    _plannedLocationCountByState = Map.unmodifiable(locationCounts);
+    _plannedChargerCountByState = Map.unmodifiable(chargerCounts);
+    _rebuildStateOverviewSummaries();
+    debugPrint('MEVnet proposed state reconciliation: '
+        'total=${plannedLocations.length}, assigned='
+        '${plannedLocations.length - unassigned}, unassigned=$unassigned, '
+        'sourceVsGeoJsonDifferences=$sourceStateDifferences.');
+  }
+
   void _rebuildStateOverviewSummaries() {
     _stateOverviewSummaries = List<StateOverviewSummary>.unmodifiable([
       for (final region in _regions)
@@ -517,6 +648,10 @@ class PlanningViewModel extends ChangeNotifier {
           acChargerCount: _acChargerCountByState[region.name] ?? 0,
           dcChargerCount: _dcChargerCountByState[region.name] ?? 0,
           proposedStationCount: _proposalCountByState[region.name] ?? 0,
+          mevnetProposedLocationCount:
+              _plannedLocationCountByState[region.name] ?? 0,
+          mevnetProposedChargerCount:
+              _plannedChargerCountByState[region.name] ?? 0,
           priorityAreaCount: _analysisByState[region.name]?.length,
         ),
     ]);
@@ -530,6 +665,10 @@ class PlanningViewModel extends ChangeNotifier {
   void _applySelectedStateFilters() {
     if (_selectedState == malaysiaSelection) {
       _selectedStations = stations;
+      _selectedPlannedLocations = plannedLocations;
+      _selectedPlannedMapLocations = List.unmodifiable(
+        plannedLocations.map((item) => item.mapLocation),
+      );
       _selectedProposals = proposals;
       return;
     }
@@ -537,6 +676,14 @@ class PlanningViewModel extends ChangeNotifier {
       stations.where(
         (station) => _stationStateById[station.id] == _selectedState,
       ),
+    );
+    _selectedPlannedLocations = List<PlannedChargingLocation>.unmodifiable(
+      plannedLocations.where(
+        (location) => _plannedStateById[location.id] == _selectedState,
+      ),
+    );
+    _selectedPlannedMapLocations = List.unmodifiable(
+      _selectedPlannedLocations.map((item) => item.mapLocation),
     );
     _selectedProposals = List<Proposal>.unmodifiable(
       proposals.where(
@@ -546,8 +693,7 @@ class PlanningViewModel extends ChangeNotifier {
   }
 
   void _logSelectedStateConsistency({required String source}) {
-    final high =
-        _priorityAreas.where((area) => area.priority == 'High').length;
+    final high = _priorityAreas.where((area) => area.priority == 'High').length;
     final medium =
         _priorityAreas.where((area) => area.priority == 'Medium').length;
     final low = _priorityAreas.where((area) => area.priority == 'Low').length;
@@ -571,12 +717,11 @@ class PlanningViewModel extends ChangeNotifier {
 
   bool ownsProposal(Proposal proposal) => _repository.ownsProposal(proposal);
 
-  String recommendation(Proposal proposal) =>
-      proposal.demand == 'High' &&
-              proposal.distance > 5 &&
-              proposal.displayedSupports > 30
-          ? 'Suitable Location'
-          : 'Needs Further Review';
+  String recommendation(Proposal proposal) => proposal.demand == 'High' &&
+          proposal.distance > 5 &&
+          proposal.displayedSupports > 30
+      ? 'Suitable Location'
+      : 'Needs Further Review';
 
   Future<void> setStatus(Proposal proposal, String status) async {
     await _repository.updateStatus(proposal.id, status);
@@ -584,9 +729,10 @@ class PlanningViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> submitProposal(Proposal proposal) async {
-    await _repository.submitProposal(proposal);
+  Future<String> submitProposal(Proposal proposal) async {
+    final proposalId = await _repository.submitProposal(proposal);
     await _refreshProposals();
+    return proposalId;
   }
 
   Future<void> updateProposal(Proposal proposal) async {
@@ -594,8 +740,32 @@ class PlanningViewModel extends ChangeNotifier {
     await _refreshProposals();
   }
 
-  Future<void> deleteProposal(String proposalId) async {
-    await _repository.deleteProposal(proposalId);
+  Future<void> uploadProposalPhoto({
+    required String proposalId,
+    required ProposalPhotoUpload upload,
+    String? previousPath,
+  }) async {
+    await _repository.uploadProposalPhoto(
+      proposalId: proposalId,
+      upload: upload,
+      previousPath: previousPath,
+    );
+    await _refreshProposals();
+  }
+
+  Future<void> removeProposalPhoto({
+    required String proposalId,
+    required String path,
+  }) async {
+    await _repository.removeProposalPhoto(
+      proposalId: proposalId,
+      path: path,
+    );
+    await _refreshProposals();
+  }
+
+  Future<void> deleteProposal(Proposal proposal) async {
+    await _repository.deleteProposal(proposal);
     await _refreshProposals();
   }
 
@@ -650,7 +820,7 @@ class PlanningViewModel extends ChangeNotifier {
           a.state != b.state ||
           a.nearestTown != b.nearestTown ||
           a.createdAt != b.createdAt ||
-           a.createdBy != b.createdBy ||
+          a.createdBy != b.createdBy ||
           a.ownerUserId != b.ownerUserId ||
           a.latitude != b.latitude ||
           a.longitude != b.longitude) {
@@ -658,5 +828,40 @@ class PlanningViewModel extends ChangeNotifier {
       }
     }
     return true;
+  }
+
+  bool _samePlannedData(
+    List<PlannedChargingLocation> current,
+    List<PlannedChargingLocation> incoming,
+  ) {
+    if (current.length != incoming.length) return false;
+    for (var index = 0; index < current.length; index++) {
+      final a = current[index];
+      final b = incoming[index];
+      if (a.id != b.id ||
+          a.latitude != b.latitude ||
+          a.longitude != b.longitude ||
+          a.proposedChargerCount != b.proposedChargerCount) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static double _distanceKm(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const earthRadiusKm = 6371.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLon = (lon2 - lon1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) *
+            math.cos(lat2 * math.pi / 180) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    return earthRadiusKm * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 }
