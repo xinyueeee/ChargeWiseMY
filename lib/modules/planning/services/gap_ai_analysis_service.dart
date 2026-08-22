@@ -18,11 +18,13 @@ class GapAiAnalysisContext {
     required this.reason,
     this.settlementName,
     this.settlementCategory,
+    this.plannedInfrastructure,
   });
 
   factory GapAiAnalysisContext.fromArea(
     GapArea area, {
     String? displayName,
+    PlannedInfrastructureContext? plannedInfrastructure,
   }) => GapAiAnalysisContext(
         state: area.state,
         areaName: displayName ?? area.name,
@@ -37,6 +39,7 @@ class GapAiAnalysisContext {
         reason: area.reason,
         settlementName: area.nearestSettlementName,
         settlementCategory: area.nearestSettlementCategory,
+        plannedInfrastructure: plannedInfrastructure,
       );
 
   final String state;
@@ -52,6 +55,7 @@ class GapAiAnalysisContext {
   final String reason;
   final String? settlementName;
   final String? settlementCategory;
+  final PlannedInfrastructureContext? plannedInfrastructure;
 
   Map<String, Object?> toJson() => {
         'state': state,
@@ -67,6 +71,13 @@ class GapAiAnalysisContext {
         'settlementName': settlementName,
         'settlementClassification': settlementCategory,
         'deterministicReason': reason,
+        'nearestMevnetProposedLocationDistanceKm':
+            plannedInfrastructure?.nearestDistanceKm,
+        'nearbyMevnetProposedLocationCount':
+            plannedInfrastructure?.nearbyLocationCount ?? 0,
+        'nearbyMevnetProposedEvcbCount':
+            plannedInfrastructure?.nearbyProposedChargerCount ?? 0,
+        'plannedNearbyRadiusKm': plannedInfrastructure?.radiusKm ?? nearbyRadiusKm,
       };
 }
 
@@ -109,6 +120,8 @@ abstract interface class GapAiAnalysisService {
   Future<GapAiAnalysisResult> generate(GapAiAnalysisContext context);
 }
 
+enum GapAiFailureReason { rateLimited, timeout, authentication, unavailable }
+
 class SupabaseGapAiAnalysisService implements GapAiAnalysisService {
   const SupabaseGapAiAnalysisService();
 
@@ -118,6 +131,7 @@ class SupabaseGapAiAnalysisService implements GapAiAnalysisService {
     if (client.auth.currentSession == null) {
       throw const GapAiAnalysisUnavailableException(
         'Sign in is required to generate an AI analysis.',
+        reason: GapAiFailureReason.authentication,
       );
     }
     try {
@@ -137,8 +151,15 @@ class SupabaseGapAiAnalysisService implements GapAiAnalysisService {
           'details=${_safeFunctionDetails(error.details)}',
         );
       }
+      final reason = switch (error.status) {
+        429 => GapAiFailureReason.rateLimited,
+        504 => GapAiFailureReason.timeout,
+        401 || 403 => GapAiFailureReason.authentication,
+        _ => GapAiFailureReason.unavailable,
+      };
       throw GapAiAnalysisUnavailableException(
         'Gap AI function failed (${error.status}).',
+        reason: reason,
       );
     } on FormatException {
       rethrow;
@@ -152,9 +173,11 @@ class SupabaseGapAiAnalysisService implements GapAiAnalysisService {
     final error = details['error'];
     final field = details['field'];
     final providerCode = details['providerCode'];
+    final providerMessage = details['providerMessage'];
     return 'error=${error is String ? error : 'unknown'}, '
         'field=${field is String ? field : 'none'}, '
-        'providerCode=${providerCode is String ? providerCode : 'none'}';
+        'providerCode=${providerCode is String ? providerCode : 'none'}, '
+        'providerMessage=${providerMessage is String ? providerMessage : 'none'}';
   }
 }
 
@@ -181,8 +204,12 @@ guidance, not a final infrastructure decision.
 }
 
 class GapAiAnalysisUnavailableException implements Exception {
-  const GapAiAnalysisUnavailableException(this.message);
+  const GapAiAnalysisUnavailableException(
+    this.message, {
+    this.reason = GapAiFailureReason.unavailable,
+  });
   final String message;
+  final GapAiFailureReason reason;
 
   @override
   String toString() => message;

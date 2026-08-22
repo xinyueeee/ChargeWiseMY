@@ -72,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
   final _chargingService = ChargingService();
 
-  bool _loadingProfile = true;
   String _driverName = 'Driver';
   String _chargerFilter = 'All';
   String _searchQuery = '';
@@ -96,11 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _driverName = fullName == null || fullName.isEmpty
             ? 'Driver'
             : fullName.split(' ').first;
-        _loadingProfile = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loadingProfile = false);
-    }
+    } catch (_) {}
   }
 
   Future<void> _loadLocation() async {
@@ -124,8 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);
       });
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   double _distanceKm(LatLng a, LatLng b) {
@@ -144,7 +139,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final lowerQuery = query.toLowerCase();
     final stateMatches = vm.stateOptions
         .where((state) =>
-            state != malaysiaSelection && state.toLowerCase().contains(lowerQuery))
+            state != malaysiaSelection &&
+            state.toLowerCase().contains(lowerQuery))
         .map(_SearchSuggestion.state);
     final stationMatches = vm.stations
         .where((station) => station.name.toLowerCase().contains(lowerQuery))
@@ -191,8 +187,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = _searchQuery;
     return stations.where((station) {
       final matchesFilter = _chargerFilter == 'All' ||
-          (_chargerFilter == 'DC' && _chargerGroup(station) == _ChargerGroup.dc) ||
-          (_chargerFilter == 'AC' && _chargerGroup(station) == _ChargerGroup.ac) ||
+          (_chargerFilter == 'DC' &&
+              _chargerGroup(station) == _ChargerGroup.dc) ||
+          (_chargerFilter == 'AC' &&
+              _chargerGroup(station) == _ChargerGroup.ac) ||
           (_chargerFilter == 'Ultra' &&
               _chargerGroup(station) == _ChargerGroup.ultra);
       final matchesSearch =
@@ -207,14 +205,14 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: Consumer<PlanningViewModel>(
           builder: (context, vm, __) {
-            if (vm.loading || _loadingProfile) {
-              return const PlanningLoadingState(message: 'Loading dashboard…');
-            }
-            if (vm.errorMessage != null) {
+            if (vm.errorMessage != null && vm.stations.isEmpty) {
               return PlanningErrorState(
                 message: vm.errorMessage!,
                 onRetry: vm.load,
               );
+            }
+            if (!vm.homeInfrastructureReady && vm.stations.isEmpty) {
+              return const PlanningLoadingState(message: 'Loading dashboard…');
             }
 
             final nearby = vm.stations.where((station) {
@@ -311,9 +309,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: SizedBox(
                               width: constraints.maxWidth,
                               child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxHeight: 260),
+                                constraints:
+                                    const BoxConstraints(maxHeight: 260),
                                 child: ListView.separated(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4),
                                   shrinkWrap: true,
                                   itemCount: list.length,
                                   separatorBuilder: (_, __) =>
@@ -338,7 +338,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ? null
                                             : Text(
                                                 option.station!.chargerType,
-                                                style: const TextStyle(fontSize: 12),
+                                                style: const TextStyle(
+                                                    fontSize: 12),
                                               ),
                                         onTap: () => onSelected(option),
                                       ),
@@ -367,7 +368,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         label: Text(vm.selectedState),
                         deleteIcon: const Icon(Icons.close, size: 17),
-                        deleteButtonTooltipMessage: 'Return to Malaysia Overview',
+                        deleteButtonTooltipMessage:
+                            'Return to Malaysia Overview',
                         onDeleted: () => vm.selectState(
                           malaysiaSelection,
                           source: 'home-chip-clear',
@@ -384,6 +386,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   focusBounds: vm.selectedMapBounds,
                   onStateSelected: (state, source) =>
                       vm.selectState(state, source: source),
+                  showNationalStateBadges: false,
+                  showStationsInNationalView: true,
                   stationIconResolver: _iconForStation,
                   onStationTap: (station) => showStationDetailsSheet(
                     context,
@@ -437,7 +441,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   items: const [
                     DropdownMenuItem(value: 'All', child: Text('All')),
                     DropdownMenuItem(value: 'AC', child: Text('AC Charger')),
-                    DropdownMenuItem(value: 'DC', child: Text('DC Fast Charger')),
+                    DropdownMenuItem(
+                        value: 'DC', child: Text('DC Fast Charger')),
                     DropdownMenuItem(
                       value: 'Ultra',
                       child: Text('Ultra Fast Charger'),

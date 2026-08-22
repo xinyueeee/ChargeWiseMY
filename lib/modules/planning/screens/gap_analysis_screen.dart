@@ -22,6 +22,7 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
   GapAiAnalysisResult? _aiResult;
   bool _generatingAi = false;
   bool _aiFailed = false;
+  GapAiFailureReason _aiFailureReason = GapAiFailureReason.unavailable;
   bool _showAllAreas = false;
 
   GapArea? _selectedArea(List<GapArea> areas) {
@@ -32,7 +33,11 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
     return areas.first;
   }
 
-  Future<void> _generateAi(GapArea area, String displayName) async {
+  Future<void> _generateAi(
+    PlanningViewModel viewModel,
+    GapArea area,
+    String displayName,
+  ) async {
     setState(() {
       _generatingAi = true;
       _aiFailed = false;
@@ -41,7 +46,17 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
     });
     try {
       final result = await widget.aiService.generate(
-        GapAiAnalysisContext.fromArea(area, displayName: displayName),
+        GapAiAnalysisContext.fromArea(
+          area,
+          displayName: displayName,
+          plannedInfrastructure: area.latitude == null || area.longitude == null
+              ? null
+              : viewModel.plannedContextAt(
+                  area.latitude!,
+                  area.longitude!,
+                  radiusKm: area.nearbyRadiusKm,
+                ),
+        ),
       );
       if (!mounted || _aiAreaId != area.id) return;
       setState(() => _aiResult = result);
@@ -49,7 +64,12 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
       debugPrint('Gap AI analysis unavailable: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted || _aiAreaId != area.id) return;
-      setState(() => _aiFailed = true);
+      setState(() {
+        _aiFailed = true;
+        _aiFailureReason = error is GapAiAnalysisUnavailableException
+            ? error.reason
+            : GapAiFailureReason.unavailable;
+      });
     } finally {
       if (mounted && _aiAreaId == area.id) setState(() => _generatingAi = false);
     }
@@ -78,6 +98,7 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
       _aiAreaId = null;
       _aiResult = null;
       _aiFailed = false;
+      _aiFailureReason = GapAiFailureReason.unavailable;
       _generatingAi = false;
     });
   }
@@ -308,6 +329,13 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
     final displayName = _areaDisplayLabels(areas)[area.id] ?? area.name;
     final aiResult = _aiAreaId == area.id ? _aiResult : null;
     final aiFailed = _aiAreaId == area.id && _aiFailed;
+    final planned = area.latitude == null || area.longitude == null
+        ? null
+        : vm.plannedContextAt(
+            area.latitude!,
+            area.longitude!,
+            radiusKm: area.nearbyRadiusKm,
+          );
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       AppCard(
         padding: const EdgeInsets.all(14),
@@ -334,13 +362,50 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
       else if (aiResult != null)
         _AiResultCard(result: aiResult)
       else if (aiFailed)
-        _AiFailureCard(onRetry: () => _generateAi(area, displayName))
+        _AiFailureCard(
+          reason: _aiFailureReason,
+          onRetry: () => _generateAi(vm, area, displayName),
+        )
       else
         OutlinedButton.icon(
-          onPressed: () => _generateAi(area, displayName),
+          onPressed: () => _generateAi(vm, area, displayName),
           icon: const Icon(Icons.auto_awesome_outlined),
           label: const Text('Generate AI Analysis'),
         ),
+      const SizedBox(height: 10),
+      AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Official Planned Infrastructure',
+                style: TextStyle(
+                    color: planningTextColor, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            _BreakdownRow(
+              label: 'Nearest MEVnet Proposed',
+              value: planned?.nearestDistanceKm == null
+                  ? 'Not available'
+                  : '${planned!.nearestDistanceKm!.toStringAsFixed(1)} km',
+            ),
+            _BreakdownRow(
+              label: 'Proposed locations nearby',
+              value: '${planned?.nearbyLocationCount ?? 0}',
+            ),
+            _BreakdownRow(
+              label: 'Proposed EVCB nearby',
+              value: '${planned?.nearbyProposedChargerCount ?? 0}',
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'MEVnet Proposed locations are future planning context and do not '
+              'count as current coverage or alter this priority score.',
+              style: TextStyle(
+                  color: planningMutedTextColor, fontSize: 12, height: 1.35),
+            ),
+          ],
+        ),
+      ),
       const SizedBox(height: 10),
       const Text('Recommended Actions', style: TextStyle(color: planningTextColor, fontWeight: FontWeight.w800)),
       const SizedBox(height: 7),
@@ -358,26 +423,31 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
       ),
       AppCard(
         padding: EdgeInsets.zero,
-        child: ExpansionTile(
-          title: const Text('View analysis breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          children: [
-            _BreakdownRow(label: 'Coverage score', value: area.coverageScore.toStringAsFixed(1)),
-            _BreakdownRow(label: 'Analysis profile', value: vm.selectedAnalysisProfile.displayName),
-            _BreakdownRow(label: 'Nearby radius', value: '${area.nearbyRadiusKm.toStringAsFixed(1)} km'),
-            if (area.localStationLocationCount > 0)
-              _BreakdownRow(label: 'Locations in analysis cell', value: '${area.localStationLocationCount}'),
-            if (area.nearestSettlementName != null)
-              _BreakdownRow(label: 'Nearest settlement', value: area.nearestSettlementName!),
-            const SizedBox(height: 8),
-            Align(alignment: Alignment.centerLeft, child: Text(area.reason,
-              style: const TextStyle(color: planningMutedTextColor, height: 1.35))),
-            const SizedBox(height: 8),
-            const Text(
-              'This is a charging-infrastructure coverage assessment, not a demand or site-feasibility prediction. Road access, parking, grid capacity, land ownership, and approval require review.',
-              style: TextStyle(color: planningMutedTextColor, fontSize: 12, height: 1.35),
-            ),
-          ],
+        child: Material(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: ExpansionTile(
+            title: const Text('View analysis breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              _BreakdownRow(label: 'Coverage score', value: area.coverageScore.toStringAsFixed(1)),
+              _BreakdownRow(label: 'Analysis profile', value: vm.selectedAnalysisProfile.displayName),
+              _BreakdownRow(label: 'Nearby radius', value: '${area.nearbyRadiusKm.toStringAsFixed(1)} km'),
+              if (area.localStationLocationCount > 0)
+                _BreakdownRow(label: 'Locations in analysis cell', value: '${area.localStationLocationCount}'),
+              if (area.nearestSettlementName != null)
+                _BreakdownRow(label: 'Nearest settlement', value: area.nearestSettlementName!),
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerLeft, child: Text(area.reason,
+                style: const TextStyle(color: planningMutedTextColor, height: 1.35))),
+              const SizedBox(height: 8),
+              const Text(
+                'This is a charging-infrastructure coverage assessment, not a demand or site-feasibility prediction. Road access, parking, grid capacity, land ownership, and approval require review.',
+                style: TextStyle(color: planningMutedTextColor, fontSize: 12, height: 1.35),
+              ),
+            ],
+          ),
         ),
       ),
       if (areas.length > 1) ...[
@@ -501,17 +571,42 @@ class _AiLoadingCard extends StatelessWidget {
 }
 
 class _AiFailureCard extends StatelessWidget {
-  const _AiFailureCard({required this.onRetry});
+  const _AiFailureCard({required this.reason, required this.onRetry});
+  final GapAiFailureReason reason;
   final VoidCallback onRetry;
   @override
-  Widget build(BuildContext context) => AppCard(
-    padding: const EdgeInsets.all(14),
-    child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-      const Icon(Icons.cloud_off_outlined, color: Colors.orange),
-      const Text("AI analysis couldn't be generated right now."),
-      TextButton(onPressed: onRetry, child: const Text('Try Again')),
-    ]),
-  );
+  Widget build(BuildContext context) {
+    final message = switch (reason) {
+      GapAiFailureReason.rateLimited =>
+        'AI service is temporarily busy. Please try again shortly.',
+      GapAiFailureReason.timeout =>
+        'AI analysis took too long. Please try again.',
+      GapAiFailureReason.authentication =>
+        'Sign in again to generate an AI planning insight.',
+      GapAiFailureReason.unavailable =>
+        "AI analysis couldn't be generated right now.",
+    };
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.cloud_off_outlined, color: Colors.orange),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(message),
+                const SizedBox(height: 4),
+                TextButton(onPressed: onRetry, child: const Text('Try Again')),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AiResultCard extends StatelessWidget {

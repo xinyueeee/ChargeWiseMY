@@ -119,20 +119,46 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                               if (value != null) viewModel.setStatusFilter(value);
                             },
                           );
-                          if (constraints.maxWidth < 500) {
-                            return Column(
-                              children: [
-                                stateFilter,
-                                const SizedBox(height: 10),
-                                statusFilter,
-                              ],
-                            );
-                          }
-                          return Row(
+                          final assessmentFilter =
+                              DropdownButtonFormField<String>(
+                            initialValue: viewModel.selectedAssessment,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Assessment',
+                              isDense: true,
+                            ),
+                            items: [
+                              for (final assessment
+                                  in viewModel.assessmentOptions)
+                                DropdownMenuItem(
+                                  value: assessment,
+                                  child: Text(
+                                    assessment,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                viewModel.setAssessmentFilter(value);
+                              }
+                            },
+                          );
+                          final filterWidth = constraints.maxWidth >= 760
+                              ? (constraints.maxWidth - 24) / 3
+                              : constraints.maxWidth >= 500
+                                  ? (constraints.maxWidth - 12) / 2
+                                  : constraints.maxWidth;
+                          return Wrap(
+                            spacing: 12,
+                            runSpacing: 10,
                             children: [
-                              Expanded(child: stateFilter),
-                              const SizedBox(width: 12),
-                              Expanded(child: statusFilter),
+                              SizedBox(width: filterWidth, child: stateFilter),
+                              SizedBox(width: filterWidth, child: statusFilter),
+                              SizedBox(
+                                width: filterWidth,
+                                child: assessmentFilter,
+                              ),
                             ],
                           );
                         },
@@ -260,10 +286,6 @@ class _AdminProposalCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  const _InfoChip(
-                    Icons.category_outlined,
-                    'Category unavailable',
-                  ),
                   _InfoChip(Icons.trending_up, '${proposal.demand} usage'),
                   _InfoChip(Icons.group_outlined,
                       '${proposal.displayedSupports} supports'),

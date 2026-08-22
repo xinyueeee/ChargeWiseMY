@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +5,7 @@ import '../models/proposal.dart';
 import '../services/proposal_location_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import '../widgets/proposal_photo_widgets.dart';
 import 'new_proposal_screen.dart';
 import 'proposal_location_map_screen.dart';
 
@@ -18,8 +18,7 @@ class ProposalDetailsScreen extends StatefulWidget {
   final Proposal proposal;
 
   @override
-  State<ProposalDetailsScreen> createState() =>
-      _ProposalDetailsScreenState();
+  State<ProposalDetailsScreen> createState() => _ProposalDetailsScreenState();
 }
 
 class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
@@ -102,10 +101,9 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
                   const Divider(height: 24),
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      final itemWidth =
-                          constraints.maxWidth < 390
-                              ? constraints.maxWidth
-                              : (constraints.maxWidth - 16) / 3;
+                      final itemWidth = constraints.maxWidth < 390
+                          ? constraints.maxWidth
+                          : (constraints.maxWidth - 16) / 3;
                       return Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -176,6 +174,19 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
                   ],
                 ),
               ),
+            if (canManageProposal && proposal.sitePhotoPath != null) ...[
+              planningSectionGap,
+              const PlanningSectionTitle(
+                'Site Photo',
+                subtitle: 'Supporting evidence submitted with this proposal',
+              ),
+              const SizedBox(height: 10),
+              AppCard(
+                child: ProposalSitePhoto(
+                  storagePath: proposal.sitePhotoPath!,
+                ),
+              ),
+            ],
             planningSectionGap,
             const PlanningSectionTitle('Description'),
             const SizedBox(height: 10),
@@ -232,33 +243,33 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
             planningSectionGap,
             _ResponsiveButtonPair(
               first: OutlinedButton.icon(
-                    onPressed: proposal.reaction == 0 && !_reacting
-                        ? () => _react(like: true)
-                        : null,
-                    icon: _pendingReaction == true
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.thumb_up_alt_outlined),
-                    label: Text(
-                      _pendingReaction == true ? 'Saving…' : 'Support',
-                    ),
-                  ),
+                onPressed: proposal.reaction == 0 && !_reacting
+                    ? () => _react(like: true)
+                    : null,
+                icon: _pendingReaction == true
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.thumb_up_alt_outlined),
+                label: Text(
+                  _pendingReaction == true ? 'Saving…' : 'Support',
+                ),
+              ),
               second: OutlinedButton.icon(
-                    onPressed: proposal.reaction == 0 && !_reacting
-                        ? () => _react(like: false)
-                        : null,
-                    icon: _pendingReaction == false
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.thumb_down_alt_outlined),
-                    label: Text(
-                      _pendingReaction == false ? 'Saving…' : 'Not suitable',
-                    ),
-                  ),
+                onPressed: proposal.reaction == 0 && !_reacting
+                    ? () => _react(like: false)
+                    : null,
+                icon: _pendingReaction == false
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.thumb_down_alt_outlined),
+                label: Text(
+                  _pendingReaction == false ? 'Saving…' : 'Not suitable',
+                ),
+              ),
             ),
             if (proposal.reaction != 0) ...[
               const SizedBox(height: 8),
@@ -275,23 +286,23 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
               const SizedBox(height: 10),
               _ResponsiveButtonPair(
                 first: OutlinedButton.icon(
-                      onPressed: _deleting ? null : _edit,
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
-                    ),
+                  onPressed: _deleting ? null : _edit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit'),
+                ),
                 second: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                      ),
-                      onPressed: _deleting ? null : _confirmDelete,
-                      icon: _deleting
-                          ? const SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.delete_outline),
-                      label: Text(_deleting ? 'Deleting…' : 'Delete'),
-                    ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                  ),
+                  onPressed: _deleting ? null : _confirmDelete,
+                  icon: _deleting
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline),
+                  label: Text(_deleting ? 'Deleting…' : 'Delete'),
+                ),
               ),
             ],
           ],
@@ -410,7 +421,7 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
 
     setState(() => _deleting = true);
     try {
-      await context.read<PlanningViewModel>().deleteProposal(proposal.id);
+      await context.read<PlanningViewModel>().deleteProposal(proposal);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
