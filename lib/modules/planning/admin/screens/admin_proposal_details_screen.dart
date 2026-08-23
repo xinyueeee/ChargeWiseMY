@@ -243,7 +243,9 @@ class AdminProposalDetailsScreen extends StatelessWidget {
         const SizedBox(height: 12),
         if (assessment != null) ...[
           _AdminAiReviewCard(
-            key: ValueKey('admin-ai-${proposal.id}-${assessment.score}'),
+            key: ValueKey(
+              _adminAiInputFingerprint(proposal, assessment, planned),
+            ),
             proposal: proposal,
             assessment: assessment,
             plannedInfrastructure: planned,
@@ -785,6 +787,43 @@ class _AdminAiReviewCard extends StatefulWidget {
   @override
   State<_AdminAiReviewCard> createState() => _AdminAiReviewCardState();
 }
+
+String _adminAiInputFingerprint(
+  Proposal proposal,
+  ProposalAssessment assessment,
+  PlannedInfrastructureContext? planned,
+) =>
+    <Object?>[
+      proposal.id,
+      proposal.city,
+      proposal.state,
+      proposal.nearestTown,
+      proposal.locationLabel,
+      proposal.demand,
+      proposal.supportCount,
+      proposal.opposeCount,
+      proposal.distance,
+      proposal.status,
+      assessment.score,
+      assessment.outcome,
+      assessment.nearbyStationLocationCount,
+      assessment.gapAnalysisAvailable,
+      assessment.relatedGap?.id,
+      assessment.distanceToGapKm,
+      assessment.nearbyProposalDistanceKm,
+      for (final factor in assessment.factors) ...[
+        factor.name,
+        factor.observedValue,
+        factor.scoreAwarded,
+        factor.maximumScore,
+        factor.available,
+        factor.explanation,
+      ],
+      planned?.nearestDistanceKm,
+      planned?.nearbyLocationCount,
+      planned?.nearbyProposedChargerCount,
+      planned?.radiusKm,
+    ].join('|');
 
 class _AdminAiReviewCardState extends State<_AdminAiReviewCard> {
   AdminProposalAiReview? _review;

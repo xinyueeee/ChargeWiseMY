@@ -14,6 +14,14 @@ enum ProposalReaction {
       _ => null,
     };
   }
+
+  /// Tapping an already-selected response clears it; tapping the other
+  /// response replaces the previous database row through the unique upsert.
+  static ProposalReaction? selectionAfterTap(
+    ProposalReaction? current,
+    ProposalReaction tapped,
+  ) =>
+      current == tapped ? null : tapped;
 }
 
 class Proposal {
@@ -157,6 +165,59 @@ class Proposal {
         currentUserReaction: currentUserReaction,
       );
 
+  Proposal withReaction(ProposalReaction? reaction) {
+    var nextSupports = supports;
+    var nextOpposes = opposes;
+    if (currentUserReaction == ProposalReaction.support) nextSupports--;
+    if (currentUserReaction == ProposalReaction.oppose) nextOpposes--;
+    if (reaction == ProposalReaction.support) nextSupports++;
+    if (reaction == ProposalReaction.oppose) nextOpposes++;
+    return _copy(
+      supports: nextSupports < 0 ? 0 : nextSupports,
+      opposes: nextOpposes < 0 ? 0 : nextOpposes,
+      currentUserReaction: reaction,
+      replaceReaction: true,
+    );
+  }
+
+  Proposal withSitePhotoPath(String? path) => _copy(
+        sitePhotoPath: path,
+        replaceSitePhotoPath: true,
+      );
+
+  Proposal _copy({
+    int? supports,
+    int? opposes,
+    ProposalReaction? currentUserReaction,
+    bool replaceReaction = false,
+    String? sitePhotoPath,
+    bool replaceSitePhotoPath = false,
+  }) =>
+      Proposal(
+        id: id,
+        city: city,
+        description: description,
+        supports: supports ?? this.supports,
+        opposes: opposes ?? this.opposes,
+        status: status,
+        area: area,
+        charger: charger,
+        distance: distance,
+        demand: demand,
+        locationLabel: locationLabel,
+        state: state,
+        nearestTown: nearestTown,
+        createdAt: createdAt,
+        createdBy: createdBy,
+        ownerUserId: ownerUserId,
+        sitePhotoPath:
+            replaceSitePhotoPath ? sitePhotoPath : this.sitePhotoPath,
+        latitude: latitude,
+        longitude: longitude,
+        currentUserReaction:
+            replaceReaction ? currentUserReaction : this.currentUserReaction,
+      );
+
   /// Normalizes only historic presentation variants when reading data. All
   /// runtime values use the database constraint's exact values.
   static String databaseStatus(String? value) {
@@ -188,6 +249,13 @@ class Proposal {
   bool get isTerminal => isApproved || isRejected;
   bool get canOwnerEdit => isActive;
   bool get canOwnerDelete => isActive;
+
+  bool canTransitionTo(String nextStatus) => switch (status) {
+        statusPending => nextStatus == statusUnderReview,
+        statusUnderReview =>
+          nextStatus == statusApproved || nextStatus == statusRejected,
+        _ => false,
+      };
 
   /// Operational queue order: unresolved review work first, terminal records
   /// later. Dates provide deterministic newest-first ordering within a status.
@@ -328,6 +396,9 @@ class GapArea {
 }
 
 class ChargingStation {
+  static const statusExisting = 'Existing';
+  static const statusNewlyProposed = 'Newly Proposed';
+
   const ChargingStation({
     required this.id,
     required this.name,
@@ -398,6 +469,31 @@ class ChargingStation {
     ].join('\n');
   }
 
+  bool hasSameSpatialIdentityAs(ChargingStation other) =>
+      id == other.id &&
+      latitude == other.latitude &&
+      longitude == other.longitude;
+
+  bool hasSameRuntimeDataAs(ChargingStation other) =>
+      hasSameSpatialIdentityAs(other) &&
+      name == other.name &&
+      chargerType == other.chargerType &&
+      address == other.address &&
+      chargerCount == other.chargerCount &&
+      acChargerCount == other.acChargerCount &&
+      dcChargerCount == other.dcChargerCount &&
+      proposedChargerCount == other.proposedChargerCount &&
+      mevnetObjectId == other.mevnetObjectId &&
+      source == other.source &&
+      sourceUrl == other.sourceUrl &&
+      dataDate == other.dataDate &&
+      importedAt == other.importedAt &&
+      state == other.state &&
+      pbt == other.pbt &&
+      category == other.category &&
+      status == other.status &&
+      indoorOutdoor == other.indoorOutdoor;
+
   static ChargingStation? fromSupabase(Map<String, dynamic> row) {
     final latitude = CoordinateParser.latitude(row['latitude']);
     final longitude = CoordinateParser.longitude(row['longitude']);
@@ -464,6 +560,19 @@ class PlannedChargingLocation {
   final String? category;
   final String? indoorOutdoor;
   final int? mevnetObjectId;
+
+  bool hasSameRuntimeDataAs(PlannedChargingLocation other) =>
+      id == other.id &&
+      name == other.name &&
+      latitude == other.latitude &&
+      longitude == other.longitude &&
+      proposedChargerCount == other.proposedChargerCount &&
+      status == other.status &&
+      state == other.state &&
+      pbt == other.pbt &&
+      category == other.category &&
+      indoorOutdoor == other.indoorOutdoor &&
+      mevnetObjectId == other.mevnetObjectId;
 
   factory PlannedChargingLocation.fromStation(ChargingStation station) =>
       PlannedChargingLocation(

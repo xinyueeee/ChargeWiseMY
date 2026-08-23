@@ -165,7 +165,7 @@ class AdminPlanningViewModel extends ChangeNotifier {
   void showPendingProposals() {
     _searchQuery = '';
     _selectedState = 'All States';
-    _selectedStatus = 'Pending';
+    _selectedStatus = Proposal.statusPending;
     _selectedAssessment = 'All Assessments';
     notifyListeners();
   }
@@ -182,6 +182,13 @@ class AdminPlanningViewModel extends ChangeNotifier {
 
   Future<bool> updateStatus(Proposal proposal, String status) async {
     if (_updatingProposalIds.contains(proposal.id)) return false;
+    if (!Proposal.validStatuses.contains(status) ||
+        !proposal.canTransitionTo(status)) {
+      statusErrorMessage =
+          'This status change is not available for the proposal’s current lifecycle stage.';
+      notifyListeners();
+      return false;
+    }
     _updatingProposalIds.add(proposal.id);
     statusErrorMessage = null;
     notifyListeners();

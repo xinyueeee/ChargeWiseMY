@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/app_route_observer.dart';
 import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../auth/services/auth_service.dart';
@@ -69,7 +70,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with RouteAware {
   final _authService = AuthService();
   final _chargingService = ChargingService();
 
@@ -78,6 +79,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = '';
   LatLng? _userLocation;
   Future<List<Map<String, dynamic>>>? _remindersFuture;
+  PageRoute<dynamic>? _subscribedRoute;
+  bool _mapMounted = true;
 
   @override
   void initState() {
@@ -85,6 +88,35 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadProfile();
     _loadLocation();
     _remindersFuture = _chargingService.fetchReminders();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> || identical(route, _subscribedRoute)) {
+      return;
+    }
+    if (_subscribedRoute != null) appRouteObserver.unsubscribe(this);
+    _subscribedRoute = route;
+    appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPushNext() => _setMapMounted(false);
+
+  @override
+  void didPopNext() => _setMapMounted(true);
+
+  void _setMapMounted(bool value) {
+    if (!mounted || value == _mapMounted) return;
+    setState(() => _mapMounted = value);
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -378,27 +410,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                MapPanel(
-                  height: 300,
-                  stations: _applyFilter(vm.mapStations),
-                  stateRegions: vm.stateRegions,
-                  stateOverviews: vm.stateOverviewSummaries,
-                  selectedState: vm.selectedState,
-                  focusBounds: vm.selectedMapBounds,
-                  onStateSelected: (state, source) =>
-                      vm.selectState(state, source: source),
-                  showNationalStateBadges: false,
-                  showStationsInNationalView: true,
-                  stationIconResolver: _iconForStation,
-                  onStationTap: (station) => showStationDetailsSheet(
-                    context,
-                    station: station,
-                    distanceKm: _distanceKm(
-                      _referencePoint,
-                      LatLng(station.latitude, station.longitude),
+                if (_mapMounted)
+                  MapPanel(
+                    height: 300,
+                    stations: _applyFilter(vm.mapStations),
+                    stateRegions: vm.stateRegions,
+                    stateOverviews: vm.stateOverviewSummaries,
+                    selectedState: vm.selectedState,
+                    focusBounds: vm.selectedMapBounds,
+                    onStateSelected: (state, source) =>
+                        vm.selectState(state, source: source),
+                    showNationalStateBadges: false,
+                    showStationsInNationalView: true,
+                    stationIconResolver: _iconForStation,
+                    onStationTap: (station) => showStationDetailsSheet(
+                      context,
+                      station: station,
+                      distanceKm: _distanceKm(
+                        _referencePoint,
+                        LatLng(station.latitude, station.longitude),
+                      ),
                     ),
-                  ),
-                ),
+                  )
+                else
+                  const SizedBox(height: 300),
                 if (vm.selectedState == malaysiaSelection) ...[
                   const SizedBox(height: 8),
                   const Row(

@@ -55,21 +55,19 @@ class ProposalReactionButtons extends StatelessWidget {
             reaction: ProposalReaction.support,
             selected: selected == ProposalReaction.support,
             busy: busy,
-            onPressed: () => onChanged(
-              selected == ProposalReaction.support
-                  ? null
-                  : ProposalReaction.support,
-            ),
+            onPressed: () => onChanged(ProposalReaction.selectionAfterTap(
+              selected,
+              ProposalReaction.support,
+            )),
           );
           final oppose = _ReactionButton(
             reaction: ProposalReaction.oppose,
             selected: selected == ProposalReaction.oppose,
             busy: busy,
-            onPressed: () => onChanged(
-              selected == ProposalReaction.oppose
-                  ? null
-                  : ProposalReaction.oppose,
-            ),
+            onPressed: () => onChanged(ProposalReaction.selectionAfterTap(
+              selected,
+              ProposalReaction.oppose,
+            )),
           );
           if (vertical) {
             return Column(

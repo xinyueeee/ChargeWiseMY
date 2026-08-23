@@ -45,6 +45,29 @@ void main() {
     }
   });
 
+  test('Admin lifecycle permits only the established forward transitions', () {
+    final pending = proposal('pending', Proposal.statusPending);
+    expect(pending.canTransitionTo(Proposal.statusUnderReview), isTrue);
+    expect(pending.canTransitionTo(Proposal.statusApproved), isFalse);
+    expect(pending.canTransitionTo(Proposal.statusRejected), isFalse);
+
+    final review = proposal('review', Proposal.statusUnderReview);
+    expect(review.canTransitionTo(Proposal.statusApproved), isTrue);
+    expect(review.canTransitionTo(Proposal.statusRejected), isTrue);
+    expect(review.canTransitionTo(Proposal.statusPending), isFalse);
+
+    expect(
+      proposal('approved', Proposal.statusApproved)
+          .canTransitionTo(Proposal.statusRejected),
+      isFalse,
+    );
+    expect(
+      proposal('rejected', Proposal.statusRejected)
+          .canTransitionTo(Proposal.statusUnderReview),
+      isFalse,
+    );
+  });
+
   test('database statuses and reaction values normalize canonically', () {
     expect(Proposal.databaseStatus('under_review'), Proposal.statusUnderReview);
     expect(Proposal.databaseStatus('approved'), Proposal.statusApproved);
@@ -53,6 +76,103 @@ void main() {
     expect(ProposalReaction.fromDatabase(null), isNull);
     expect(ProposalReaction.support.databaseValue, 'Like');
     expect(ProposalReaction.oppose.databaseValue, 'Dislike');
+  });
+
+  test('reaction taps cover select, switch, and clear transitions', () {
+    expect(
+      ProposalReaction.selectionAfterTap(null, ProposalReaction.support),
+      ProposalReaction.support,
+    );
+    expect(
+      ProposalReaction.selectionAfterTap(
+        ProposalReaction.support,
+        ProposalReaction.oppose,
+      ),
+      ProposalReaction.oppose,
+    );
+    expect(
+      ProposalReaction.selectionAfterTap(
+        ProposalReaction.oppose,
+        ProposalReaction.support,
+      ),
+      ProposalReaction.support,
+    );
+    expect(
+      ProposalReaction.selectionAfterTap(
+        ProposalReaction.support,
+        ProposalReaction.support,
+      ),
+      isNull,
+    );
+  });
+
+  test('local reaction projection keeps aggregate counts consistent', () {
+    final initial = Proposal(
+      id: 'reaction-test',
+      city: 'Test location',
+      description: 'Test proposal',
+      supports: 4,
+      opposes: 2,
+      status: Proposal.statusPending,
+      area: 'Residential Area',
+      charger: 'AC Charger',
+      distance: 8,
+      demand: 'Medium',
+      currentUserReaction: ProposalReaction.support,
+    );
+
+    final switched = initial.withReaction(ProposalReaction.oppose);
+    expect(switched.supportCount, 3);
+    expect(switched.opposeCount, 3);
+    expect(switched.currentUserReaction, ProposalReaction.oppose);
+
+    final cleared = switched.withReaction(null);
+    expect(cleared.supportCount, 3);
+    expect(cleared.opposeCount, 2);
+    expect(cleared.currentUserReaction, isNull);
+  });
+
+  test('station equality separates spatial changes from metadata changes', () {
+    const original = ChargingStation(
+      id: 'station-1',
+      name: 'Location',
+      latitude: 3.1,
+      longitude: 101.6,
+      chargerType: 'AC/DC',
+      chargerCount: 2,
+      acChargerCount: 1,
+      dcChargerCount: 1,
+      state: 'Selangor',
+      status: ChargingStation.statusExisting,
+    );
+    const metadataChanged = ChargingStation(
+      id: 'station-1',
+      name: 'Location',
+      latitude: 3.1,
+      longitude: 101.6,
+      chargerType: 'AC/DC',
+      chargerCount: 3,
+      acChargerCount: 2,
+      dcChargerCount: 1,
+      state: 'Selangor',
+      status: ChargingStation.statusExisting,
+    );
+    const coordinateChanged = ChargingStation(
+      id: 'station-1',
+      name: 'Location',
+      latitude: 3.2,
+      longitude: 101.6,
+      chargerType: 'AC/DC',
+      chargerCount: 2,
+      acChargerCount: 1,
+      dcChargerCount: 1,
+      state: 'Selangor',
+      status: ChargingStation.statusExisting,
+    );
+
+    expect(original.hasSameSpatialIdentityAs(metadataChanged), isTrue);
+    expect(original.hasSameRuntimeDataAs(metadataChanged), isFalse);
+    expect(original.hasSameSpatialIdentityAs(coordinateChanged), isFalse);
   });
 
   test('review queue puts unresolved work first and newest first within status',
