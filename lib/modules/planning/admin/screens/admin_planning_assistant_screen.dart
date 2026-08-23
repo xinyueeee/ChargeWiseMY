@@ -25,6 +25,7 @@ class _AdminPlanningAssistantScreenState
     'Main risks',
     'Infrastructure coverage',
     'Coverage-gap relationship',
+    'Community response',
     'Nearby proposals',
     'What should I verify?',
   ];
@@ -148,7 +149,8 @@ class _AdminPlanningAssistantScreenState
                               padding: EdgeInsets.symmetric(vertical: 8),
                               child: SizedBox.square(
                                 dimension: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
                           );

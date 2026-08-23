@@ -20,10 +20,18 @@ class AdminPlanningAssistantService {
     required ProposalAssessment assessment,
   }) {
     final normalized = question.trim().toLowerCase();
+    if (normalized.contains('community') ||
+        normalized.contains('support') ||
+        normalized.contains('oppose') ||
+        normalized.contains('reaction')) {
+      return 'Community response: ${proposal.supportCount} support, '
+          '${proposal.opposeCount} not support. These are the current '
+          'proposal-reaction counts used by the rule-based assessment.';
+    }
+
     if (normalized.contains('why') &&
         (normalized.contains('recommend') || normalized.contains('score'))) {
-      final strongest = [...assessment.factors]
-        ..sort((a, b) {
+      final strongest = [...assessment.factors]..sort((a, b) {
           final aRatio = a.available && a.maximumScore > 0
               ? a.scoreAwarded / a.maximumScore
               : -1;
@@ -46,18 +54,15 @@ class AdminPlanningAssistantService {
     }
 
     if (normalized.contains('risk') || normalized.contains('weak')) {
-      final weakest = assessment.factors
-          .where((factor) => factor.available)
-          .toList()
-        ..sort((a, b) {
-          final aRatio = a.maximumScore == 0
-              ? 0
-              : a.scoreAwarded / a.maximumScore;
-          final bRatio = b.maximumScore == 0
-              ? 0
-              : b.scoreAwarded / b.maximumScore;
-          return aRatio.compareTo(bRatio);
-        });
+      final weakest =
+          assessment.factors.where((factor) => factor.available).toList()
+            ..sort((a, b) {
+              final aRatio =
+                  a.maximumScore == 0 ? 0 : a.scoreAwarded / a.maximumScore;
+              final bRatio =
+                  b.maximumScore == 0 ? 0 : b.scoreAwarded / b.maximumScore;
+              return aRatio.compareTo(bRatio);
+            });
       if (weakest.isEmpty) {
         return 'The current dataset does not provide enough verified evidence to rank weaknesses.';
       }

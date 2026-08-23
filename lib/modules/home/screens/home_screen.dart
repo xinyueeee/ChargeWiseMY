@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../auth/services/auth_service.dart';
 import '../../charging/screens/charging_screen.dart';
@@ -534,7 +535,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     final next = upcoming.isEmpty ? null : upcoming.first;
 
                     return InkWell(
-                      onTap: () => _switchTo(const ChargingScreen()),
+                      onTap: () => _switchTo(
+                        const ChargingScreen(),
+                        DriverRouteNames.charging,
+                      ),
                       child: AppCard(
                         child: Row(
                           children: [
@@ -587,17 +591,27 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: FloatingBottomNav(
         currentTab: 'Home',
-        onChargingTap: () => _switchTo(const ChargingScreen()),
-        onPlanningTap: () => _switchTo(const PlanningDashboardScreen()),
-        onProfileTap: () => _switchTo(const ProfileScreen()),
+        onChargingTap: () => _switchTo(
+          const ChargingScreen(),
+          DriverRouteNames.charging,
+        ),
+        onPlanningTap: () => _switchTo(
+          const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
+        ),
+        onProfileTap: () => _switchTo(
+          const ProfileScreen(),
+          DriverRouteNames.profile,
+        ),
       ),
     );
   }
 
-  void _switchTo(Widget page) {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page),
+  void _switchTo(Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
     );
   }
 }

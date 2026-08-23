@@ -89,21 +89,53 @@ class SupabaseService {
     return actingUserId;
   }
 
-  Future<void> addReaction(
-      {required String proposalId, required String reaction}) async {
+  Future<void> setProposalReaction({
+    required String proposalId,
+    required String? reaction,
+  }) async {
     final userId = await ensureActingUser();
-    await client.from('proposal_reactions').insert({
-      'proposal_id': proposalId,
-      'user_id': userId,
-      'reaction': reaction,
-    });
+    if (reaction == null) {
+      final deleted = await client
+          .from('proposal_reactions')
+          .delete()
+          .eq('proposal_id', proposalId)
+          .eq('user_id', userId)
+          .select('reaction')
+          .maybeSingle();
+      if (deleted == null) {
+        throw StateError('Proposal reaction was not removed.');
+      }
+      return;
+    }
+    final updated = await client
+        .from('proposal_reactions')
+        .upsert(
+          {
+            'proposal_id': proposalId,
+            'user_id': userId,
+            'reaction': reaction,
+          },
+          onConflict: 'proposal_id,user_id',
+        )
+        .select('reaction')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError('Proposal reaction was not saved.');
+    }
   }
 
   Future<void> updateProposalStatus(String proposalId, String status) async {
-    await client
+    final updated = await client
         .from('proposals')
-        .update({'status': status.toLowerCase().replaceAll(' ', '_')}).eq(
-            'proposal_id', proposalId);
+        .update({'status': status})
+        .eq('proposal_id', proposalId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError(
+        'Proposal status was not updated by the authenticated administrator.',
+      );
+    }
   }
 
   Future<void> updateProposal(

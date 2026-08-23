@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import '../widgets/planning_destination_bottom_nav.dart';
 
 class AiPlanningScreen extends StatefulWidget {
   const AiPlanningScreen({
@@ -29,8 +30,8 @@ class _AiPlanningScreenState extends State<AiPlanningScreen> {
     final viewModel = context.watch<PlanningViewModel>();
     final ruleRecommendation = viewModel.recommendation(proposal);
     final suitable = ruleRecommendation == 'Suitable Location';
-    final rejected = proposal.status.toLowerCase() == 'rejected';
-    final approved = proposal.status.toLowerCase() == 'approved';
+    final rejected = proposal.status == Proposal.statusRejected;
+    final approved = proposal.status == Proposal.statusApproved;
     final recommended = !rejected && (suitable || approved);
     final assessmentOutcome = rejected
         ? 'Not Recommended'
@@ -167,8 +168,7 @@ class _AiPlanningScreenState extends State<AiPlanningScreen> {
                           assessmentOutcome,
                           style:
                               Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    color:
-                                        recommended ? green : Colors.orange,
+                                    color: recommended ? green : Colors.orange,
                                     fontWeight: FontWeight.w700,
                                   ),
                         ),
@@ -223,45 +223,43 @@ class _AiPlanningScreenState extends State<AiPlanningScreen> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final approveButton = ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: green,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                    onPressed: _updatingStatus
-                        ? null
-                        : () => _setStatus('Approved'),
-                    icon: _pendingStatus == 'Approved'
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.check),
-                    label: Text(
-                      _pendingStatus == 'Approved' ? 'Approving…' : 'Approve',
-                    ),
-                  );
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: green,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed:
+                      _updatingStatus ? null : () => _setStatus('Approved'),
+                  icon: _pendingStatus == 'Approved'
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check),
+                  label: Text(
+                    _pendingStatus == 'Approved' ? 'Approving…' : 'Approve',
+                  ),
+                );
                 final rejectButton = OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                    onPressed: _updatingStatus
-                        ? null
-                        : () => _setStatus('Rejected'),
-                    icon: _pendingStatus == 'Rejected'
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.close),
-                    label: Text(
-                      _pendingStatus == 'Rejected' ? 'Rejecting…' : 'Reject',
-                    ),
-                  );
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed:
+                      _updatingStatus ? null : () => _setStatus('Rejected'),
+                  icon: _pendingStatus == 'Rejected'
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.close),
+                  label: Text(
+                    _pendingStatus == 'Rejected' ? 'Rejecting…' : 'Reject',
+                  ),
+                );
                 final vertical = constraints.maxWidth < 360 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.25;
                 if (vertical) {
@@ -286,7 +284,7 @@ class _AiPlanningScreenState extends State<AiPlanningScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const FloatingBottomNav(),
+      bottomNavigationBar: const PlanningDestinationBottomNav(),
     );
   }
 

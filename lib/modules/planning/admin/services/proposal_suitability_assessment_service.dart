@@ -38,10 +38,10 @@ class ProposalSuitabilityAssessmentService {
     final gapMatch = gapAnalysisAvailable && hasCoordinates
         ? _nearestGap(proposal, gaps)
         : null;
-    final relatedGapMatch = gapMatch != null &&
-            gapMatch.distanceKm <= gapRelationshipRadiusKm
-        ? gapMatch
-        : null;
+    final relatedGapMatch =
+        gapMatch != null && gapMatch.distanceKm <= gapRelationshipRadiusKm
+            ? gapMatch
+            : null;
     factors.add(
       _gapFactor(
         gapMatch,
@@ -49,12 +49,16 @@ class ProposalSuitabilityAssessmentService {
       ),
     );
     factors.add(_expectedUsageFactor(proposal.demand));
-    factors.add(_communitySupportFactor(proposal.displayedSupports));
+    factors.add(
+      _communitySupportFactor(
+        proposal.supportCount,
+        proposal.opposeCount,
+      ),
+    );
     factors.add(_settlementFactor(proposal));
 
-    final duplicate = hasCoordinates
-        ? _nearestRelevantProposal(proposal, proposals)
-        : null;
+    final duplicate =
+        hasCoordinates ? _nearestRelevantProposal(proposal, proposals) : null;
     factors.add(_duplicationFactor(duplicate, available: hasCoordinates));
 
     final availableMaximum = factors
@@ -99,7 +103,8 @@ class ProposalSuitabilityAssessmentService {
         observedValue: 'Location data unavailable',
         scoreAwarded: 0,
         maximumScore: 30,
-        explanation: 'Infrastructure coverage could not be measured because valid proposal coordinates or station data are unavailable.',
+        explanation:
+            'Infrastructure coverage could not be measured because valid proposal coordinates or station data are unavailable.',
         available: false,
       );
     }
@@ -141,7 +146,8 @@ class ProposalSuitabilityAssessmentService {
         observedValue: 'Current gap analysis unavailable',
         scoreAwarded: 0,
         maximumScore: 25,
-        explanation: 'No compatible cached coverage-gap result is available for this proposal location.',
+        explanation:
+            'No compatible cached coverage-gap result is available for this proposal location.',
         available: false,
       );
     }
@@ -151,7 +157,8 @@ class ProposalSuitabilityAssessmentService {
         observedValue: 'Outside identified gap areas',
         scoreAwarded: 0,
         maximumScore: 25,
-        explanation: 'The proposal is outside the current identified coverage gaps. This is neutral evidence and is not an automatic rejection.',
+        explanation:
+            'The proposal is outside the current identified coverage gaps. This is neutral evidence and is not an automatic rejection.',
       );
     }
 
@@ -167,7 +174,8 @@ class ProposalSuitabilityAssessmentService {
           '${match.area.priority} Priority gap, ${match.distanceKm.toStringAsFixed(1)} km away',
       scoreAwarded: awarded,
       maximumScore: 25,
-      explanation: 'The proposed location is within 5 km of ${match.area.name}, a ${match.area.priority.toLowerCase()}-priority infrastructure coverage gap.',
+      explanation:
+          'The proposed location is within 5 km of ${match.area.name}, a ${match.area.priority.toLowerCase()}-priority infrastructure coverage gap.',
     );
   }
 
@@ -179,7 +187,8 @@ class ProposalSuitabilityAssessmentService {
           observedValue: 'High',
           scoreAwarded: 20,
           maximumScore: 20,
-          explanation: 'The driver submitted High expected usage. This is self-reported and is not a demand prediction.',
+          explanation:
+              'The driver submitted High expected usage. This is self-reported and is not a demand prediction.',
         );
       case 'medium':
         return const ProposalAssessmentFactor(
@@ -187,7 +196,8 @@ class ProposalSuitabilityAssessmentService {
           observedValue: 'Medium',
           scoreAwarded: 12,
           maximumScore: 20,
-          explanation: 'The driver submitted Medium expected usage. This is self-reported and is not a demand prediction.',
+          explanation:
+              'The driver submitted Medium expected usage. This is self-reported and is not a demand prediction.',
         );
       case 'low':
         return const ProposalAssessmentFactor(
@@ -195,7 +205,8 @@ class ProposalSuitabilityAssessmentService {
           observedValue: 'Low',
           scoreAwarded: 5,
           maximumScore: 20,
-          explanation: 'The driver submitted Low expected usage. This is self-reported and is not a demand prediction.',
+          explanation:
+              'The driver submitted Low expected usage. This is self-reported and is not a demand prediction.',
         );
       default:
         return ProposalAssessmentFactor(
@@ -203,13 +214,17 @@ class ProposalSuitabilityAssessmentService {
           observedValue: demand.trim().isEmpty ? 'Unavailable' : demand,
           scoreAwarded: 0,
           maximumScore: 20,
-          explanation: 'The submitted expected-usage value is unavailable or unsupported.',
+          explanation:
+              'The submitted expected-usage value is unavailable or unsupported.',
           available: false,
         );
     }
   }
 
-  ProposalAssessmentFactor _communitySupportFactor(int supports) {
+  ProposalAssessmentFactor _communitySupportFactor(
+    int supports,
+    int opposes,
+  ) {
     final awarded = supports >= 50
         ? 10
         : supports >= 30
@@ -221,10 +236,11 @@ class ProposalSuitabilityAssessmentService {
                     : 0;
     return ProposalAssessmentFactor(
       name: 'Community support',
-      observedValue: '$supports support${supports == 1 ? '' : 's'}',
+      observedValue: '$supports support · $opposes not support',
       scoreAwarded: awarded,
       maximumScore: 10,
-      explanation: '$supports users currently support this proposal. Community support contributes evidence but is not a mandatory approval gate.',
+      explanation:
+          '$supports users currently support this proposal and $opposes do not support it. The existing score remains based on support count; community response contributes evidence but is not a mandatory approval gate.',
     );
   }
 
@@ -276,7 +292,8 @@ class ProposalSuitabilityAssessmentService {
         observedValue: 'No pending or approved proposal within 5 km',
         scoreAwarded: 5,
         maximumScore: 5,
-        explanation: 'No nearby active proposal duplication concern was identified.',
+        explanation:
+            'No nearby active proposal duplication concern was identified.',
       );
     }
     final strong = duplicate.distanceKm <= strongDuplicateConcernRadiusKm;
@@ -286,7 +303,8 @@ class ProposalSuitabilityAssessmentService {
           '${duplicate.proposal.city}, ${duplicate.distanceKm.toStringAsFixed(1)} km away',
       scoreAwarded: strong ? 0 : 2,
       maximumScore: 5,
-      explanation: 'Another ${duplicate.proposal.status.toLowerCase()} proposal exists ${duplicate.distanceKm.toStringAsFixed(1)} km from this location. This is a review concern, not an automatic rejection.',
+      explanation:
+          'Another ${duplicate.proposal.status.toLowerCase()} proposal exists ${duplicate.distanceKm.toStringAsFixed(1)} km from this location. This is a review concern, not an automatic rejection.',
     );
   }
 
@@ -349,8 +367,11 @@ class ProposalSuitabilityAssessmentService {
           other.longitude == null) {
         continue;
       }
-      final status = other.status.trim().toLowerCase();
-      if (status != 'pending' && status != 'approved') continue;
+      final status = other.status;
+      if (status != Proposal.statusPending &&
+          status != Proposal.statusApproved) {
+        continue;
+      }
       final distance = _distanceKm(
         proposal.latitude!,
         proposal.longitude!,

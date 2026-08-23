@@ -5,11 +5,13 @@ import '../models/proposal.dart';
 import '../services/gap_ai_analysis_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import '../widgets/planning_destination_bottom_nav.dart';
 import 'new_proposal_screen.dart';
 import 'priority_area_map_screen.dart';
 
 class GapAnalysisScreen extends StatefulWidget {
-  const GapAnalysisScreen({super.key, this.aiService = const SupabaseGapAiAnalysisService()});
+  const GapAnalysisScreen(
+      {super.key, this.aiService = const SupabaseGapAiAnalysisService()});
   final GapAiAnalysisService aiService;
 
   @override
@@ -71,7 +73,9 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
             : GapAiFailureReason.unavailable;
       });
     } finally {
-      if (mounted && _aiAreaId == area.id) setState(() => _generatingAi = false);
+      if (mounted && _aiAreaId == area.id) {
+        setState(() => _generatingAi = false);
+      }
     }
   }
 
@@ -113,62 +117,75 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
               'resultCount=${areas.length}.');
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Gap Analysis', style: planningAppBarTitleStyle),
+              title:
+                  const Text('Gap Analysis', style: planningAppBarTitleStyle),
               centerTitle: true,
               backgroundColor: Colors.white,
               elevation: 0,
               foregroundColor: Colors.black,
             ),
             body: viewModel.loading
-                ? const PlanningLoadingState(message: 'Loading charging infrastructure…')
+                ? const PlanningLoadingState(
+                    message: 'Loading charging infrastructure…')
                 : viewModel.errorMessage != null
-                    ? PlanningErrorState(message: viewModel.errorMessage!, onRetry: viewModel.load)
+                    ? PlanningErrorState(
+                        message: viewModel.errorMessage!,
+                        onRetry: viewModel.load)
                     : SafeArea(child: LayoutBuilder(
                         builder: (context, constraints) {
                           final landscape = constraints.maxWidth >= 700 &&
                               constraints.maxWidth > constraints.maxHeight;
                           final controls = _controls(viewModel);
-                          final details = _details(viewModel, areas, selectedArea);
+                          final details =
+                              _details(viewModel, areas, selectedArea);
                           if (landscape) {
-                            return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                              Expanded(
-                                flex: 3,
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(14, 10, 8, 14),
-                                  child: Column(children: [
-                                    controls,
-                                    const SizedBox(height: 8),
-                                    Expanded(child: LayoutBuilder(
-                                      builder: (context, mapConstraints) => _analysisMap(
-                                        viewModel,
-                                        areas,
-                                        selectedArea,
-                                        height: mapConstraints.maxHeight,
-                                      ),
-                                    )),
-                                  ]),
-                                ),
-                              ),
-                              const VerticalDivider(width: 1),
-                              Expanded(
-                                flex: 2,
-                                child: ListView(
-                                  padding: const EdgeInsets.fromLTRB(12, 10, 14, 18),
-                                  children: [
-                                    _rankedAreaSelector(areas, landscape: true),
-                                    const SizedBox(height: 10),
-                                    details,
-                                  ],
-                                ),
-                              ),
-                            ]);
+                            return Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          14, 10, 8, 14),
+                                      child: Column(children: [
+                                        controls,
+                                        const SizedBox(height: 8),
+                                        Expanded(
+                                            child: LayoutBuilder(
+                                          builder: (context, mapConstraints) =>
+                                              _analysisMap(
+                                            viewModel,
+                                            areas,
+                                            selectedArea,
+                                            height: mapConstraints.maxHeight,
+                                          ),
+                                        )),
+                                      ]),
+                                    ),
+                                  ),
+                                  const VerticalDivider(width: 1),
+                                  Expanded(
+                                    flex: 2,
+                                    child: ListView(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          12, 10, 14, 18),
+                                      children: [
+                                        _rankedAreaSelector(areas,
+                                            landscape: true),
+                                        const SizedBox(height: 10),
+                                        details,
+                                      ],
+                                    ),
+                                  ),
+                                ]);
                           }
                           return ListView(
                             padding: const EdgeInsets.fromLTRB(16, 10, 16, 22),
                             children: [
                               controls,
                               const SizedBox(height: 10),
-                              _analysisMap(viewModel, areas, selectedArea, height: 250),
+                              _analysisMap(viewModel, areas, selectedArea,
+                                  height: 250),
                               const SizedBox(height: 10),
                               _rankedAreaSelector(areas),
                               const SizedBox(height: 10),
@@ -177,7 +194,7 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
                           );
                         },
                       )),
-            bottomNavigationBar: const FloatingBottomNav(),
+            bottomNavigationBar: const PlanningDestinationBottomNav(),
           );
         },
       );
@@ -186,7 +203,8 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [
-            Expanded(child: DropdownButtonFormField<String>(
+            Expanded(
+                child: DropdownButtonFormField<String>(
               key: ValueKey('gap-state-${viewModel.selectedState}'),
               initialValue: viewModel.selectedState,
               isExpanded: true,
@@ -196,14 +214,21 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              items: [for (final state in viewModel.stateOptions)
-                DropdownMenuItem(value: state, child: Text(state, overflow: TextOverflow.ellipsis))],
+              items: [
+                for (final state in viewModel.stateOptions)
+                  DropdownMenuItem(
+                      value: state,
+                      child: Text(state, overflow: TextOverflow.ellipsis))
+              ],
               onChanged: (state) {
-                if (state != null) viewModel.selectState(state, source: 'gap-analysis-dropdown');
+                if (state != null) {
+                  viewModel.selectState(state, source: 'gap-analysis-dropdown');
+                }
               },
             )),
             const SizedBox(width: 8),
-            Flexible(child: Container(
+            Flexible(
+                child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               decoration: BoxDecoration(
                 color: const Color(0xFFF2F8F6),
@@ -214,11 +239,13 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
                 viewModel.selectedAnalysisProfile.displayName,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: green, fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                    color: green, fontSize: 12, fontWeight: FontWeight.w700),
               ),
             )),
           ]),
-          if (viewModel.analyzingGaps || viewModel.analysisErrorMessage != null) ...[
+          if (viewModel.analyzingGaps ||
+              viewModel.analysisErrorMessage != null) ...[
             const SizedBox(height: 8),
             AnalysisStatusPanel(
               message: viewModel.analysisStatusMessage ?? 'Preparing analysis…',
@@ -254,17 +281,19 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
   }) {
     if (areas.isEmpty) return const SizedBox.shrink();
     final labels = _areaDisplayLabels(areas);
-    final visibleCount = landscape || _showAllAreas
-        ? areas.length
-        : areas.length.clamp(0, 3);
+    final visibleCount =
+        landscape || _showAllAreas ? areas.length : areas.length.clamp(0, 3);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children: [
-          const Expanded(child: Text('Ranked Priority Areas',
-            style: TextStyle(color: planningTextColor, fontWeight: FontWeight.w800))),
+          const Expanded(
+              child: Text('Ranked Priority Areas',
+                  style: TextStyle(
+                      color: planningTextColor, fontWeight: FontWeight.w800))),
           Text('${areas.length} results',
-            style: const TextStyle(color: planningMutedTextColor, fontSize: 12)),
+              style:
+                  const TextStyle(color: planningMutedTextColor, fontSize: 12)),
         ]),
         const SizedBox(height: 7),
         for (var index = 0; index < visibleCount; index++) ...[
@@ -281,7 +310,9 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
           TextButton.icon(
             onPressed: () => setState(() => _showAllAreas = !_showAllAreas),
             icon: Icon(_showAllAreas ? Icons.expand_less : Icons.expand_more),
-            label: Text(_showAllAreas ? 'Show top 3' : 'View all ${areas.length} areas'),
+            label: Text(_showAllAreas
+                ? 'Show top 3'
+                : 'View all ${areas.length} areas'),
           ),
       ],
     );
@@ -292,9 +323,8 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
     final totals = <String, int>{};
     for (final area in areas) {
       final settlement = area.nearestSettlementName?.trim();
-      final base = settlement != null && settlement.isNotEmpty
-          ? settlement
-          : area.state;
+      final base =
+          settlement != null && settlement.isNotEmpty ? settlement : area.state;
       bases.add(base);
       totals[base] = (totals[base] ?? 0) + 1;
     }
@@ -312,16 +342,20 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
 
   Widget _details(PlanningViewModel vm, List<GapArea> areas, GapArea? area) {
     if (vm.analyzingGaps) {
-      return PlanningLoadingState(message: 'Analyzing ${vm.selectedState} coverage…');
+      return PlanningLoadingState(
+          message: 'Analyzing ${vm.selectedState} coverage…');
     }
     if (vm.analysisErrorMessage != null) {
-      return PlanningErrorState(message: vm.analysisErrorMessage!, onRetry: vm.retrySelectedStateAnalysis);
+      return PlanningErrorState(
+          message: vm.analysisErrorMessage!,
+          onRetry: vm.retrySelectedStateAnalysis);
     }
     if (area == null) {
       return const PlanningEmptyState(
         icon: Icons.check_circle_outline,
         title: 'No infrastructure gaps detected',
-        message: 'No sampled land location met the configured geographical coverage-gap criteria. No thresholds were relaxed.',
+        message:
+            'No sampled land location met the configured geographical coverage-gap criteria. No thresholds were relaxed.',
       );
     }
 
@@ -341,16 +375,31 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${area.priority.toUpperCase()} PRIORITY', style: TextStyle(
-                color: priorityColor, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: .5)),
-              const SizedBox(height: 3),
-              Text(displayName, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: planningTextColor, fontSize: 18, fontWeight: FontWeight.w800)),
-            ])),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text('${area.priority.toUpperCase()} PRIORITY',
+                      style: TextStyle(
+                          color: priorityColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .5)),
+                  const SizedBox(height: 3),
+                  Text(displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: planningTextColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800)),
+                ])),
             const SizedBox(width: 10),
-            Text('${area.priorityScore.toStringAsFixed(0)}/100', style: TextStyle(
-              color: priorityColor, fontSize: 22, fontWeight: FontWeight.w800)),
+            Text('${area.priorityScore.toStringAsFixed(0)}/100',
+                style: TextStyle(
+                    color: priorityColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800)),
           ]),
           const SizedBox(height: 10),
           _EvidenceStrip(area: area),
@@ -407,17 +456,23 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
         ),
       ),
       const SizedBox(height: 10),
-      const Text('Recommended Actions', style: TextStyle(color: planningTextColor, fontWeight: FontWeight.w800)),
+      const Text('Recommended Actions',
+          style:
+              TextStyle(color: planningTextColor, fontWeight: FontWeight.w800)),
       const SizedBox(height: 7),
       ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: green, foregroundColor: Colors.white, minimumSize: const Size.fromHeight(46)),
+            backgroundColor: green,
+            foregroundColor: Colors.white,
+            minimumSize: const Size.fromHeight(46)),
         onPressed: () => _createProposal(area, displayName),
         icon: const Icon(Icons.add_location_alt_outlined),
         label: const Text('Create Proposal'),
       ),
       TextButton.icon(
-        onPressed: area.latitude == null || area.longitude == null ? null : () => _openAreaMap(area),
+        onPressed: area.latitude == null || area.longitude == null
+            ? null
+            : () => _openAreaMap(area),
         icon: const Icon(Icons.map_outlined),
         label: const Text('View focused map'),
       ),
@@ -428,23 +483,38 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
           borderRadius: BorderRadius.circular(14),
           clipBehavior: Clip.antiAlias,
           child: ExpansionTile(
-            title: const Text('View analysis breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
+            title: const Text('View analysis breakdown',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: [
-              _BreakdownRow(label: 'Coverage score', value: area.coverageScore.toStringAsFixed(1)),
-              _BreakdownRow(label: 'Analysis profile', value: vm.selectedAnalysisProfile.displayName),
-              _BreakdownRow(label: 'Nearby radius', value: '${area.nearbyRadiusKm.toStringAsFixed(1)} km'),
+              _BreakdownRow(
+                  label: 'Coverage score',
+                  value: area.coverageScore.toStringAsFixed(1)),
+              _BreakdownRow(
+                  label: 'Analysis profile',
+                  value: vm.selectedAnalysisProfile.displayName),
+              _BreakdownRow(
+                  label: 'Nearby radius',
+                  value: '${area.nearbyRadiusKm.toStringAsFixed(1)} km'),
               if (area.localStationLocationCount > 0)
-                _BreakdownRow(label: 'Locations in analysis cell', value: '${area.localStationLocationCount}'),
+                _BreakdownRow(
+                    label: 'Locations in analysis cell',
+                    value: '${area.localStationLocationCount}'),
               if (area.nearestSettlementName != null)
-                _BreakdownRow(label: 'Nearest settlement', value: area.nearestSettlementName!),
+                _BreakdownRow(
+                    label: 'Nearest settlement',
+                    value: area.nearestSettlementName!),
               const SizedBox(height: 8),
-              Align(alignment: Alignment.centerLeft, child: Text(area.reason,
-                style: const TextStyle(color: planningMutedTextColor, height: 1.35))),
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(area.reason,
+                      style: const TextStyle(
+                          color: planningMutedTextColor, height: 1.35))),
               const SizedBox(height: 8),
               const Text(
                 'This is a charging-infrastructure coverage assessment, not a demand or site-feasibility prediction. Road access, parking, grid capacity, land ownership, and approval require review.',
-                style: TextStyle(color: planningMutedTextColor, fontSize: 12, height: 1.35),
+                style: TextStyle(
+                    color: planningMutedTextColor, fontSize: 12, height: 1.35),
               ),
             ],
           ),
@@ -452,8 +522,10 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
       ),
       if (areas.length > 1) ...[
         const SizedBox(height: 8),
-        Text('${areas.length} ranked gaps available in ${vm.selectedState}', textAlign: TextAlign.center,
-          style: const TextStyle(color: planningMutedTextColor, fontSize: 12)),
+        Text('${areas.length} ranked gaps available in ${vm.selectedState}',
+            textAlign: TextAlign.center,
+            style:
+                const TextStyle(color: planningMutedTextColor, fontSize: 12)),
       ],
     ]);
   }
@@ -463,11 +535,17 @@ class _EvidenceStrip extends StatelessWidget {
   const _EvidenceStrip({required this.area});
   final GapArea area;
   @override
-  Widget build(BuildContext context) => Wrap(spacing: 18, runSpacing: 10, children: [
-    _EvidenceMetric(label: 'Nearest', value: '${area.distance.toStringAsFixed(1)} km'),
-    _EvidenceMetric(label: 'Nearby', value: '${area.nearbyStationCount} location${area.nearbyStationCount == 1 ? '' : 's'}'),
-    _EvidenceMetric(label: 'Coverage', value: area.coverageScore.toStringAsFixed(1)),
-  ]);
+  Widget build(BuildContext context) =>
+      Wrap(spacing: 18, runSpacing: 10, children: [
+        _EvidenceMetric(
+            label: 'Nearest', value: '${area.distance.toStringAsFixed(1)} km'),
+        _EvidenceMetric(
+            label: 'Nearby',
+            value:
+                '${area.nearbyStationCount} location${area.nearbyStationCount == 1 ? '' : 's'}'),
+        _EvidenceMetric(
+            label: 'Coverage', value: area.coverageScore.toStringAsFixed(1)),
+      ]);
 }
 
 class _RankedAreaTile extends StatelessWidget {
@@ -505,21 +583,35 @@ class _RankedAreaTile extends StatelessWidget {
             CircleAvatar(
               radius: 16,
               backgroundColor: color,
-              child: Text('$rank', style: const TextStyle(
-                color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+              child: Text('$rank',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800)),
             ),
             const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: planningTextColor, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Text('${area.priority} Priority · ${area.distance.toStringAsFixed(1)} km nearest',
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: planningMutedTextColor, fontSize: 12)),
-            ])),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: planningTextColor,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(
+                      '${area.priority} Priority · ${area.distance.toStringAsFixed(1)} km nearest',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: planningMutedTextColor, fontSize: 12)),
+                ])),
             const SizedBox(width: 8),
             Text(area.priorityScore.toStringAsFixed(0),
-              style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w800)),
+                style: TextStyle(
+                    color: color, fontSize: 17, fontWeight: FontWeight.w800)),
           ]),
         ),
       ),
@@ -533,13 +625,20 @@ class _EvidenceMetric extends StatelessWidget {
   final String value;
   @override
   Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(minWidth: 76),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      Text(label, style: const TextStyle(color: planningMutedTextColor, fontSize: 11)),
-      const SizedBox(height: 2),
-      Text(value, style: const TextStyle(color: planningTextColor, fontWeight: FontWeight.w800)),
-    ]),
-  );
+        constraints: const BoxConstraints(minWidth: 76),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: const TextStyle(
+                      color: planningMutedTextColor, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(value,
+                  style: const TextStyle(
+                      color: planningTextColor, fontWeight: FontWeight.w800)),
+            ]),
+      );
 }
 
 class _BreakdownRow extends StatelessWidget {
@@ -548,26 +647,32 @@ class _BreakdownRow extends StatelessWidget {
   final String value;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(children: [
-      Expanded(child: Text(label, style: const TextStyle(color: planningMutedTextColor))),
-      const SizedBox(width: 12),
-      Flexible(child: Text(value, textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.w700))),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          Expanded(
+              child: Text(label,
+                  style: const TextStyle(color: planningMutedTextColor))),
+          const SizedBox(width: 12),
+          Flexible(
+              child: Text(value,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontWeight: FontWeight.w700))),
+        ]),
+      );
 }
 
 class _AiLoadingCard extends StatelessWidget {
   const _AiLoadingCard();
   @override
   Widget build(BuildContext context) => const AppCard(
-    padding: EdgeInsets.all(14),
-    child: Row(children: [
-      SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-      SizedBox(width: 12),
-      Expanded(child: Text('Generating planning insight…')),
-    ]),
-  );
+        padding: EdgeInsets.all(14),
+        child: Row(children: [
+          SizedBox.square(
+              dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 12),
+          Expanded(child: Text('Generating planning insight…')),
+        ]),
+      );
 }
 
 class _AiFailureCard extends StatelessWidget {
@@ -614,36 +719,42 @@ class _AiResultCard extends StatelessWidget {
   final GapAiAnalysisResult result;
   @override
   Widget build(BuildContext context) => AppCard(
-    padding: const EdgeInsets.all(14),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Row(children: [
-        Icon(Icons.auto_awesome_outlined, color: green, size: 20),
-        SizedBox(width: 8),
-        Text('AI Planning Insight', style: TextStyle(fontWeight: FontWeight.w800)),
-      ]),
-      const SizedBox(height: 8),
-      Text(result.interpretation),
-      if (result.keyConsiderations.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        const Text('Key considerations', style: TextStyle(fontWeight: FontWeight.w700)),
-        for (final item in result.keyConsiderations) Text('• $item'),
-      ],
-      const SizedBox(height: 8),
-      const Text('Suggested next step', style: TextStyle(fontWeight: FontWeight.w700)),
-      Text(result.suggestedNextStep),
-      const SizedBox(height: 8),
-      const Text(
-        'Generated from the current Gap Analysis results. Verify site-specific conditions before making planning decisions.',
-        style: TextStyle(color: planningMutedTextColor, fontSize: 11),
-      ),
-    ]),
-  );
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.auto_awesome_outlined, color: green, size: 20),
+            SizedBox(width: 8),
+            Text('AI Planning Insight',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 8),
+          Text(result.interpretation),
+          if (result.keyConsiderations.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Key considerations',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            for (final item in result.keyConsiderations) Text('• $item'),
+          ],
+          const SizedBox(height: 8),
+          const Text('Suggested next step',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(result.suggestedNextStep),
+          const SizedBox(height: 8),
+          const Text(
+            'Generated from the current Gap Analysis results. Verify site-specific conditions before making planning decisions.',
+            style: TextStyle(color: planningMutedTextColor, fontSize: 11),
+          ),
+        ]),
+      );
 }
 
 Color _priorityColor(String priority) {
   switch (priority.toLowerCase()) {
-    case 'high': return Colors.red;
-    case 'medium': return Colors.orange;
-    default: return green;
+    case 'high':
+      return Colors.red;
+    case 'medium':
+      return Colors.orange;
+    default:
+      return green;
   }
 }

@@ -28,6 +28,7 @@ class PlanningViewModel extends ChangeNotifier {
   List<PlannedChargingLocation> _selectedPlannedLocations = const [];
   List<ChargingStation> _selectedPlannedMapLocations = const [];
   List<Proposal> _selectedProposals = const [];
+  List<Proposal> _selectedMapProposals = const [];
   List<GapArea> _priorityAreas = const [];
   List<StateRegion> _regions = const [];
   Map<String, String?> _stationStateById = const {};
@@ -73,11 +74,24 @@ class PlanningViewModel extends ChangeNotifier {
   List<PlannedChargingLocation> get selectedPlannedLocations =>
       _selectedPlannedLocations;
   List<Proposal> get selectedProposals => _selectedProposals;
+  List<Proposal> get myProposals => List<Proposal>.unmodifiable(
+        proposals.where(_repository.ownsProposal),
+      );
+  List<Proposal> get communityProposals => List<Proposal>.unmodifiable(
+        proposals.where((proposal) => !_repository.ownsProposal(proposal)),
+      );
+  Proposal? proposalById(String id) {
+    for (final proposal in proposals) {
+      if (proposal.id == id) return proposal;
+    }
+    return null;
+  }
+
   // Existing-only source. MapPanel decides whether national consumers render
   // these locations or replace them with Planning summary badges.
   List<ChargingStation> get mapStations => _selectedStations;
   List<Proposal> get mapProposals =>
-      _selectedState == malaysiaSelection ? const [] : _selectedProposals;
+      _selectedState == malaysiaSelection ? const [] : _selectedMapProposals;
   List<ChargingStation> get mapPlannedLocations =>
       _selectedState == malaysiaSelection
           ? const []
@@ -670,6 +684,7 @@ class PlanningViewModel extends ChangeNotifier {
         plannedLocations.map((item) => item.mapLocation),
       );
       _selectedProposals = proposals;
+      _selectedMapProposals = const [];
       return;
     }
     _selectedStations = List<ChargingStation>.unmodifiable(
@@ -690,6 +705,9 @@ class PlanningViewModel extends ChangeNotifier {
         (proposal) => _proposalStateById[proposal.id] == _selectedState,
       ),
     );
+    _selectedMapProposals = List<Proposal>.unmodifiable(
+      _selectedProposals.where((proposal) => !proposal.isRejected),
+    );
   }
 
   void _logSelectedStateConsistency({required String source}) {
@@ -707,15 +725,19 @@ class PlanningViewModel extends ChangeNotifier {
     );
   }
 
-  Future<void> react(Proposal proposal, bool like) async {
-    if (proposal.reaction == 0) {
-      await _repository.reactToProposal(proposal, like);
-      proposal.reaction = like ? 1 : -1;
-      notifyListeners();
-    }
+  Future<void> setReaction(
+    Proposal proposal,
+    ProposalReaction? reaction,
+  ) async {
+    await _repository.setProposalReaction(proposal, reaction);
+    await _refreshProposals();
   }
 
   bool ownsProposal(Proposal proposal) => _repository.ownsProposal(proposal);
+  bool canOwnerEdit(Proposal proposal) =>
+      ownsProposal(proposal) && proposal.canOwnerEdit;
+  bool canOwnerDelete(Proposal proposal) =>
+      ownsProposal(proposal) && proposal.canOwnerDelete;
 
   String recommendation(Proposal proposal) => proposal.demand == 'High' &&
           proposal.distance > 5 &&
@@ -727,11 +749,33 @@ class PlanningViewModel extends ChangeNotifier {
     await _repository.updateStatus(proposal.id, status);
     proposal.status = status;
     notifyListeners();
+    try {
+      await _refreshProposals();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal status persisted, but the follow-up refresh failed: '
+          'error=$error.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }
   }
 
   Future<String> submitProposal(Proposal proposal) async {
     final proposalId = await _repository.submitProposal(proposal);
-    await _refreshProposals();
+    try {
+      await _refreshProposals();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal post-insert refresh failed after proposal creation: '
+          'error=$error.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
+    }
     return proposalId;
   }
 
@@ -813,15 +857,17 @@ class PlanningViewModel extends ChangeNotifier {
           a.area != b.area ||
           a.charger != b.charger ||
           a.demand != b.demand ||
+          a.distance != b.distance ||
           a.supports != b.supports ||
-          a.reaction != b.reaction ||
-          a.reactionIncludedInSupports != b.reactionIncludedInSupports ||
+          a.opposes != b.opposes ||
+          a.currentUserReaction != b.currentUserReaction ||
           a.locationLabel != b.locationLabel ||
           a.state != b.state ||
           a.nearestTown != b.nearestTown ||
           a.createdAt != b.createdAt ||
           a.createdBy != b.createdBy ||
           a.ownerUserId != b.ownerUserId ||
+          a.sitePhotoPath != b.sitePhotoPath ||
           a.latitude != b.latitude ||
           a.longitude != b.longitude) {
         return false;

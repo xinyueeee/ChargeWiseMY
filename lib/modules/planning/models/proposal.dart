@@ -1,9 +1,39 @@
+enum ProposalReaction {
+  support('Like'),
+  oppose('Dislike');
+
+  const ProposalReaction(this.databaseValue);
+
+  final String databaseValue;
+
+  static ProposalReaction? fromDatabase(Object? value) {
+    final normalized = value?.toString().trim().toLowerCase();
+    return switch (normalized) {
+      'like' => ProposalReaction.support,
+      'dislike' => ProposalReaction.oppose,
+      _ => null,
+    };
+  }
+}
+
 class Proposal {
+  static const statusPending = 'Pending';
+  static const statusApproved = 'Approved';
+  static const statusRejected = 'Rejected';
+  static const statusUnderReview = 'Under Review';
+  static const validStatuses = <String>{
+    statusPending,
+    statusApproved,
+    statusRejected,
+    statusUnderReview,
+  };
+
   Proposal({
     required this.id,
     required this.city,
     required this.description,
     required this.supports,
+    this.opposes = 0,
     required this.status,
     required this.area,
     required this.charger,
@@ -18,8 +48,7 @@ class Proposal {
     this.sitePhotoPath,
     this.latitude,
     this.longitude,
-    this.reaction = 0,
-    this.reactionIncludedInSupports = false,
+    this.currentUserReaction,
   });
   final String id, city, description, area, charger, demand;
   final String locationLabel;
@@ -31,17 +60,18 @@ class Proposal {
   final String? sitePhotoPath;
   String status;
   final int supports;
+  final int opposes;
   final double distance;
   final double? latitude;
   final double? longitude;
-  int reaction;
-  final bool reactionIncludedInSupports;
+  final ProposalReaction? currentUserReaction;
   factory Proposal.fromJson(Map<String, dynamic> json) => Proposal(
         id: json['id'],
         city: json['city'],
         description: json['description'],
         supports: json['supports'],
-        status: json['status'],
+        opposes: json['opposes'] as int? ?? 0,
+        status: databaseStatus(json['status'] as String?),
         area: json['area'],
         charger: json['charger'],
         distance: (json['distance'] as num).toDouble(),
@@ -53,6 +83,9 @@ class Proposal {
         createdBy: json['createdBy'] as String? ?? 'Community member',
         ownerUserId: json['ownerUserId'] as String?,
         sitePhotoPath: json['sitePhotoPath'] as String?,
+        currentUserReaction: ProposalReaction.fromDatabase(
+          json['currentUserReaction'] ?? json['reaction'],
+        ),
         latitude: CoordinateParser.latitude(json['latitude']),
         longitude: CoordinateParser.longitude(json['longitude']),
       );
@@ -61,7 +94,8 @@ class Proposal {
     Map<String, dynamic> row, {
     required double nearestStationKm,
     required int supportCount,
-    required int reaction,
+    required int opposeCount,
+    required ProposalReaction? currentUserReaction,
   }) =>
       Proposal(
         id: row['proposal_id'] as String,
@@ -70,7 +104,8 @@ class Proposal {
             : (row['address'] as String? ?? 'Unnamed location'),
         description: row['description'] as String? ?? '',
         supports: supportCount,
-        status: _displayStatus(row['status'] as String?),
+        opposes: opposeCount,
+        status: databaseStatus(row['status'] as String?),
         // The current schema has no area-type column. Keep this presentation
         // default until an `area_type` column is added later.
         area: 'Residential Area',
@@ -91,8 +126,7 @@ class Proposal {
                 : null,
         latitude: CoordinateParser.latitude(row['latitude']),
         longitude: CoordinateParser.longitude(row['longitude']),
-        reaction: reaction,
-        reactionIncludedInSupports: reaction == 1,
+        currentUserReaction: currentUserReaction,
       );
 
   Proposal copyWithLocation({
@@ -105,6 +139,7 @@ class Proposal {
         city: city,
         description: description,
         supports: supports,
+        opposes: opposes,
         status: status,
         area: area,
         charger: charger,
@@ -119,17 +154,23 @@ class Proposal {
         sitePhotoPath: sitePhotoPath,
         latitude: latitude,
         longitude: longitude,
-        reaction: reaction,
-        reactionIncludedInSupports: reactionIncludedInSupports,
+        currentUserReaction: currentUserReaction,
       );
 
-  static String _displayStatus(String? value) {
-    if (value == null || value.isEmpty) return 'Pending';
-    return value
-        .split('_')
-        .map((word) =>
-            '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
-        .join(' ');
+  /// Normalizes only historic presentation variants when reading data. All
+  /// runtime values use the database constraint's exact values.
+  static String databaseStatus(String? value) {
+    switch (value?.trim().toLowerCase().replaceAll('_', ' ')) {
+      case 'approved':
+        return statusApproved;
+      case 'rejected':
+        return statusRejected;
+      case 'under review':
+        return statusUnderReview;
+      case 'pending':
+      default:
+        return statusPending;
+    }
   }
 
   static String _displayDemand(dynamic value) {
@@ -139,8 +180,37 @@ class Proposal {
     return 'Medium';
   }
 
-  int get displayedSupports =>
-      supports + (reaction == 1 && !reactionIncludedInSupports ? 1 : 0);
+  int get supportCount => supports;
+  int get opposeCount => opposes;
+  bool get isActive => status == statusUnderReview || status == statusPending;
+  bool get isApproved => status == statusApproved;
+  bool get isRejected => status == statusRejected;
+  bool get isTerminal => isApproved || isRejected;
+  bool get canOwnerEdit => isActive;
+  bool get canOwnerDelete => isActive;
+
+  /// Operational queue order: unresolved review work first, terminal records
+  /// later. Dates provide deterministic newest-first ordering within a status.
+  static int compareForReviewQueue(Proposal a, Proposal b) {
+    final statusComparison =
+        statusPriority(a.status).compareTo(statusPriority(b.status));
+    if (statusComparison != 0) return statusComparison;
+    final dateComparison = (b.createdAt ?? DateTime(1970))
+        .compareTo(a.createdAt ?? DateTime(1970));
+    return dateComparison != 0 ? dateComparison : a.id.compareTo(b.id);
+  }
+
+  static int statusPriority(String status) => switch (status) {
+        statusUnderReview => 0,
+        statusPending => 1,
+        statusApproved => 2,
+        statusRejected => 3,
+        _ => 4,
+      };
+
+  // Retained for existing assessment/dashboard consumers. Reaction rows are
+  // already included in [supports], so no local adjustment is required.
+  int get displayedSupports => supports;
 }
 
 class GapArea {

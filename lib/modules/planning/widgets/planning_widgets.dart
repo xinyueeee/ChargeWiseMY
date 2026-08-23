@@ -713,12 +713,14 @@ class _MapPanelState extends State<MapPanel> {
         Marker(
           markerId: MarkerId('proposal_${proposal.id}'),
           position: LatLng(proposal.latitude!, proposal.longitude!),
-          icon: _icons!.proposal,
+          icon:
+              proposal.isApproved ? _icons!.approvedProposal : _icons!.proposal,
           infoWindow: InfoWindow(
             title: proposal.city,
             snippet: 'Status: Community Proposal · ${proposal.status}\n'
                 'Expected Usage: ${proposal.demand} · '
-                'Support: ${proposal.displayedSupports}'
+                'Support: ${proposal.supportCount} · '
+                'Not Support: ${proposal.opposeCount}'
                 '${proposal.state == null ? '' : '\n${proposal.state}'}',
           ),
         ),
@@ -1187,16 +1189,19 @@ class _MapPanelState extends State<MapPanel> {
         Marker(
           markerId: MarkerId('proposal_${proposal.id}'),
           position: LatLng(proposal.latitude!, proposal.longitude!),
-          icon: _icons!.proposal,
+          icon:
+              proposal.isApproved ? _icons!.approvedProposal : _icons!.proposal,
           infoWindow: InfoWindow(
             title: proposal.city,
             snippet: proposal.state == null
                 ? 'Status: Community Proposal · ${proposal.status}\n'
                     'Expected Usage: ${proposal.demand} · '
-                    'Support: ${proposal.displayedSupports}'
+                    'Support: ${proposal.supportCount} · '
+                    'Not Support: ${proposal.opposeCount}'
                 : 'Status: Community Proposal · ${proposal.status}\n'
                     'Expected Usage: ${proposal.demand} · '
-                    'Support: ${proposal.displayedSupports}\n${proposal.state}',
+                    'Support: ${proposal.supportCount} · '
+                    'Not Support: ${proposal.opposeCount}\n${proposal.state}',
           ),
         ),
       );
@@ -1649,6 +1654,7 @@ class _MarkerIcons {
   const _MarkerIcons({
     required this.station,
     required this.proposal,
+    required this.approvedProposal,
     required this.planned,
     required this.aggregateBadges,
   });
@@ -1666,6 +1672,7 @@ class _MarkerIcons {
 
   final BitmapDescriptor station;
   final BitmapDescriptor proposal;
+  final BitmapDescriptor approvedProposal;
   final BitmapDescriptor planned;
   final Map<int, BitmapDescriptor> aggregateBadges;
 
@@ -1711,6 +1718,9 @@ class _MarkerIcons {
       proposal: await BitmapDescriptor.asset(
         const ImageConfiguration(size: Size(32, 32)),
         'assets/icons/proposed_station.png',
+      ),
+      approvedProposal: BitmapDescriptor.defaultMarkerWithHue(
+        BitmapDescriptor.hueViolet,
       ),
       planned: BitmapDescriptor.defaultMarkerWithHue(
         BitmapDescriptor.hueAzure,
@@ -1951,7 +1961,8 @@ class ProposalCard extends StatelessWidget {
               children: [
                 _CompactInfo(
                   icon: Icons.group_outlined,
-                  label: '${proposal.displayedSupports} supports',
+                  label: '${proposal.supportCount} Support · '
+                      '${proposal.opposeCount} Not Support',
                   color: green,
                 ),
                 _CompactInfo(

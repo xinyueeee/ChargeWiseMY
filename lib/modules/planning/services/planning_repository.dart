@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../services/supabase_service.dart';
 import '../models/proposal.dart';
 import 'analysis_profile.dart';
@@ -51,21 +52,27 @@ class PlanningRepository {
     final proposals = rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
           row['proposal_reactions'] as List? ?? []);
-      final likes =
-          reactions.where((item) => item['reaction'] == 'like').length;
+      final likes = reactions
+          .where((item) =>
+              ProposalReaction.fromDatabase(item['reaction']) ==
+              ProposalReaction.support)
+          .length;
+      final dislikes = reactions
+          .where((item) =>
+              ProposalReaction.fromDatabase(item['reaction']) ==
+              ProposalReaction.oppose)
+          .length;
       final myReactions =
           reactions.where((item) => item['user_id'] == actingUserId).toList();
       final mine = myReactions.isEmpty ? null : myReactions.first;
-      final reaction = mine == null
-          ? 0
-          : mine['reaction'] == 'like'
-              ? 1
-              : -1;
+      final reaction =
+          mine == null ? null : ProposalReaction.fromDatabase(mine['reaction']);
       return Proposal.fromSupabase(
         row,
         nearestStationKm: _nearestStationKm(row, stations),
         supportCount: likes,
-        reaction: reaction,
+        opposeCount: dislikes,
+        currentUserReaction: reaction,
       );
     }).toList();
     await _proposalLocations.load();
@@ -212,29 +219,54 @@ class PlanningRepository {
 
   Future<String> submitProposal(Proposal proposal) async {
     final actingUserId = await _supabase.ensureActingUser();
-    final inserted = await _supabase.client
-        .from('proposals')
-        .insert({
-          'user_id': actingUserId,
-          'title': proposal.city,
-          'description': proposal.description,
-          'address': proposal.locationLabel,
-          'latitude': proposal.latitude,
-          'longitude': proposal.longitude,
-          'charger_type': proposal.charger,
-          'expected_demand': proposal.demand == 'High'
-              ? 3
-              : proposal.demand == 'Low'
-                  ? 1
-                  : 2,
-          'status': 'pending',
-        })
-        .select('proposal_id')
-        .single();
-    return inserted['proposal_id'] as String;
+    final payload = <String, Object?>{
+      'user_id': actingUserId,
+      'title': proposal.city,
+      'description': proposal.description,
+      'address': proposal.locationLabel,
+      'latitude': proposal.latitude,
+      'longitude': proposal.longitude,
+      'charger_type': proposal.charger,
+      'expected_demand': proposal.demand == 'High'
+          ? 3
+          : proposal.demand == 'Low'
+              ? 1
+              : 2,
+      'status': Proposal.statusPending,
+    };
+    try {
+      final inserted = await _supabase.client
+          .from('proposals')
+          .insert(payload)
+          .select('proposal_id')
+          .single();
+      final proposalId = inserted['proposal_id'];
+      if (proposalId is! String || proposalId.isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+            'Proposal insert returned without a valid proposal_id.',
+          );
+        }
+        throw const FormatException(
+          'Proposal insert returned an invalid identifier.',
+        );
+      }
+      return proposalId;
+    } on PostgrestException catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal insert PostgREST failure: code=${error.code}, '
+          'message=${error.message}, details=${error.details}, '
+          'hint=${error.hint}.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
+    }
   }
 
   Future<void> updateProposal(Proposal proposal) async {
+    _assertOwnerMutationAllowed(proposal, action: 'edit');
     await _supabase.updateProposal(proposal.id, {
       'title': proposal.city,
       'description': proposal.description,
@@ -268,6 +300,7 @@ class PlanningRepository {
       _photoService.removeAndDetach(proposalId: proposalId, path: path);
 
   Future<void> deleteProposal(Proposal proposal) async {
+    _assertOwnerMutationAllowed(proposal, action: 'delete');
     await _supabase.deleteProposal(proposal.id);
     final path = proposal.sitePhotoPath;
     if (path != null) {
@@ -278,18 +311,58 @@ class PlanningRepository {
     }
   }
 
-  Future<void> reactToProposal(Proposal proposal, bool like) =>
-      _supabase.addReaction(
+  Future<void> setProposalReaction(
+    Proposal proposal,
+    ProposalReaction? reaction,
+  ) async {
+    try {
+      await _supabase.setProposalReaction(
         proposalId: proposal.id,
-        reaction: like ? 'like' : 'dislike',
+        reaction: reaction?.databaseValue,
       );
+    } on PostgrestException catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal reaction PostgREST failure: code=${error.code}, '
+          'message=${error.message}, details=${error.details}, '
+          'hint=${error.hint}.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
+    }
+  }
 
-  Future<void> updateStatus(String id, String status) =>
-      _supabase.updateProposalStatus(id, status);
+  Future<void> updateStatus(String id, String status) {
+    if (!Proposal.validStatuses.contains(status)) {
+      throw ArgumentError.value(
+          status, 'status', 'Unsupported proposal status');
+    }
+    return _supabase.updateProposalStatus(id, status);
+  }
 
   bool ownsProposal(Proposal proposal) =>
       proposal.ownerUserId != null &&
       proposal.ownerUserId == _supabase.actingUserId;
+
+  void _assertOwnerMutationAllowed(
+    Proposal proposal, {
+    required String action,
+  }) {
+    if (!ownsProposal(proposal)) {
+      throw StateError('Only the proposal owner may $action this proposal.');
+    }
+    final allowed =
+        action == 'edit' ? proposal.canOwnerEdit : proposal.canOwnerDelete;
+    if (!allowed) {
+      throw StateError(
+        '${proposal.status} proposals are read-only and cannot be '
+        '${action == 'edit' ? 'edited' : 'deleted'}.',
+      );
+    }
+  }
+
+  String get actingUserId => _supabase.actingUserId;
 
   double _nearestStationKm(
     Map<String, dynamic> proposal,
