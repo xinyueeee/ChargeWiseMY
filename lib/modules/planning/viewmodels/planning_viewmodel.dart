@@ -770,11 +770,11 @@ class PlanningViewModel extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint(
           'Proposal post-insert refresh failed after proposal creation: '
-          'error=$error.',
+          'proposalId=$proposalId, error=$error. The insert succeeded and '
+          'the shared collection will reconcile on the next refresh.',
         );
         debugPrintStack(stackTrace: stackTrace);
       }
-      rethrow;
     }
     return proposalId;
   }

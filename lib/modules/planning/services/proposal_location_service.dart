@@ -26,16 +26,29 @@ class ProposalLocationSuggestion {
   const ProposalLocationSuggestion({
     required this.name,
     required this.state,
+    required this.category,
     required this.latitude,
     required this.longitude,
   });
 
   final String name;
   final String state;
+  final String category;
   final double latitude;
   final double longitude;
 
   String get label => '$name, $state';
+
+  String get contextLabel {
+    final type = switch (category) {
+      'majorCity' => 'Major city',
+      'city' => 'City',
+      'districtCentre' => 'District centre',
+      'town' => 'Town',
+      _ => 'Malaysian place',
+    };
+    return '$state · $type';
+  }
 }
 
 class ProposalLocationService {
@@ -44,7 +57,22 @@ class ProposalLocationService {
 
   final StateBoundaryService _stateBoundaries;
   List<_Settlement> _settlements = const [];
+  List<_SettlementSearchEntry> _searchIndex = const [];
   Future<void>? _loading;
+
+  static const Map<String, String> _searchAliases = {
+    'kl': 'kuala lumpur',
+    'k l': 'kuala lumpur',
+    'wilayah persekutuan kuala lumpur': 'kuala lumpur',
+  };
+
+  static const Set<String> _optionalPlacePrefixes = {
+    'bandar',
+    'kampung',
+    'kg',
+    'pekan',
+    'taman',
+  };
 
   StateBoundaryService get stateBoundaries => _stateBoundaries;
 
@@ -61,6 +89,9 @@ class ProposalLocationService {
           .whereType<Map<String, dynamic>>()
           .map(_Settlement.fromJson)
           .whereType<_Settlement>(),
+    );
+    _searchIndex = List<_SettlementSearchEntry>.unmodifiable(
+      _settlements.map(_SettlementSearchEntry.new),
     );
   }
 
@@ -110,40 +141,55 @@ class ProposalLocationService {
     int limit = 8,
   }) async {
     await load();
-    final normalized = query.trim().toLowerCase();
+    final normalized = _normalizeSearchText(query);
     if (normalized.length < 2) return const [];
-    final matches = _settlements.where((settlement) {
-      final name = settlement.name.toLowerCase();
-      final state = settlement.state.toLowerCase();
-      return name.contains(normalized) || state.contains(normalized);
-    }).toList()
-      ..sort((a, b) {
-        final aName = a.name.toLowerCase();
-        final bName = b.name.toLowerCase();
-        final aRank = aName == normalized
-            ? 0
-            : aName.startsWith(normalized)
-                ? 1
-                : 2;
-        final bRank = bName == normalized
-            ? 0
-            : bName.startsWith(normalized)
-                ? 1
-                : 2;
-        final rankComparison = aRank.compareTo(bRank);
-        if (rankComparison != 0) return rankComparison;
-        final stateComparison = a.state.compareTo(b.state);
-        return stateComparison != 0
-            ? stateComparison
-            : a.name.compareTo(b.name);
-      });
+
+    final variants = <_SearchVariant>[
+      _SearchVariant(normalized, penalty: 0),
+    ];
+    final alias = _searchAliases[normalized];
+    if (alias != null && alias != normalized) {
+      variants.add(_SearchVariant(alias, penalty: 50));
+    }
+    final words = normalized.split(' ');
+    if (words.length > 1 && _optionalPlacePrefixes.contains(words.first)) {
+      final broader = words.skip(1).join(' ');
+      if (broader.length >= 2 && broader != alias) {
+        variants.add(_SearchVariant(broader, penalty: 40));
+      }
+    }
+
+    final matches = <_RankedSettlement>[];
+    for (final entry in _searchIndex) {
+      _RankedSettlement? best;
+      for (final variant in variants) {
+        final rank = entry.rankFor(variant.query);
+        if (rank == null) continue;
+        final candidate = _RankedSettlement(
+          entry.settlement,
+          rank: rank + variant.penalty,
+        );
+        if (best == null || candidate.rank < best.rank) best = candidate;
+      }
+      if (best != null) matches.add(best);
+    }
+    matches.sort((a, b) {
+      final rankComparison = a.rank.compareTo(b.rank);
+      if (rankComparison != 0) return rankComparison;
+      final stateComparison = a.settlement.state.compareTo(b.settlement.state);
+      return stateComparison != 0
+          ? stateComparison
+          : a.settlement.name.compareTo(b.settlement.name);
+    });
+
     return List<ProposalLocationSuggestion>.unmodifiable(
       matches.take(limit).map(
-            (settlement) => ProposalLocationSuggestion(
-              name: settlement.name,
-              state: settlement.state,
-              latitude: settlement.latitude,
-              longitude: settlement.longitude,
+            (match) => ProposalLocationSuggestion(
+              name: match.settlement.name,
+              state: match.settlement.state,
+              category: match.settlement.category,
+              latitude: match.settlement.latitude,
+              longitude: match.settlement.longitude,
             ),
           ),
     );
@@ -210,18 +256,21 @@ class _Settlement {
   const _Settlement({
     required this.name,
     required this.state,
+    required this.category,
     required this.latitude,
     required this.longitude,
   });
 
   final String name;
   final String state;
+  final String category;
   final double latitude;
   final double longitude;
 
   static _Settlement? fromJson(Map<String, dynamic> json) {
     final name = json['name'] as String?;
     final state = json['state'] as String?;
+    final category = json['category'] as String? ?? '';
     final latitude = CoordinateParser.latitude(json['latitude']);
     final longitude = CoordinateParser.longitude(json['longitude']);
     if (name == null ||
@@ -233,8 +282,54 @@ class _Settlement {
     return _Settlement(
       name: name,
       state: state,
+      category: category,
       latitude: latitude,
       longitude: longitude,
     );
   }
 }
+
+class _SettlementSearchEntry {
+  _SettlementSearchEntry(this.settlement)
+      : normalizedName = _normalizeSearchText(settlement.name),
+        normalizedState = _normalizeSearchText(settlement.state),
+        normalizedCategory = _normalizeSearchText(settlement.category);
+
+  final _Settlement settlement;
+  final String normalizedName;
+  final String normalizedState;
+  final String normalizedCategory;
+
+  int? rankFor(String query) {
+    if (normalizedName == query) return 0;
+    if (normalizedName.startsWith(query)) return 10;
+
+    final queryWords = query.split(' ').where((word) => word.isNotEmpty);
+    final searchable = '$normalizedName $normalizedState $normalizedCategory';
+    if (queryWords.every(searchable.contains)) return 20;
+    if (normalizedName.contains(query)) return 30;
+    if (searchable.contains(query)) return 40;
+    return null;
+  }
+}
+
+class _SearchVariant {
+  const _SearchVariant(this.query, {required this.penalty});
+
+  final String query;
+  final int penalty;
+}
+
+class _RankedSettlement {
+  const _RankedSettlement(this.settlement, {required this.rank});
+
+  final _Settlement settlement;
+  final int rank;
+}
+
+String _normalizeSearchText(String value) => value
+    .trim()
+    .toLowerCase()
+    .replaceAll(RegExp('[^a-z0-9]+'), ' ')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();

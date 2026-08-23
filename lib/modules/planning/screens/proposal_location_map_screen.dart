@@ -135,6 +135,7 @@ class _ProposalLocationMapScreenState extends State<ProposalLocationMapScreen> {
   Widget build(BuildContext context) {
     final mapUnavailable =
         !_loading && _boundaries.isEmpty && _validationMessage != null;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -152,7 +153,7 @@ class _ProposalLocationMapScreenState extends State<ProposalLocationMapScreen> {
             final landscape = constraints.maxWidth >= 700 &&
                 constraints.maxWidth > constraints.maxHeight;
             final map = _buildMap(mapUnavailable);
-            final panel = _buildLocationPanel();
+            final panel = _buildLocationPanel(keyboardOpen: keyboardOpen);
             if (landscape) {
               return Row(
                 children: [
@@ -179,7 +180,8 @@ class _ProposalLocationMapScreenState extends State<ProposalLocationMapScreen> {
                     color: Colors.white,
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxHeight: constraints.maxHeight * .5,
+                        maxHeight:
+                            constraints.maxHeight * (keyboardOpen ? .68 : .5),
                       ),
                       child: panel,
                     ),
@@ -230,129 +232,176 @@ class _ProposalLocationMapScreenState extends State<ProposalLocationMapScreen> {
     );
   }
 
-  Widget _buildLocationPanel() => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-        shrinkWrap: true,
-        children: [
-          if (!widget.readOnly) ...[
-            TextField(
-              controller: _searchController,
-              focusNode: _searchFocus,
-              textInputAction: TextInputAction.search,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                labelText: 'Search location',
-                hintText: 'City, district or state in Malaysia',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear location search',
-                        onPressed: _clearSearch,
-                        icon: const Icon(Icons.clear),
+  Widget _buildLocationPanel({required bool keyboardOpen}) => LayoutBuilder(
+        builder: (context, constraints) {
+          final suggestionHeight =
+              (constraints.maxHeight * (keyboardOpen ? .42 : .46))
+                  .clamp(96.0, keyboardOpen ? 180.0 : 240.0)
+                  .toDouble();
+          return SingleChildScrollView(
+            primary: false,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!widget.readOnly) ...[
+                  TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    textInputAction: TextInputAction.search,
+                    onChanged: _onSearchChanged,
+                    decoration: InputDecoration(
+                      labelText: 'Search location',
+                      hintText: 'City, district or state in Malaysia',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear location search',
+                              onPressed: _clearSearch,
+                              icon: const Icon(Icons.clear),
+                            ),
+                    ),
+                  ),
+                  if (_searching) ...[
+                    const SizedBox(height: 7),
+                    const LinearProgressIndicator(minHeight: 2),
+                  ],
+                  if (_searchError != null) ...[
+                    const SizedBox(height: 7),
+                    Text(
+                      _searchError!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ],
+                  if (_suggestions.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: suggestionHeight),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ListView.separated(
+                          primary: false,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: _suggestions.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final suggestion = _suggestions[index];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(
+                                Icons.location_on_outlined,
+                                color: green,
+                              ),
+                              title: Text(suggestion.name),
+                              subtitle: Text(suggestion.contextLabel),
+                              onTap: () => _applySuggestion(suggestion),
+                            );
+                          },
+                        ),
                       ),
-              ),
-            ),
-            if (_searching) ...[
-              const SizedBox(height: 7),
-              const LinearProgressIndicator(minHeight: 2),
-            ],
-            if (_searchError != null) ...[
-              const SizedBox(height: 7),
-              Text(
-                _searchError!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ],
-            if (_suggestions.isNotEmpty) ...[
-              const SizedBox(height: 5),
-              for (final suggestion in _suggestions)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.location_on_outlined, color: green),
-                  title: Text(suggestion.name),
-                  subtitle: Text(suggestion.state),
-                  onTap: () => _applySuggestion(suggestion),
+                    ),
+                  ] else if (_searchAttempted &&
+                      !_searching &&
+                      _searchError == null) ...[
+                    const SizedBox(height: 8),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'No matching Malaysian place found.\n'
+                        'Try a nearby city, district, or shorter place name.',
+                        style: TextStyle(color: planningMutedTextColor),
+                      ),
+                    ),
+                  ],
+                ],
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!widget.readOnly)
+                        const Text(
+                          'Select a result, tap the map, or drag the pin to refine the location.',
+                          style: TextStyle(color: planningMutedTextColor),
+                        )
+                      else
+                        const Text(
+                          'Saved proposal location',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      if (_selection != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _selection!.locationLabel,
+                          style: const TextStyle(
+                            color: planningTextColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${_selection!.latitude.toStringAsFixed(6)}, '
+                          '${_selection!.longitude.toStringAsFixed(6)}',
+                          style: const TextStyle(
+                            color: planningMutedTextColor,
+                            fontSize: 11,
+                          ),
+                        ),
+                        if (!widget.readOnly)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _clearSearch,
+                              icon: const Icon(
+                                Icons.edit_location_alt_outlined,
+                              ),
+                              label: const Text('Change Location'),
+                            ),
+                          ),
+                      ],
+                      if (_resolving) ...[
+                        const SizedBox(height: 10),
+                        const LinearProgressIndicator(minHeight: 2),
+                      ],
+                      if (_validationMessage != null &&
+                          _boundaries.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _validationMessage!,
+                          semanticsLabel: _validationMessage,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      if (!widget.readOnly) ...[
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: green,
+                            minimumSize: const Size.fromHeight(50),
+                          ),
+                          onPressed: _selection == null || _resolving
+                              ? null
+                              : () => Navigator.pop(context, _selection),
+                          icon: const Icon(Icons.check_circle_outline),
+                          label: const Text('Use This Location'),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-            ] else if (_searchAttempted &&
-                !_searching &&
-                _searchError == null) ...[
-              const SizedBox(height: 8),
-              const Text(
-                'No matching Malaysian settlement was found.',
-                style: TextStyle(color: planningMutedTextColor),
-              ),
-            ],
-            const SizedBox(height: 10),
-            const Text(
-              'Select a result, tap the map, or drag the pin to refine the location.',
-              style: TextStyle(color: planningMutedTextColor),
+              ],
             ),
-          ] else
-            const Text(
-              'Saved proposal location',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          if (_selection != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _selection!.locationLabel,
-              style: const TextStyle(
-                color: planningTextColor,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              '${_selection!.latitude.toStringAsFixed(6)}, '
-              '${_selection!.longitude.toStringAsFixed(6)}',
-              style: const TextStyle(
-                color: planningMutedTextColor,
-                fontSize: 11,
-              ),
-            ),
-            if (!widget.readOnly)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _clearSearch,
-                  icon: const Icon(Icons.edit_location_alt_outlined),
-                  label: const Text('Change Location'),
-                ),
-              ),
-          ],
-          if (_resolving) ...[
-            const SizedBox(height: 10),
-            const LinearProgressIndicator(minHeight: 2),
-          ],
-          if (_validationMessage != null && _boundaries.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              _validationMessage!,
-              semanticsLabel: _validationMessage,
-              style: const TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-          if (!widget.readOnly) ...[
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: green,
-                minimumSize: const Size.fromHeight(50),
-              ),
-              onPressed: _selection == null || _resolving
-                  ? null
-                  : () => Navigator.pop(context, _selection),
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Use This Location'),
-            ),
-          ],
-        ],
+          );
+        },
       );
 
   void _onSearchChanged(String value) {
