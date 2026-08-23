@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,9 @@ import '../services/state_boundary_service.dart';
 
 class PlanningViewModel extends ChangeNotifier {
   PlanningViewModel(this._repository) {
+    _authSubscription = _repository.authenticatedUserChanges.listen(
+      _handleAuthenticatedUserChanged,
+    );
     debugPrint(
       'PlanningViewModel created: instance=${identityHashCode(this)}.',
     );
@@ -43,6 +47,7 @@ class PlanningViewModel extends ChangeNotifier {
   Map<String, int> _plannedChargerCountByState = const {};
   List<StateOverviewSummary> _stateOverviewSummaries = const [];
   final Map<String, List<GapArea>> _analysisByState = {};
+  final Map<String, PlannedInfrastructureContext> _plannedContextCache = {};
 
   int stationCount = 0;
   bool loading = true;
@@ -55,7 +60,11 @@ class PlanningViewModel extends ChangeNotifier {
   String _selectedState = malaysiaSelection;
   int _loadGeneration = 0;
   int _analysisGeneration = 0;
+  int _proposalFetchGeneration = 0;
   int _notifyListenersCount = 0;
+  String? _proposalContextUserId;
+  StreamSubscription<String?>? _authSubscription;
+  bool _disposed = false;
 
   String get selectedState => _selectedState;
   List<String> get stateOptions => _stateBoundaries.stateOptions;
@@ -123,6 +132,10 @@ class PlanningViewModel extends ChangeNotifier {
     double longitude, {
     double radiusKm = 25,
   }) {
+    final cacheKey = '${latitude.toStringAsFixed(6)}|'
+        '${longitude.toStringAsFixed(6)}|${radiusKm.toStringAsFixed(3)}';
+    final cached = _plannedContextCache[cacheKey];
+    if (cached != null) return cached;
     PlannedChargingLocation? nearest;
     var nearestKm = double.infinity;
     var nearbyCount = 0;
@@ -143,13 +156,15 @@ class PlanningViewModel extends ChangeNotifier {
         nearbyChargers += location.proposedChargerCount;
       }
     }
-    return PlannedInfrastructureContext(
+    final result = PlannedInfrastructureContext(
       nearestDistanceKm: nearest == null ? null : nearestKm,
       nearbyLocationCount: nearbyCount,
       nearbyProposedChargerCount: nearbyChargers,
       radiusKm: radiusKm,
       nearestLocation: nearest,
     );
+    _plannedContextCache[cacheKey] = result;
+    return result;
   }
 
   int get proposalCount => _selectedProposals.length;
@@ -211,6 +226,7 @@ class PlanningViewModel extends ChangeNotifier {
 
   @override
   void notifyListeners() {
+    if (_disposed) return;
     _notifyListenersCount++;
     debugPrint(
       'PlanningViewModel notifyListeners: '
@@ -235,7 +251,7 @@ class PlanningViewModel extends ChangeNotifier {
     try {
       final homeDataStopwatch = Stopwatch()..start();
       final stationResults = await Future.wait([
-        _repository.getStations(status: 'Existing'),
+        _repository.getStations(status: ChargingStation.statusExisting),
         _stateBoundaries.load(),
       ]);
       if (generation != _loadGeneration) return;
@@ -246,10 +262,11 @@ class PlanningViewModel extends ChangeNotifier {
       _regions = stationResults[1] as List<StateRegion>;
       stationCount = loadedStations.length;
       final stationDataChanged = !_sameStationData(stations, loadedStations);
+      final stationSpatialDataChanged =
+          !_sameStationSpatialData(stations, loadedStations);
       var analysisCacheInvalidated = false;
-      if (stationDataChanged) {
+      if (stationSpatialDataChanged) {
         _repository.invalidateStationDataCaches();
-        stations = loadedStations;
         _analysisByState.clear();
         _priorityAreas = const [];
         analysisCacheInvalidated = true;
@@ -257,6 +274,9 @@ class PlanningViewModel extends ChangeNotifier {
           'PlanningViewModel cleared state-analysis cache because the '
           'complete station dataset changed.',
         );
+      }
+      if (stationDataChanged) {
+        stations = loadedStations;
       }
       final rebuildStateCache =
           stationDataChanged || _stateOverviewSummaries.isEmpty;
@@ -275,7 +295,7 @@ class PlanningViewModel extends ChangeNotifier {
 
       final plannedLoadStopwatch = Stopwatch()..start();
       final loadedPlannedRows = await _repository.getStations(
-        status: 'Newly Proposed',
+        status: ChargingStation.statusNewlyProposed,
       );
       if (generation != _loadGeneration) return;
       final loadedPlanned = List<PlannedChargingLocation>.unmodifiable(
@@ -295,6 +315,7 @@ class PlanningViewModel extends ChangeNotifier {
       if (!_samePlannedData(plannedLocations, loadedPlanned) ||
           _plannedStateById.isEmpty) {
         plannedLocations = loadedPlanned;
+        _plannedContextCache.clear();
         _cachePlannedStates();
       }
       final stationFingerprint =
@@ -308,14 +329,26 @@ class PlanningViewModel extends ChangeNotifier {
       );
       _applySelectedStateFilters();
 
-      final loadedProposals = await _repository.getProposals(stations);
+      final proposalUserId = _repository.authenticatedUserId;
+      final proposalFetchGeneration = ++_proposalFetchGeneration;
+      final loadedProposals = await _repository.getProposals(
+        stations,
+        authenticatedUserId: proposalUserId,
+      );
       if (generation != _loadGeneration) return;
-      if (!_sameProposalData(proposals, loadedProposals) ||
-          _proposalCountByState.isEmpty) {
-        proposals = loadedProposals;
-        _cacheProposalStates();
+      if (proposalFetchGeneration == _proposalFetchGeneration) {
+        _proposalContextUserId = proposalUserId;
+        if (!_sameProposalData(proposals, loadedProposals) ||
+            _proposalCountByState.isEmpty) {
+          proposals = loadedProposals;
+          _cacheProposalStates();
+        }
+        _applySelectedStateFilters();
       }
-      _applySelectedStateFilters();
+      final currentUserId = _repository.authenticatedUserId;
+      if (currentUserId != _proposalContextUserId) {
+        unawaited(_refreshProposalsAfterAuthChange(currentUserId));
+      }
 
       analyzingGaps = true;
       analysisStatusMessage =
@@ -730,7 +763,8 @@ class PlanningViewModel extends ChangeNotifier {
     ProposalReaction? reaction,
   ) async {
     await _repository.setProposalReaction(proposal, reaction);
-    await _refreshProposals();
+    _replaceProposalLocally(proposal.withReaction(reaction));
+    await _refreshAfterPersistedMutation('reaction update');
   }
 
   bool ownsProposal(Proposal proposal) => _repository.ownsProposal(proposal);
@@ -739,49 +773,25 @@ class PlanningViewModel extends ChangeNotifier {
   bool canOwnerDelete(Proposal proposal) =>
       ownsProposal(proposal) && proposal.canOwnerDelete;
 
-  String recommendation(Proposal proposal) => proposal.demand == 'High' &&
-          proposal.distance > 5 &&
-          proposal.displayedSupports > 30
-      ? 'Suitable Location'
-      : 'Needs Further Review';
-
   Future<void> setStatus(Proposal proposal, String status) async {
     await _repository.updateStatus(proposal.id, status);
     proposal.status = status;
     notifyListeners();
-    try {
-      await _refreshProposals();
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        debugPrint(
-          'Proposal status persisted, but the follow-up refresh failed: '
-          'error=$error.',
-        );
-        debugPrintStack(stackTrace: stackTrace);
-      }
-    }
+    await _refreshAfterPersistedMutation('status update');
   }
 
   Future<String> submitProposal(Proposal proposal) async {
     final proposalId = await _repository.submitProposal(proposal);
-    try {
-      await _refreshProposals();
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        debugPrint(
-          'Proposal post-insert refresh failed after proposal creation: '
-          'proposalId=$proposalId, error=$error. The insert succeeded and '
-          'the shared collection will reconcile on the next refresh.',
-        );
-        debugPrintStack(stackTrace: stackTrace);
-      }
-    }
+    await _refreshAfterPersistedMutation(
+      'creation (proposalId=$proposalId)',
+    );
     return proposalId;
   }
 
   Future<void> updateProposal(Proposal proposal) async {
     await _repository.updateProposal(proposal);
-    await _refreshProposals();
+    _replaceProposalLocally(proposal);
+    await _refreshAfterPersistedMutation('edit');
   }
 
   Future<void> uploadProposalPhoto({
@@ -789,12 +799,16 @@ class PlanningViewModel extends ChangeNotifier {
     required ProposalPhotoUpload upload,
     String? previousPath,
   }) async {
-    await _repository.uploadProposalPhoto(
+    final path = await _repository.uploadProposalPhoto(
       proposalId: proposalId,
       upload: upload,
       previousPath: previousPath,
     );
-    await _refreshProposals();
+    final proposal = proposalById(proposalId);
+    if (proposal != null) {
+      _replaceProposalLocally(proposal.withSitePhotoPath(path));
+    }
+    await _refreshAfterPersistedMutation('photo upload');
   }
 
   Future<void> removeProposalPhoto({
@@ -805,22 +819,98 @@ class PlanningViewModel extends ChangeNotifier {
       proposalId: proposalId,
       path: path,
     );
-    await _refreshProposals();
+    final proposal = proposalById(proposalId);
+    if (proposal != null) {
+      _replaceProposalLocally(proposal.withSitePhotoPath(null));
+    }
+    await _refreshAfterPersistedMutation('photo removal');
   }
 
   Future<void> deleteProposal(Proposal proposal) async {
     await _repository.deleteProposal(proposal);
-    await _refreshProposals();
+    proposals = List<Proposal>.unmodifiable(
+      proposals.where((item) => item.id != proposal.id),
+    );
+    _cacheProposalStates();
+    _applySelectedStateFilters();
+    notifyListeners();
+    await _refreshAfterPersistedMutation('deletion');
+  }
+
+  void _replaceProposalLocally(Proposal proposal) {
+    final index = proposals.indexWhere((item) => item.id == proposal.id);
+    if (index < 0) return;
+    final updated = List<Proposal>.of(proposals)..[index] = proposal;
+    proposals = List<Proposal>.unmodifiable(updated);
+    _cacheProposalStates();
+    _applySelectedStateFilters();
+    notifyListeners();
+  }
+
+  Future<void> _refreshAfterPersistedMutation(String operation) async {
+    try {
+      await _refreshProposals();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal $operation persisted, but the follow-up refresh failed: '
+          'error=$error. Local state remains updated and the shared '
+          'collection will reconcile on the next refresh.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }
   }
 
   Future<void> _refreshProposals() async {
-    final loadedProposals = await _repository.getProposals(stations);
-    if (!_sameProposalData(proposals, loadedProposals)) {
+    await _refreshProposalsForUser(_repository.authenticatedUserId);
+  }
+
+  void _handleAuthenticatedUserChanged(String? userId) {
+    if (_disposed || stations.isEmpty || userId == _proposalContextUserId) {
+      return;
+    }
+    unawaited(_refreshProposalsAfterAuthChange(userId));
+  }
+
+  Future<void> _refreshProposalsAfterAuthChange(String? userId) async {
+    try {
+      await _refreshProposalsForUser(userId);
+    } catch (_) {
+      // The detailed, sanitized failure is logged by the shared refresh path.
+      // Infrastructure remains usable and the next authenticated refresh can
+      // reconcile the user's reaction selection.
+    }
+  }
+
+  Future<void> _refreshProposalsForUser(String? userId) async {
+    final generation = ++_proposalFetchGeneration;
+    try {
+      final loadedProposals = await _repository.getProposals(
+        stations,
+        authenticatedUserId: userId,
+      );
+      if (_disposed ||
+          generation != _proposalFetchGeneration ||
+          userId != _repository.authenticatedUserId) {
+        return;
+      }
+      _proposalContextUserId = userId;
+      if (_sameProposalData(proposals, loadedProposals)) return;
       proposals = loadedProposals;
       _cacheProposalStates();
+      _applySelectedStateFilters();
+      notifyListeners();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal refresh failed for the current authenticated context: '
+          'error=$error.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
     }
-    _applySelectedStateFilters();
-    notifyListeners();
   }
 
   bool _sameStationData(
@@ -831,13 +921,20 @@ class PlanningViewModel extends ChangeNotifier {
     for (var index = 0; index < current.length; index++) {
       final a = current[index];
       final b = incoming[index];
-      if (a.id != b.id ||
-          a.latitude != b.latitude ||
-          a.longitude != b.longitude ||
-          a.name != b.name ||
-          a.chargerType != b.chargerType) {
-        return false;
-      }
+      if (!a.hasSameRuntimeDataAs(b)) return false;
+    }
+    return true;
+  }
+
+  bool _sameStationSpatialData(
+    List<ChargingStation> current,
+    List<ChargingStation> incoming,
+  ) {
+    if (current.length != incoming.length) return false;
+    for (var index = 0; index < current.length; index++) {
+      final a = current[index];
+      final b = incoming[index];
+      if (!a.hasSameSpatialIdentityAs(b)) return false;
     }
     return true;
   }
@@ -884,12 +981,7 @@ class PlanningViewModel extends ChangeNotifier {
     for (var index = 0; index < current.length; index++) {
       final a = current[index];
       final b = incoming[index];
-      if (a.id != b.id ||
-          a.latitude != b.latitude ||
-          a.longitude != b.longitude ||
-          a.proposedChargerCount != b.proposedChargerCount) {
-        return false;
-      }
+      if (!a.hasSameRuntimeDataAs(b)) return false;
     }
     return true;
   }
@@ -909,5 +1001,15 @@ class PlanningViewModel extends ChangeNotifier {
             math.sin(dLon / 2) *
             math.sin(dLon / 2);
     return earthRadiusKm * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _loadGeneration++;
+    _analysisGeneration++;
+    _proposalFetchGeneration++;
+    _authSubscription?.cancel();
+    super.dispose();
   }
 }

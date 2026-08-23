@@ -1870,11 +1870,11 @@ class StatusChip extends StatelessWidget {
   final String status;
   @override
   Widget build(BuildContext c) {
-    final color = status == 'Approved'
+    final color = status == Proposal.statusApproved
         ? green
-        : status == 'Rejected'
+        : status == Proposal.statusRejected
             ? Colors.red
-            : status == 'Pending'
+            : status == Proposal.statusPending
                 ? Colors.orange
                 : blue;
     return Semantics(

@@ -26,6 +26,9 @@ class PlanningRepository {
   int _analyzerExecutionCount = 0;
 
   String get stationFingerprint => _cachedStationFingerprint;
+  String? get authenticatedUserId => _supabase.authenticatedUserId;
+  Stream<String?> get authenticatedUserChanges =>
+      _supabase.authenticatedUserChanges;
 
   String prepareStationFingerprint(List<ChargingStation> stations) {
     _prepareStationFingerprint(stations);
@@ -44,10 +47,8 @@ class PlanningRepository {
     );
   }
 
-  Future<List<Proposal>> getProposals(
-    List<ChargingStation> stations,
-  ) async {
-    final actingUserId = await _supabase.ensureActingUser();
+  Future<List<Proposal>> getProposals(List<ChargingStation> stations,
+      {String? authenticatedUserId}) async {
     final rows = await _supabase.getProposalsWithReactions();
     final proposals = rows.map((row) {
       final reactions = List<Map<String, dynamic>>.from(
@@ -62,8 +63,11 @@ class PlanningRepository {
               ProposalReaction.fromDatabase(item['reaction']) ==
               ProposalReaction.oppose)
           .length;
-      final myReactions =
-          reactions.where((item) => item['user_id'] == actingUserId).toList();
+      final myReactions = authenticatedUserId == null
+          ? const <Map<String, dynamic>>[]
+          : reactions
+              .where((item) => item['user_id'] == authenticatedUserId)
+              .toList();
       final mine = myReactions.isEmpty ? null : myReactions.first;
       final reaction =
           mine == null ? null : ProposalReaction.fromDatabase(mine['reaction']);
@@ -343,7 +347,7 @@ class PlanningRepository {
 
   bool ownsProposal(Proposal proposal) =>
       proposal.ownerUserId != null &&
-      proposal.ownerUserId == _supabase.actingUserId;
+      proposal.ownerUserId == _supabase.authenticatedUserId;
 
   void _assertOwnerMutationAllowed(
     Proposal proposal, {
@@ -361,8 +365,6 @@ class PlanningRepository {
       );
     }
   }
-
-  String get actingUserId => _supabase.actingUserId;
 
   double _nearestStationKm(
     Map<String, dynamic> proposal,

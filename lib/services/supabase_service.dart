@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
-  static const mockUserId = '00000000-0000-4000-8000-000000000001';
+  String? get authenticatedUserId => client.auth.currentUser?.id;
 
-  String get actingUserId => client.auth.currentUser?.id ?? mockUserId;
+  Stream<String?> get authenticatedUserChanges => client.auth.onAuthStateChange
+      .map((state) => state.session?.user.id)
+      .distinct();
 
   Future<List<Map<String, dynamic>>> getChargingStations(
       {String? status}) async {
@@ -74,19 +76,14 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  Future<void> ensureMockUser() async {
-    if (client.auth.currentSession != null) return;
-    await client.from('users').upsert({
-      'id': mockUserId,
-      'full_name': 'ChargeWise Demo User',
-      'email': 'demo.user@chargewise.my',
-      'role': 'driver',
-    });
-  }
-
   Future<String> ensureActingUser() async {
-    await ensureMockUser();
-    return actingUserId;
+    final userId = authenticatedUserId;
+    if (userId == null) {
+      throw const AuthException(
+        'Authentication is required for proposal operations.',
+      );
+    }
+    return userId;
   }
 
   Future<void> setProposalReaction({
@@ -143,11 +140,16 @@ class SupabaseService {
     Map<String, dynamic> values,
   ) async {
     final userId = await ensureActingUser();
-    await client
+    final updated = await client
         .from('proposals')
         .update(values)
         .eq('proposal_id', proposalId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError('Proposal was not updated by its owner.');
+    }
   }
 
   Future<void> deleteProposal(String proposalId) async {
