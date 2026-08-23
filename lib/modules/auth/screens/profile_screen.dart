@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
 import '../../charging/screens/charging_screen.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
@@ -16,8 +17,18 @@ const _hintColor = Color(0xFF9AA5B1);
 const _primaryGreen = Color(0xFF00B894);
 
 const _monthNames = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 String _formatMemberSince(String? isoDate) {
@@ -97,13 +108,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       bottomNavigationBar: FloatingBottomNav(
         currentTab: 'Profile',
-        onHomeTap: () => Navigator.of(context).popUntil(
-          (route) => route.isFirst,
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
         ),
-        onChargingTap: () => _switchTo(context, const ChargingScreen()),
         onPlanningTap: () => _switchTo(
           context,
           const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
         ),
       ),
       body: SafeArea(
@@ -468,10 +482,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _switchTo(BuildContext context, Widget page) {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page),
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
     );
   }
 }

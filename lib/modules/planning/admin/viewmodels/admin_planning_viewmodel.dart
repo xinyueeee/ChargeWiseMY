@@ -37,7 +37,8 @@ class AdminPlanningViewModel extends ChangeNotifier {
 
   bool get loading => _planning.loading;
   String? get loadingErrorMessage => _planning.errorMessage;
-  List<Proposal> get proposals => List<Proposal>.unmodifiable(_planning.proposals);
+  List<Proposal> get proposals =>
+      List<Proposal>.unmodifiable(_planning.proposals);
   List<ChargingStation> get stations =>
       List<ChargingStation>.unmodifiable(_planning.stations);
   List<PlannedChargingLocation> get plannedLocations =>
@@ -63,13 +64,12 @@ class AdminPlanningViewModel extends ChangeNotifier {
       ];
 
   int get totalProposalCount => _planning.proposals.length;
-  int get pendingProposalCount => _statusCount('pending');
-  int get approvedProposalCount => _statusCount('approved');
-  int get rejectedProposalCount => _statusCount('rejected');
+  int get pendingProposalCount => _statusCount(Proposal.statusPending);
+  int get approvedProposalCount => _statusCount(Proposal.statusApproved);
+  int get rejectedProposalCount => _statusCount(Proposal.statusRejected);
   int get requiringReviewCount => _assessments.values
       .where((assessment) =>
-          assessment.outcome ==
-          ProposalAssessmentOutcome.furtherReviewRequired)
+          assessment.outcome == ProposalAssessmentOutcome.furtherReviewRequired)
       .length;
   int get recommendedAssessmentCount => _assessments.values
       .where(
@@ -90,9 +90,11 @@ class AdminPlanningViewModel extends ChangeNotifier {
   }
 
   List<String> get statusOptions {
-    final statuses = <String>{'Pending', 'Approved', 'Rejected'};
+    final statuses = <String>{...Proposal.validStatuses};
     for (final proposal in _planning.proposals) {
-      if (proposal.status.trim().isNotEmpty) statuses.add(proposal.status.trim());
+      if (proposal.status.trim().isNotEmpty) {
+        statuses.add(proposal.status.trim());
+      }
     }
     final sorted = statuses.toList()..sort();
     return ['All Statuses', ...sorted];
@@ -101,10 +103,10 @@ class AdminPlanningViewModel extends ChangeNotifier {
   List<Proposal> get filteredProposals {
     final query = _searchQuery.trim().toLowerCase();
     final result = _planning.proposals.where((proposal) {
-      final matchesState = _selectedState == 'All States' ||
-          proposal.state == _selectedState;
+      final matchesState =
+          _selectedState == 'All States' || proposal.state == _selectedState;
       final matchesStatus = _selectedStatus == 'All Statuses' ||
-          proposal.status.toLowerCase() == _selectedStatus.toLowerCase();
+          proposal.status == _selectedStatus;
       final assessment = _assessments[proposal.id];
       final matchesAssessment = _selectedAssessment == 'All Assessments' ||
           assessment?.outcome.label == _selectedAssessment;
@@ -114,13 +116,12 @@ class AdminPlanningViewModel extends ChangeNotifier {
           proposal.locationLabel.toLowerCase().contains(query) ||
           (proposal.state?.toLowerCase().contains(query) ?? false) ||
           (proposal.nearestTown?.toLowerCase().contains(query) ?? false);
-      return matchesState && matchesStatus && matchesAssessment && matchesSearch;
+      return matchesState &&
+          matchesStatus &&
+          matchesAssessment &&
+          matchesSearch;
     }).toList()
-      ..sort((a, b) {
-        final dateComparison = (b.createdAt ?? DateTime(1970))
-            .compareTo(a.createdAt ?? DateTime(1970));
-        return dateComparison != 0 ? dateComparison : a.city.compareTo(b.city);
-      });
+      ..sort(Proposal.compareForReviewQueue);
     return List<Proposal>.unmodifiable(result);
   }
 
@@ -188,7 +189,8 @@ class AdminPlanningViewModel extends ChangeNotifier {
       await _planning.setStatus(proposal, status);
       return true;
     } catch (error, stackTrace) {
-      statusErrorMessage = 'Unable to update proposal status. Please try again.';
+      statusErrorMessage =
+          'Unable to update proposal status. Please try again.';
       debugPrint('Admin proposal status update failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       return false;
@@ -218,7 +220,9 @@ class AdminPlanningViewModel extends ChangeNotifier {
     double radiusKm = 15,
     int maximum = 80,
   }) {
-    if (proposal.latitude == null || proposal.longitude == null) return const [];
+    if (proposal.latitude == null || proposal.longitude == null) {
+      return const [];
+    }
     final candidates = <_StationDistance>[];
     for (final station in _planning.stations) {
       final distance = _distanceKm(
@@ -227,7 +231,9 @@ class AdminPlanningViewModel extends ChangeNotifier {
         station.latitude,
         station.longitude,
       );
-      if (distance <= radiusKm) candidates.add(_StationDistance(station, distance));
+      if (distance <= radiusKm) {
+        candidates.add(_StationDistance(station, distance));
+      }
     }
     candidates.sort((a, b) {
       final distanceComparison = a.distanceKm.compareTo(b.distanceKm);
@@ -265,18 +271,27 @@ class AdminPlanningViewModel extends ChangeNotifier {
   }
 
   String _buildSourceFingerprint() {
-    final proposalToken = _planning.proposals.map((proposal) =>
-        '${proposal.id}:${proposal.status}:${proposal.displayedSupports}:${proposal.distance}:${proposal.demand}:${proposal.latitude}:${proposal.longitude}:${proposal.state}:${proposal.nearestTown}').join('|');
-    final gapToken = _planning.priorityAreas.map((area) =>
-        '${area.id}:${area.priority}:${area.priorityScore}:${area.latitude}:${area.longitude}').join('|');
+    final proposalToken = _planning.proposals
+        .map((proposal) =>
+            '${proposal.id}:${proposal.status}:${proposal.supportCount}:'
+            '${proposal.opposeCount}:${proposal.currentUserReaction}:'
+            '${proposal.sitePhotoPath}:${proposal.distance}:${proposal.demand}:'
+            '${proposal.city}:${proposal.description}:${proposal.charger}:'
+            '${proposal.locationLabel}:${proposal.ownerUserId}:'
+            '${proposal.createdAt}:${proposal.latitude}:${proposal.longitude}:'
+            '${proposal.state}:${proposal.nearestTown}')
+        .join('|');
+    final gapToken = _planning.priorityAreas
+        .map((area) =>
+            '${area.id}:${area.priority}:${area.priorityScore}:${area.latitude}:${area.longitude}')
+        .join('|');
     return '${_planning.loading}|${identityHashCode(_planning.stations)}|'
         '${_planning.stations.length}|${identityHashCode(_planning.priorityAreas)}|'
         '${_planning.selectedState}|$proposalToken|$gapToken';
   }
 
-  int _statusCount(String status) => _planning.proposals
-      .where((proposal) => proposal.status.trim().toLowerCase() == status)
-      .length;
+  int _statusCount(String status) =>
+      _planning.proposals.where((proposal) => proposal.status == status).length;
 
   double _distanceKm(
     double latitudeA,

@@ -46,6 +46,8 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
   String? _selectedPhotoContentType;
   bool _removeExistingPhoto = false;
   String? _acknowledgedPlannedWarningKey;
+  bool _formDirty = false;
+  bool _allowPop = false;
 
   static const int _maximumPhotoBytes = 5 * 1024 * 1024;
 
@@ -71,6 +73,8 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
     );
     _demand = proposal?.demand ?? 'Medium';
     _chargerType = proposal?.charger ?? 'AC Charger';
+    _nameController.addListener(_markDirty);
+    _reasonController.addListener(_markDirty);
     if (proposal?.latitude != null && proposal?.longitude != null) {
       _preparingLocation = true;
       _resolveSavedLocation(proposal!.latitude!, proposal.longitude!);
@@ -105,6 +109,8 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
 
   @override
   void dispose() {
+    _nameController.removeListener(_markDirty);
+    _reasonController.removeListener(_markDirty);
     _nameController.dispose();
     _reasonController.dispose();
     super.dispose();
@@ -112,88 +118,153 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _editing ? 'Edit Proposal' : 'New Proposal',
-          style: planningAppBarTitleStyle,
+    if (_editing && !widget.proposal!.canOwnerEdit) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Edit Proposal', style: planningAppBarTitleStyle),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
         ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: Colors.black,
-      ),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 760;
-              return ListView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + keyboardInset),
-                children: [
-                  Text(
-                    _editing
-                        ? 'Update the proposed charging-station information.'
-                        : 'Submit a charging-station proposal for community review.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: planningMutedTextColor),
-                  ),
-                  planningSectionGap,
-                  if (wide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 6,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildProposalDetailsSection(),
-                              planningSectionGap,
-                              _buildLocationSection(),
-                            ],
+        body: const PlanningEmptyState(
+          icon: Icons.lock_outline,
+          title: 'This proposal is read-only',
+          message:
+              'Approved and rejected proposals can be viewed but cannot be edited.',
+        ),
+      );
+    }
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    return PopScope<bool>(
+      canPop: _allowPop || !_formDirty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _requestClose();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: _editing ? 'Cancel editing' : 'Close proposal form',
+            onPressed: _submitting ? null : _requestClose,
+            icon: const Icon(Icons.close),
+          ),
+          title: Text(
+            _editing ? 'Edit Proposal' : 'New Proposal',
+            style: planningAppBarTitleStyle,
+          ),
+          centerTitle: true,
+          backgroundColor: Colors.white,
+          elevation: 0,
+          foregroundColor: Colors.black,
+        ),
+        body: SafeArea(
+          child: Form(
+            key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final landscape =
+                    MediaQuery.orientationOf(context) == Orientation.landscape;
+                final wide = constraints.maxWidth >= 900 ||
+                    (landscape && constraints.maxWidth >= 650);
+                return ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + keyboardInset),
+                  children: [
+                    Text(
+                      _editing
+                          ? 'Update the proposed charging-station information.'
+                          : 'Submit a charging-station proposal for community review.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: planningMutedTextColor),
+                    ),
+                    planningSectionGap,
+                    if (wide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 6,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildProposalDetailsSection(),
+                                planningSectionGap,
+                                _buildLocationSection(),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildUsageSection(),
-                              planningSectionGap,
-                              _buildPhotoPlaceholder(),
-                              const SizedBox(height: 18),
-                              _buildSubmitButton(),
-                            ],
+                          const SizedBox(width: 18),
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildUsageSection(),
+                                planningSectionGap,
+                                _buildPhotoPlaceholder(),
+                                const SizedBox(height: 18),
+                                _buildSubmitButton(),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    )
-                  else ...[
-                    _buildProposalDetailsSection(),
-                    planningSectionGap,
-                    _buildLocationSection(),
-                    planningSectionGap,
-                    _buildUsageSection(),
-                    planningSectionGap,
-                    _buildPhotoPlaceholder(),
-                    const SizedBox(height: 20),
-                    _buildSubmitButton(),
+                        ],
+                      )
+                    else ...[
+                      _buildProposalDetailsSection(),
+                      planningSectionGap,
+                      _buildLocationSection(),
+                      planningSectionGap,
+                      _buildUsageSection(),
+                      planningSectionGap,
+                      _buildPhotoPlaceholder(),
+                      const SizedBox(height: 20),
+                      _buildSubmitButton(),
+                    ],
                   ],
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: const FloatingBottomNav(),
     );
+  }
+
+  void _markDirty() {
+    _formDirty = true;
+  }
+
+  Future<void> _requestClose() async {
+    if (_submitting) return;
+    if (!_formDirty) {
+      _allowPop = true;
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final discard = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Discard unsaved changes?'),
+            content: const Text(
+              'Your proposal changes have not been saved.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Keep Editing'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Discard'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!discard || !mounted) return;
+    _allowPop = true;
+    Navigator.of(context).pop();
   }
 
   Widget _buildProposalDetailsSection() => Column(
@@ -247,7 +318,10 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                   ],
                   onChanged: _submitting
                       ? null
-                      : (value) => setState(() => _chargerType = value!),
+                      : (value) => setState(() {
+                            _chargerType = value!;
+                            _markDirty();
+                          }),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -310,7 +384,10 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                     selectedColor: green.withValues(alpha: .18),
                     onSelected: _submitting
                         ? null
-                        : (_) => setState(() => _demand = value),
+                        : (_) => setState(() {
+                              _demand = value;
+                              _markDirty();
+                            }),
                   ),
               ],
             ),
@@ -410,7 +487,10 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
                   TextButton(
                     onPressed: _submitting
                         ? null
-                        : () => setState(() => _removeExistingPhoto = false),
+                        : () => setState(() {
+                              _removeExistingPhoto = false;
+                              _markDirty();
+                            }),
                     child: const Text('Undo'),
                   ),
               ],
@@ -510,6 +590,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
           _ => 'image/jpeg',
         };
         _removeExistingPhoto = false;
+        _markDirty();
       });
     } catch (error, stackTrace) {
       debugPrint('Proposal site photo selection failed: $error');
@@ -556,6 +637,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
         _selectedPhotoExtension = null;
         _selectedPhotoContentType = null;
         _removeExistingPhoto = widget.proposal?.sitePhotoPath != null;
+        _markDirty();
       });
 
   void _showPhotoMessage(String message) {
@@ -668,11 +750,18 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       setState(() {
         _selection = selected;
         _locationError = null;
+        _markDirty();
       });
     }
   }
 
   Future<void> _submit() async {
+    if (_editing && !widget.proposal!.canOwnerEdit) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This proposal is read-only.')),
+      );
+      return;
+    }
     if (_submitting || !_formKey.currentState!.validate()) return;
     final selection = _selection;
     if (selection == null) {
@@ -747,7 +836,8 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       city: _nameController.text.trim(),
       description: _reasonController.text.trim(),
       supports: existing?.supports ?? 0,
-      status: existing?.status ?? 'Pending',
+      opposes: existing?.opposes ?? 0,
+      status: existing?.status ?? Proposal.statusPending,
       area: existing?.area ?? 'Residential Area',
       charger: _chargerType,
       distance: existing?.distance ?? 0,
@@ -761,7 +851,7 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
       sitePhotoPath: existing?.sitePhotoPath,
       latitude: selection.latitude,
       longitude: selection.longitude,
-      reaction: existing?.reaction ?? 0,
+      currentUserReaction: existing?.currentUserReaction,
     );
 
     try {
@@ -804,6 +894,8 @@ class _NewProposalScreenState extends State<NewProposalScreen> {
         }
       }
       if (!mounted) return;
+      _formDirty = false;
+      _allowPop = true;
       setState(() {
         _submitting = false;
         _uploadingPhoto = false;

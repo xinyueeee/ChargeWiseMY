@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/proposal.dart';
 import '../../widgets/planning_widgets.dart';
+import '../../widgets/proposal_response_widgets.dart';
 import '../models/proposal_assessment.dart';
 import '../viewmodels/admin_planning_viewmodel.dart';
 import 'admin_proposal_details_screen.dart';
@@ -95,7 +96,9 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                                 ),
                             ],
                             onChanged: (value) {
-                              if (value != null) viewModel.setStateFilter(value);
+                              if (value != null) {
+                                viewModel.setStateFilter(value);
+                              }
                             },
                           );
                           final statusFilter = DropdownButtonFormField<String>(
@@ -116,7 +119,9 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                                 ),
                             ],
                             onChanged: (value) {
-                              if (value != null) viewModel.setStatusFilter(value);
+                              if (value != null) {
+                                viewModel.setStatusFilter(value);
+                              }
                             },
                           );
                           final assessmentFilter =
@@ -144,21 +149,45 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                               }
                             },
                           );
+                          final media = MediaQuery.of(context);
+                          final shortLandscape =
+                              media.orientation == Orientation.landscape &&
+                                  media.size.height < 480;
                           final filterWidth = constraints.maxWidth >= 760
                               ? (constraints.maxWidth - 24) / 3
                               : constraints.maxWidth >= 500
                                   ? (constraints.maxWidth - 12) / 2
                                   : constraints.maxWidth;
+                          final filters = [
+                            stateFilter,
+                            statusFilter,
+                            assessmentFilter,
+                          ];
+                          if (shortLandscape) {
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  for (var index = 0;
+                                      index < filters.length;
+                                      index++) ...[
+                                    SizedBox(
+                                      width: 210,
+                                      child: filters[index],
+                                    ),
+                                    if (index != filters.length - 1)
+                                      const SizedBox(width: 10),
+                                  ],
+                                ],
+                              ),
+                            );
+                          }
                           return Wrap(
                             spacing: 12,
                             runSpacing: 10,
                             children: [
-                              SizedBox(width: filterWidth, child: stateFilter),
-                              SizedBox(width: filterWidth, child: statusFilter),
-                              SizedBox(
-                                width: filterWidth,
-                                child: assessmentFilter,
-                              ),
+                              for (final filter in filters)
+                                SizedBox(width: filterWidth, child: filter),
                             ],
                           );
                         },
@@ -183,22 +212,71 @@ class _AdminProposalListScreenState extends State<AdminProposalListScreen> {
                           message:
                               'No proposals match the selected search and filters.',
                         )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                          itemCount: proposals.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final proposal = proposals[index];
-                            return _AdminProposalCard(
-                              proposal: proposal,
-                              assessment: viewModel.assessmentFor(proposal),
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => AdminProposalDetailsScreen(
-                                    proposalId: proposal.id,
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final landscape =
+                                MediaQuery.orientationOf(context) ==
+                                    Orientation.landscape;
+                            final media = MediaQuery.of(context);
+                            final scale = media.textScaler.scale(1);
+                            final shortLandscape =
+                                landscape && media.size.height < 480;
+                            final largeText = scale > 1.15;
+                            final columns = shortLandscape || largeText
+                                ? 1
+                                : constraints.maxWidth >= 1180 &&
+                                        media.size.height >= 680
+                                    ? 3
+                                    : constraints.maxWidth >= 760 &&
+                                            media.size.height >= 560
+                                        ? 2
+                                        : 1;
+                            Widget cardAt(int index) {
+                              final proposal = proposals[index];
+                              return _AdminProposalCard(
+                                proposal: proposal,
+                                assessment: viewModel.assessmentFor(proposal),
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => AdminProposalDetailsScreen(
+                                      proposalId: proposal.id,
+                                    ),
                                   ),
                                 ),
+                              );
+                            }
+
+                            if (columns == 1) {
+                              return ListView.separated(
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                                itemCount: proposals.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (_, index) => cardAt(index),
+                              );
+                            }
+                            const horizontalPadding = 20.0;
+                            const spacing = 12.0;
+                            final contentWidth =
+                                constraints.maxWidth - horizontalPadding * 2;
+                            final cardWidth =
+                                (contentWidth - spacing * (columns - 1)) /
+                                    columns;
+                            return SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                              child: Wrap(
+                                spacing: spacing,
+                                runSpacing: spacing,
+                                children: [
+                                  for (var index = 0;
+                                      index < proposals.length;
+                                      index++)
+                                    SizedBox(
+                                      width: cardWidth,
+                                      child: cardAt(index),
+                                    ),
+                                ],
                               ),
                             );
                           },
@@ -287,8 +365,10 @@ class _AdminProposalCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   _InfoChip(Icons.trending_up, '${proposal.demand} usage'),
-                  _InfoChip(Icons.group_outlined,
-                      '${proposal.displayedSupports} supports'),
+                  CommunityResponseSummary(
+                    proposal: proposal,
+                    compact: true,
+                  ),
                 ],
               ),
               const Divider(height: 22),
@@ -316,7 +396,8 @@ class _AdminProposalCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right, color: planningMutedTextColor),
+                  const Icon(Icons.chevron_right,
+                      color: planningMutedTextColor),
                 ],
               ),
             ],
@@ -342,8 +423,18 @@ class _AdminProposalCard extends StatelessWidget {
   String _formatDate(DateTime? date) {
     if (date == null) return 'Date unavailable';
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }

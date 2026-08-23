@@ -22,6 +22,22 @@ class ProposalLocationSelection {
   final String locationLabel;
 }
 
+class ProposalLocationSuggestion {
+  const ProposalLocationSuggestion({
+    required this.name,
+    required this.state,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String name;
+  final String state;
+  final double latitude;
+  final double longitude;
+
+  String get label => '$name, $state';
+}
+
 class ProposalLocationService {
   ProposalLocationService({StateBoundaryService? stateBoundaries})
       : _stateBoundaries = stateBoundaries ?? StateBoundaryService();
@@ -59,7 +75,8 @@ class ProposalLocationService {
     final stateSettlements = _settlements
         .where((settlement) => settlement.state == state)
         .toList(growable: false);
-    final candidates = stateSettlements.isEmpty ? _settlements : stateSettlements;
+    final candidates =
+        stateSettlements.isEmpty ? _settlements : stateSettlements;
     _Settlement? nearest;
     var nearestDistance = double.infinity;
     for (final settlement in candidates) {
@@ -83,7 +100,52 @@ class ProposalLocationService {
       longitude: longitude,
       state: state,
       nearestTown: town,
-      locationLabel: nearest == null ? 'Selected location, $state' : '$town, $state',
+      locationLabel:
+          nearest == null ? 'Selected location, $state' : '$town, $state',
+    );
+  }
+
+  Future<List<ProposalLocationSuggestion>> search(
+    String query, {
+    int limit = 8,
+  }) async {
+    await load();
+    final normalized = query.trim().toLowerCase();
+    if (normalized.length < 2) return const [];
+    final matches = _settlements.where((settlement) {
+      final name = settlement.name.toLowerCase();
+      final state = settlement.state.toLowerCase();
+      return name.contains(normalized) || state.contains(normalized);
+    }).toList()
+      ..sort((a, b) {
+        final aName = a.name.toLowerCase();
+        final bName = b.name.toLowerCase();
+        final aRank = aName == normalized
+            ? 0
+            : aName.startsWith(normalized)
+                ? 1
+                : 2;
+        final bRank = bName == normalized
+            ? 0
+            : bName.startsWith(normalized)
+                ? 1
+                : 2;
+        final rankComparison = aRank.compareTo(bRank);
+        if (rankComparison != 0) return rankComparison;
+        final stateComparison = a.state.compareTo(b.state);
+        return stateComparison != 0
+            ? stateComparison
+            : a.name.compareTo(b.name);
+      });
+    return List<ProposalLocationSuggestion>.unmodifiable(
+      matches.take(limit).map(
+            (settlement) => ProposalLocationSuggestion(
+              name: settlement.name,
+              state: settlement.state,
+              latitude: settlement.latitude,
+              longitude: settlement.longitude,
+            ),
+          ),
     );
   }
 
@@ -162,7 +224,10 @@ class _Settlement {
     final state = json['state'] as String?;
     final latitude = CoordinateParser.latitude(json['latitude']);
     final longitude = CoordinateParser.longitude(json['longitude']);
-    if (name == null || state == null || latitude == null || longitude == null) {
+    if (name == null ||
+        state == null ||
+        latitude == null ||
+        longitude == null) {
       return null;
     }
     return _Settlement(

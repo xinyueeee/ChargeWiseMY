@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/navigation/app_route_observer.dart';
+import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../charging/screens/charging_screen.dart';
 import '../models/proposal.dart';
@@ -46,8 +47,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
-    if (route is! PageRoute<dynamic> ||
-        identical(route, _subscribedRoute)) {
+    if (route is! PageRoute<dynamic> || identical(route, _subscribedRoute)) {
       return;
     }
     if (_subscribedRoute != null) {
@@ -113,76 +113,76 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                         return _buildLandscapeDashboard(context, vm, size);
                       }
                       return ListView(
-                    padding: planningPagePadding,
-                    children: [
-                      PlanningSectionTitle(
-                        'Infrastructure Planning',
-                        subtitle:
-                            'Plan smarter. Build better. Power the future.',
-                        trailing: IconButton(
-                          tooltip: 'Refresh planning data',
-                          onPressed: vm.load,
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ),
-                      planningSectionGap,
-                      if (vm.errorMessage != null) ...[
-                        PlanningErrorState(
-                          message: vm.errorMessage!,
-                          onRetry: vm.load,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      _buildPlanningRegionCard(vm),
-                      const SizedBox(height: 18),
-                      _buildMapExplorer(vm, height: 285),
-                      planningSectionGap,
-                      PlanningSectionTitle(
-                        'Infrastructure Summary',
-                        subtitle: vm.selectedState == malaysiaSelection
-                            ? 'Physical charging locations across Malaysia'
-                            : 'Physical charging locations in ${vm.selectedState}',
-                      ),
-                      const SizedBox(height: 12),
-                      _InfrastructureSummaryCard(
-                        locations: vm.selectedStationCount,
-                        chargers: vm.selectedInstalledChargerCount,
-                        acChargers: vm.selectedAcChargerCount,
-                        dcChargers: vm.selectedDcChargerCount,
-                        plannedLocations: vm.selectedPlannedLocationCount,
-                        plannedChargers: vm.selectedPlannedChargerCount,
-                      ),
-                      planningSectionGap,
-                      PlanningSectionTitle(
-                        'Planning Activity',
-                        subtitle: vm.selectedState == malaysiaSelection
-                            ? 'Proposal and coverage-gap work across Malaysia'
-                            : 'Proposal and coverage-gap work in ${vm.selectedState}',
-                      ),
-                      const SizedBox(height: 12),
-                      _PlanningActivityCard(
-                        pendingProposals: _proposalStatusCount(
-                          vm.selectedProposals,
-                          'pending',
-                        ),
-                        approvedProposals: _proposalStatusCount(
-                          vm.selectedProposals,
-                          'approved',
-                        ),
-                        highPriorityAreas: vm.highPriorityAreaCount,
-                      ),
-                      planningSectionGap,
-                      _buildQuickActions(context),
-                      planningSectionGap,
-                      _PlanningInsightsCard(
-                        highPriorityAreas: vm.highPriorityAreaCount,
-                        pendingProposals: _proposalStatusCount(
-                          vm.selectedProposals,
-                          'pending',
-                        ),
-                        averageGapDistance: vm.averageGapDistance,
-                      ),
-                    ],
+                        padding: planningPagePadding,
+                        children: [
+                          PlanningSectionTitle(
+                            'Infrastructure Planning',
+                            subtitle:
+                                'Plan smarter. Build better. Power the future.',
+                            trailing: IconButton(
+                              tooltip: 'Refresh planning data',
+                              onPressed: vm.load,
+                              icon: const Icon(Icons.refresh),
+                            ),
+                          ),
+                          planningSectionGap,
+                          if (vm.errorMessage != null) ...[
+                            PlanningErrorState(
+                              message: vm.errorMessage!,
+                              onRetry: vm.load,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          _buildPlanningRegionCard(vm),
+                          const SizedBox(height: 18),
+                          _buildMapExplorer(vm, height: 285),
+                          planningSectionGap,
+                          PlanningSectionTitle(
+                            'Infrastructure Summary',
+                            subtitle: vm.selectedState == malaysiaSelection
+                                ? 'Physical charging locations across Malaysia'
+                                : 'Physical charging locations in ${vm.selectedState}',
+                          ),
+                          const SizedBox(height: 12),
+                          _InfrastructureSummaryCard(
+                            locations: vm.selectedStationCount,
+                            chargers: vm.selectedInstalledChargerCount,
+                            acChargers: vm.selectedAcChargerCount,
+                            dcChargers: vm.selectedDcChargerCount,
+                            plannedLocations: vm.selectedPlannedLocationCount,
+                            plannedChargers: vm.selectedPlannedChargerCount,
+                          ),
+                          planningSectionGap,
+                          PlanningSectionTitle(
+                            'Planning Activity',
+                            subtitle: vm.selectedState == malaysiaSelection
+                                ? 'Proposal and coverage-gap work across Malaysia'
+                                : 'Proposal and coverage-gap work in ${vm.selectedState}',
+                          ),
+                          const SizedBox(height: 12),
+                          _PlanningActivityCard(
+                            pendingProposals: _proposalStatusCount(
+                              vm.selectedProposals,
+                              Proposal.statusPending,
+                            ),
+                            approvedProposals: _proposalStatusCount(
+                              vm.selectedProposals,
+                              Proposal.statusApproved,
+                            ),
+                            highPriorityAreas: vm.highPriorityAreaCount,
+                          ),
+                          planningSectionGap,
+                          _buildQuickActions(context),
+                          planningSectionGap,
+                          _PlanningInsightsCard(
+                            highPriorityAreas: vm.highPriorityAreaCount,
+                            pendingProposals: _proposalStatusCount(
+                              vm.selectedProposals,
+                              Proposal.statusPending,
+                            ),
+                            averageGapDistance: vm.averageGapDistance,
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -191,11 +191,17 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
       ),
       bottomNavigationBar: FloatingBottomNav(
         currentTab: 'Planning',
-        onHomeTap: () => Navigator.of(context).popUntil(
-          (route) => route.isFirst,
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
         ),
-        onChargingTap: () => _switchTo(context, const ChargingScreen()),
-        onProfileTap: () => _switchTo(context, const ProfileScreen()),
+        onProfileTap: () => _switchTo(
+          context,
+          const ProfileScreen(),
+          DriverRouteNames.profile,
+        ),
       ),
     );
   }
@@ -205,7 +211,8 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
     PlanningViewModel vm,
     Size size,
   ) {
-    final pending = _proposalStatusCount(vm.selectedProposals, 'pending');
+    final pending =
+        _proposalStatusCount(vm.selectedProposals, Proposal.statusPending);
     return Column(
       children: [
         Padding(
@@ -268,8 +275,10 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                       const SizedBox(height: 7),
                       _PlanningActivityCard(
                         pendingProposals: pending,
-                        approvedProposals:
-                            _proposalStatusCount(vm.selectedProposals, 'approved'),
+                        approvedProposals: _proposalStatusCount(
+                          vm.selectedProposals,
+                          Proposal.statusApproved,
+                        ),
                         highPriorityAreas: vm.highPriorityAreaCount,
                       ),
                       const SizedBox(height: 12),
@@ -295,8 +304,8 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                       // then consumes only the height this panel truly owns.
                       final chromeHeight =
                           vm.selectedState == malaysiaSelection ? 132.0 : 106.0;
-                      final mapHeight =
-                          (constraints.maxHeight - chromeHeight).clamp(96.0, 480.0);
+                      final mapHeight = (constraints.maxHeight - chromeHeight)
+                          .clamp(96.0, 480.0);
                       return _buildMapExplorer(vm, height: mapHeight);
                     },
                   ),
@@ -420,7 +429,11 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
               if (constraints.maxWidth < 330) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [proposalsButton, const SizedBox(height: 8), gapButton],
+                  children: [
+                    proposalsButton,
+                    const SizedBox(height: 8),
+                    gapButton
+                  ],
                 );
               }
               return Row(
@@ -494,7 +507,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           _MapContextCard(
             locations: vm.selectedStationCount,
             chargers: vm.selectedInstalledChargerCount,
-            activeProposals: _proposalStatusCount(vm.selectedProposals, 'pending'),
+            activeProposals: _activeProposalCount(vm.selectedProposals),
             priorityAreas: vm.highPriorityAreaCount,
             plannedLocations: vm.selectedPlannedLocationCount,
           ),
@@ -552,19 +565,22 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
     );
   }
 
-  void _switchTo(BuildContext context, Widget page) {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page),
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
     );
   }
 
   static int _proposalStatusCount(
     Iterable<Proposal> proposals,
     String status,
-  ) => proposals
-      .where((proposal) => proposal.status.trim().toLowerCase() == status)
-      .length;
+  ) =>
+      proposals.where((proposal) => proposal.status == status).length;
+
+  static int _activeProposalCount(Iterable<Proposal> proposals) =>
+      proposals.where((proposal) => proposal.isActive).length;
 }
 
 class _InlinePlanningError extends StatelessWidget {
@@ -852,7 +868,8 @@ class _MapContextCard extends StatelessWidget {
           children: [
             _MapContextMetric(value: '$locations', label: 'locations'),
             _MapContextMetric(value: '$chargers', label: 'installed chargers'),
-            _MapContextMetric(value: '$activeProposals', label: 'active proposals'),
+            _MapContextMetric(
+                value: '$activeProposals', label: 'active proposals'),
             _MapContextMetric(value: '$priorityAreas', label: 'priority areas'),
             _MapContextMetric(
               value: '$plannedLocations',
@@ -952,7 +969,8 @@ class _InsightLine extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: planningMutedTextColor, height: 1.35),
+              style:
+                  const TextStyle(color: planningMutedTextColor, height: 1.35),
             ),
           ),
         ],
@@ -1037,6 +1055,16 @@ class _CompactMapLegend extends StatelessWidget {
                       value: showCommunityProposals,
                       onChanged: onCommunityProposalsChanged,
                     ),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 25, top: 2),
+                      child: Text(
+                        'Blue active · Violet approved',
+                        style: TextStyle(
+                          color: planningMutedTextColor,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1087,5 +1115,4 @@ class _MapLayerToggle extends StatelessWidget {
           ],
         ),
       );
-
 }

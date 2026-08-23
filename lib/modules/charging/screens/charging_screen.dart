@@ -6,9 +6,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
 import '../../../services/notification_service.dart';
 import '../../auth/screens/profile_screen.dart';
-import '../../home/screens/home_screen.dart';
 import '../../home/widgets/station_details_sheet.dart';
 import '../../planning/models/proposal.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
@@ -95,9 +95,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);
       });
-    } catch (_) {
-
-    }
+    } catch (_) {}
   }
 
   double _distanceKm(LatLng a, LatLng b) {
@@ -146,7 +144,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child:
+                const Text('Delete', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -169,7 +168,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child:
+                const Text('Delete', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -180,7 +180,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
     _reloadReminders();
   }
 
-  Future<void> _toggleReminder(Map<String, dynamic> reminder, bool enabled) async {
+  Future<void> _toggleReminder(
+      Map<String, dynamic> reminder, bool enabled) async {
     final id = reminder['id'] as String;
     await _service.setReminderEnabled(id, enabled);
     if (enabled) {
@@ -238,16 +239,25 @@ class _ChargingScreenState extends State<ChargingScreen> {
       ),
       bottomNavigationBar: FloatingBottomNav(
         currentTab: 'Charging',
-        onHomeTap: () => _switchTo(const HomeScreen()),
-        onPlanningTap: () => _switchTo(const PlanningDashboardScreen()),
-        onProfileTap: () => _switchTo(const ProfileScreen()),
+        onHomeTap: () => returnToDriverHome(context),
+        onPlanningTap: () => _switchTo(
+          const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
+        ),
+        onProfileTap: () => _switchTo(
+          const ProfileScreen(),
+          DriverRouteNames.profile,
+        ),
       ),
     );
   }
 
-  void _switchTo(Widget page) {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+  void _switchTo(Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
+    );
   }
 
   Widget _buildCalculatorCard() {
@@ -464,8 +474,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
                         );
                         if (saved == true) _reloadReminders();
                       },
-                      onDelete: () =>
-                          _deleteReminder(reminder['id'] as String),
+                      onDelete: () => _deleteReminder(reminder['id'] as String),
                     ),
                 ],
               );
@@ -516,7 +525,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
                 message: 'Rule-based recommendation using your location, '
                     'the nearest real charging station, and Malaysia\'s '
                     'TNB off-peak electricity hours.',
-                child: Icon(Icons.info_outline, size: 18, color: planningMutedTextColor),
+                child: Icon(Icons.info_outline,
+                    size: 18, color: planningMutedTextColor),
               ),
             ],
           ),
@@ -530,78 +540,78 @@ class _ChargingScreenState extends State<ChargingScreen> {
             Builder(builder: (context) {
               final station = nearest!;
               return ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                height: 130,
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: LatLng(
-                      (referencePoint.latitude + station.latitude) / 2,
-                      (referencePoint.longitude + station.longitude) / 2,
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  height: 130,
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: LatLng(
+                        (referencePoint.latitude + station.latitude) / 2,
+                        (referencePoint.longitude + station.longitude) / 2,
+                      ),
+                      zoom: 11,
                     ),
-                    zoom: 11,
-                  ),
-                  markers: {
-                    if (_userLocation != null)
-                      Marker(
-                        markerId: const MarkerId('user'),
-                        position: _userLocation!,
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure,
+                    markers: {
+                      if (_userLocation != null)
+                        Marker(
+                          markerId: const MarkerId('user'),
+                          position: _userLocation!,
+                          icon: BitmapDescriptor.defaultMarkerWithHue(
+                            BitmapDescriptor.hueAzure,
+                          ),
+                          infoWindow: const InfoWindow(title: 'Your location'),
                         ),
-                        infoWindow: const InfoWindow(title: 'Your location'),
+                      Marker(
+                        markerId: MarkerId('rec_${station.id}'),
+                        position: LatLng(station.latitude, station.longitude),
+                        icon: BitmapDescriptor.defaultMarkerWithHue(
+                          BitmapDescriptor.hueOrange,
+                        ),
+                        onTap: () => showStationDetailsSheet(
+                          context,
+                          station: station,
+                          distanceKm: nearestDistance,
+                        ),
                       ),
-                    Marker(
-                      markerId: MarkerId('rec_${station.id}'),
-                      position: LatLng(station.latitude, station.longitude),
-                      icon: BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueOrange,
-                      ),
-                      onTap: () => showStationDetailsSheet(
-                        context,
-                        station: station,
-                        distanceKm: nearestDistance,
-                      ),
-                    ),
-                  },
-                  zoomControlsEnabled: false,
-                  myLocationButtonEnabled: false,
-                  rotateGesturesEnabled: false,
-                  tiltGesturesEnabled: false,
+                    },
+                    zoomControlsEnabled: false,
+                    myLocationButtonEnabled: false,
+                    rotateGesturesEnabled: false,
+                    tiltGesturesEnabled: false,
+                  ),
                 ),
-              ),
               );
             }),
             const SizedBox(height: 12),
             Builder(builder: (context) {
               final station = nearest!;
               return InkWell(
-              onTap: () => showStationDetailsSheet(
-                context,
-                station: station,
-                distanceKm: nearestDistance,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    station.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: planningTextColor,
+                onTap: () => showStationDetailsSheet(
+                  context,
+                  station: station,
+                  distanceKm: nearestDistance,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      station.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: planningTextColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${nearestDistance.toStringAsFixed(1)} km away · '
-                    '${station.chargerType} · Tap for details',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: planningMutedTextColor,
+                    const SizedBox(height: 3),
+                    Text(
+                      '${nearestDistance.toStringAsFixed(1)} km away · '
+                      '${station.chargerType} · Tap for details',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: planningMutedTextColor,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
               );
             }),
             const SizedBox(height: 14),
