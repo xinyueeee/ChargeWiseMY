@@ -291,6 +291,12 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   'Find, charge and manage your EV charging easily.',
                   style: TextStyle(color: planningMutedTextColor),
                 ),
+                if (vm.infrastructureWarningMessage != null) ...[
+                  const SizedBox(height: 12),
+                  InfrastructureDataNotice(
+                    message: vm.infrastructureWarningMessage!,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 LayoutBuilder(
                   builder: (context, constraints) {

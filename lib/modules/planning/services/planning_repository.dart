@@ -5,6 +5,7 @@ import '../../../services/supabase_service.dart';
 import '../models/proposal.dart';
 import 'analysis_profile.dart';
 import 'coverage_gap_analyzer.dart';
+import 'infrastructure_cache_service.dart';
 import 'proposal_location_service.dart';
 import 'proposal_photo_service.dart';
 import 'state_boundary_service.dart';
@@ -13,10 +14,20 @@ class PlanningRepository {
   PlanningRepository({
     SupabaseService? supabaseService,
     ProposalPhotoService? photoService,
+    InfrastructureCacheStore? infrastructureCache,
   })  : _supabase = supabaseService ?? SupabaseService(),
-        _photoService = photoService ?? ProposalPhotoService();
+        _photoService = photoService ?? ProposalPhotoService(),
+        _infrastructureCache =
+            infrastructureCache ?? SqliteInfrastructureCacheService() {
+    _infrastructureSync = InfrastructureSyncCoordinator(
+      cache: _infrastructureCache,
+      remoteLoader: (status) => _getStationsFromSupabase(status: status),
+    );
+  }
   final SupabaseService _supabase;
   final ProposalPhotoService _photoService;
+  final InfrastructureCacheStore _infrastructureCache;
+  late final InfrastructureSyncCoordinator _infrastructureSync;
   final CoverageGapAnalyzer _gapAnalyzer = const CoverageGapAnalyzer();
   final ProposalLocationService _proposalLocations = ProposalLocationService();
   final Map<String, Future<List<GapArea>>> _gapCache = {};
@@ -29,6 +40,12 @@ class PlanningRepository {
   String? get authenticatedUserId => _supabase.authenticatedUserId;
   Stream<String?> get authenticatedUserChanges =>
       _supabase.authenticatedUserChanges;
+
+  Stream<InfrastructureLoadUpdate> synchronizeInfrastructure() =>
+      _infrastructureSync.synchronize();
+
+  Future<void> clearInfrastructureCache() =>
+      _infrastructureCache.clearInfrastructureCache();
 
   String prepareStationFingerprint(List<ChargingStation> stations) {
     _prepareStationFingerprint(stations);
@@ -188,7 +205,9 @@ class PlanningRepository {
     return '${stations.length}-${hash.toRadixString(16).padLeft(8, '0')}';
   }
 
-  Future<List<ChargingStation>> getStations({String? status}) async {
+  Future<List<ChargingStation>> _getStationsFromSupabase({
+    required String status,
+  }) async {
     final fetchStopwatch = Stopwatch()..start();
     final rows = await _supabase.getChargingStations(status: status);
     fetchStopwatch.stop();
@@ -206,7 +225,7 @@ class PlanningRepository {
     parsingStopwatch.stop();
     debugPrint(
       'Station loading diagnostics: '
-      'status=${status ?? 'all'}, '
+      'status=$status, '
       'stationRowsFetched=${rows.length}, '
       'validCoordinateRows=${stations.length}, '
       'invalidCoordinateRows=$invalidCoordinates, '

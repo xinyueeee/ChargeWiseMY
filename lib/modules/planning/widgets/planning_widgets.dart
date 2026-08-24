@@ -95,6 +95,48 @@ class PlanningLoadingState extends StatelessWidget {
       );
 }
 
+class InfrastructureDataNotice extends StatelessWidget {
+  const InfrastructureDataNotice({
+    super.key,
+    required this.message,
+  });
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        liveRegion: true,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8E8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFF0D89A)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.cloud_off_outlined,
+                size: 18,
+                color: Color(0xFF8A6414),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF684B0E),
+                        height: 1.3,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
 class PlanningErrorState extends StatelessWidget {
   const PlanningErrorState({
     super.key,

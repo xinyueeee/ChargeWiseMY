@@ -494,6 +494,34 @@ class ChargingStation {
       status == other.status &&
       indoorOutdoor == other.indoorOutdoor;
 
+  /// Serializes the public MEVnet infrastructure fields used by the local
+  /// SQLite cache. Supabase remains authoritative; this representation is
+  /// never uploaded back to the cloud.
+  Map<String, Object?> toCacheMap({required DateTime cachedAt}) =>
+      <String, Object?>{
+        'station_id': id,
+        'station_name': name,
+        'latitude': latitude,
+        'longitude': longitude,
+        'charger_type': chargerType,
+        'address': address,
+        'charger_count': chargerCount,
+        'ac_charger_count': acChargerCount,
+        'dc_charger_count': dcChargerCount,
+        'proposed_charger_count': proposedChargerCount,
+        'state': state,
+        'pbt': pbt,
+        'category': category,
+        'status': status,
+        'indoor_outdoor': indoorOutdoor,
+        'mevnet_object_id': mevnetObjectId,
+        'source': source,
+        'source_url': sourceUrl,
+        'data_date': dataDate?.toIso8601String(),
+        'imported_at': importedAt?.toIso8601String(),
+        'cached_at': cachedAt.toUtc().toIso8601String(),
+      };
+
   static ChargingStation? fromSupabase(Map<String, dynamic> row) {
     final latitude = CoordinateParser.latitude(row['latitude']);
     final longitude = CoordinateParser.longitude(row['longitude']);
@@ -522,6 +550,9 @@ class ChargingStation {
       indoorOutdoor: row['indoor_outdoor']?.toString(),
     );
   }
+
+  static ChargingStation? fromCacheMap(Map<String, Object?> row) =>
+      fromSupabase(Map<String, dynamic>.from(row));
 
   static int? _nullableCount(dynamic value) {
     final parsed = value is num

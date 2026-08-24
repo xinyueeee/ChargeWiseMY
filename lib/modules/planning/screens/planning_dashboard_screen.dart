@@ -119,17 +119,19 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                             'Infrastructure Planning',
                             subtitle:
                                 'Plan smarter. Build better. Power the future.',
-                            trailing: IconButton(
-                              tooltip: 'Refresh planning data',
-                              onPressed: vm.load,
-                              icon: const Icon(Icons.refresh),
-                            ),
+                            trailing: _buildRefreshControl(vm),
                           ),
                           planningSectionGap,
                           if (vm.errorMessage != null) ...[
                             PlanningErrorState(
                               message: vm.errorMessage!,
                               onRetry: vm.load,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          if (vm.infrastructureWarningMessage != null) ...[
+                            InfrastructureDataNotice(
+                              message: vm.infrastructureWarningMessage!,
                             ),
                             const SizedBox(height: 16),
                           ],
@@ -220,11 +222,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           child: PlanningSectionTitle(
             'Infrastructure Planning',
             subtitle: 'Plan smarter. Build better. Power the future.',
-            trailing: IconButton(
-              tooltip: 'Refresh planning data',
-              onPressed: vm.load,
-              icon: const Icon(Icons.refresh),
-            ),
+            trailing: _buildRefreshControl(vm),
           ),
         ),
         if (vm.errorMessage != null)
@@ -233,6 +231,13 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
             child: _InlinePlanningError(
               message: vm.errorMessage!,
               onRetry: vm.load,
+            ),
+          ),
+        if (vm.infrastructureWarningMessage != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: InfrastructureDataNotice(
+              message: vm.infrastructureWarningMessage!,
             ),
           ),
         Expanded(
@@ -315,6 +320,27 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRefreshControl(PlanningViewModel vm) {
+    if (!vm.infrastructureRefreshing) {
+      return IconButton(
+        tooltip: 'Refresh planning data',
+        onPressed: vm.load,
+        icon: const Icon(Icons.refresh),
+      );
+    }
+    return const SizedBox(
+      width: 48,
+      height: 48,
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator.adaptive(strokeWidth: 2.4),
+        ),
+      ),
     );
   }
 
