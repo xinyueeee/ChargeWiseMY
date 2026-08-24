@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/proposal.dart';
 import '../services/analysis_profile.dart';
+import '../services/infrastructure_cache_service.dart';
 import '../services/planning_repository.dart';
 import '../services/proposal_photo_service.dart';
 import '../services/state_boundary_service.dart';
@@ -53,6 +54,10 @@ class PlanningViewModel extends ChangeNotifier {
   bool loading = true;
   bool homeInfrastructureReady = false;
   bool analyzingGaps = false;
+  bool infrastructureRefreshing = false;
+  bool usingCachedInfrastructure = false;
+  DateTime? infrastructureCachedAt;
+  String? infrastructureWarningMessage;
   String? errorMessage;
   String? analysisErrorMessage;
   String? analysisStatusMessage;
@@ -65,6 +70,7 @@ class PlanningViewModel extends ChangeNotifier {
   String? _proposalContextUserId;
   StreamSubscription<String?>? _authSubscription;
   bool _disposed = false;
+  bool _loadInProgress = false;
 
   String get selectedState => _selectedState;
   List<String> get stateOptions => _stateBoundaries.stateOptions;
@@ -237,11 +243,16 @@ class PlanningViewModel extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (_loadInProgress) return;
+    _loadInProgress = true;
     final initializationStopwatch = Stopwatch()..start();
+    final homeReadyStopwatch = Stopwatch()..start();
     final generation = ++_loadGeneration;
     _analysisGeneration++;
-    loading = true;
+    loading = stations.isEmpty;
     homeInfrastructureReady = stations.isNotEmpty;
+    infrastructureRefreshing = true;
+    infrastructureWarningMessage = null;
     analyzingGaps = false;
     errorMessage = null;
     analysisErrorMessage = null;
@@ -249,101 +260,104 @@ class PlanningViewModel extends ChangeNotifier {
     lastAnalysisCacheHit = null;
     notifyListeners();
     try {
-      final homeDataStopwatch = Stopwatch()..start();
-      final stationResults = await Future.wait([
-        _repository.getStations(status: ChargingStation.statusExisting),
-        _stateBoundaries.load(),
-      ]);
-      if (generation != _loadGeneration) return;
+      final boundariesFuture = _stateBoundaries.load();
+      var homeReadyLogged = homeInfrastructureReady;
+      var initialCachedAnalysisStarted = false;
+      await for (final update in _repository.synchronizeInfrastructure()) {
+        if (generation != _loadGeneration) return;
+        if (_regions.isEmpty) _regions = await boundariesFuture;
+        if (generation != _loadGeneration) return;
 
-      final loadedStations = List<ChargingStation>.unmodifiable(
-        stationResults[0] as List<ChargingStation>,
-      );
-      _regions = stationResults[1] as List<StateRegion>;
-      stationCount = loadedStations.length;
-      final stationDataChanged = !_sameStationData(stations, loadedStations);
-      final stationSpatialDataChanged =
-          !_sameStationSpatialData(stations, loadedStations);
-      var analysisCacheInvalidated = false;
-      if (stationSpatialDataChanged) {
-        _repository.invalidateStationDataCaches();
-        _analysisByState.clear();
-        _priorityAreas = const [];
-        analysisCacheInvalidated = true;
-        debugPrint(
-          'PlanningViewModel cleared state-analysis cache because the '
-          'complete station dataset changed.',
-        );
-      }
-      if (stationDataChanged) {
-        stations = loadedStations;
-      }
-      final rebuildStateCache =
-          stationDataChanged || _stateOverviewSummaries.isEmpty;
-      if (rebuildStateCache) {
-        _cacheStationStates();
-      }
-      _applySelectedStateFilters();
-      homeInfrastructureReady = true;
-      homeDataStopwatch.stop();
-      debugPrint(
-        'Home infrastructure ready: existing=${stations.length}, '
-        'duration=${homeDataStopwatch.elapsedMilliseconds}ms, '
-        'planningInitializationContinues=true.',
-      );
-      notifyListeners();
+        final snapshot = update.snapshot;
+        final dataChanged =
+            snapshot == null ? false : _applyInfrastructureSnapshot(snapshot);
+        switch (update.phase) {
+          case InfrastructureLoadPhase.cacheReady:
+            usingCachedInfrastructure = true;
+            infrastructureCachedAt = snapshot?.cachedAt;
+            break;
+          case InfrastructureLoadPhase.remoteExistingReady:
+            break;
+          case InfrastructureLoadPhase.remoteFresh:
+            usingCachedInfrastructure = false;
+            infrastructureCachedAt = snapshot?.cachedAt;
+            infrastructureRefreshing = false;
+            infrastructureWarningMessage = null;
+            break;
+          case InfrastructureLoadPhase.remoteFailed:
+            infrastructureRefreshing = false;
+            if (update.hasUsableInfrastructure) {
+              infrastructureWarningMessage = usingCachedInfrastructure
+                  ? 'Showing saved infrastructure data. Some information may '
+                      'not be up to date.'
+                  : 'Fresh infrastructure data could not be fully loaded. '
+                      'Previously available data remains visible.';
+            } else {
+              throw update.error ??
+                  StateError('No charging infrastructure is available.');
+            }
+            break;
+        }
 
-      final plannedLoadStopwatch = Stopwatch()..start();
-      final loadedPlannedRows = await _repository.getStations(
-        status: ChargingStation.statusNewlyProposed,
-      );
-      if (generation != _loadGeneration) return;
-      final loadedPlanned = List<PlannedChargingLocation>.unmodifiable(
-        loadedPlannedRows.map(PlannedChargingLocation.fromStation),
-      );
-      allMevnetLocations = List<ChargingStation>.unmodifiable([
-        ...loadedStations,
-        ...loadedPlannedRows,
-      ]);
-      plannedLoadStopwatch.stop();
-      debugPrint(
-        'MEVnet runtime partition: total=${allMevnetLocations.length}, '
-        'existing=${loadedStations.length}, planned=${loadedPlanned.length}, '
-        'other=0, plannedFetchAndParse='
-        '${plannedLoadStopwatch.elapsedMilliseconds}ms.',
-      );
-      if (!_samePlannedData(plannedLocations, loadedPlanned) ||
-          _plannedStateById.isEmpty) {
-        plannedLocations = loadedPlanned;
-        _plannedContextCache.clear();
-        _cachePlannedStates();
+        if (stations.isNotEmpty) {
+          homeInfrastructureReady = true;
+          loading = false;
+          if (!homeReadyLogged) {
+            homeReadyLogged = true;
+            homeReadyStopwatch.stop();
+            debugPrint(
+              'Home infrastructure ready: existing=${stations.length}, '
+              'source=${usingCachedInfrastructure ? 'sqlite-cache' : 'supabase'}, '
+              'duration=${homeReadyStopwatch.elapsedMilliseconds}ms, '
+              'planningInitializationContinues=true.',
+            );
+          }
+        }
+        if (dataChanged ||
+            update.phase == InfrastructureLoadPhase.cacheReady ||
+            update.phase == InfrastructureLoadPhase.remoteFresh ||
+            update.phase == InfrastructureLoadPhase.remoteFailed) {
+          notifyListeners();
+        }
+        if (!initialCachedAnalysisStarted &&
+            homeInfrastructureReady &&
+            _priorityAreas.isEmpty) {
+          initialCachedAnalysisStarted = true;
+          // Coverage analysis is local and Existing-only, so cached physical
+          // locations are safe to analyze while Supabase revalidates them.
+          unawaited(runSelectedStateAnalysis());
+        }
       }
-      final stationFingerprint =
-          _repository.prepareStationFingerprint(stations);
-      debugPrint(
-        'Station refresh audit: stationRowsFetched=${stations.length}, '
-        'stationFingerprint=$stationFingerprint, '
-        'stateCacheRebuilt=$rebuildStateCache, '
-        'analysisCacheInvalidated=$analysisCacheInvalidated, '
-        'markerCacheInvalidated=$stationDataChanged.',
-      );
-      _applySelectedStateFilters();
+      if (generation != _loadGeneration) return;
+      if (stations.isEmpty) {
+        throw StateError('No valid Existing charging locations were loaded.');
+      }
 
       final proposalUserId = _repository.authenticatedUserId;
       final proposalFetchGeneration = ++_proposalFetchGeneration;
-      final loadedProposals = await _repository.getProposals(
-        stations,
-        authenticatedUserId: proposalUserId,
-      );
-      if (generation != _loadGeneration) return;
-      if (proposalFetchGeneration == _proposalFetchGeneration) {
-        _proposalContextUserId = proposalUserId;
-        if (!_sameProposalData(proposals, loadedProposals) ||
-            _proposalCountByState.isEmpty) {
-          proposals = loadedProposals;
-          _cacheProposalStates();
+      try {
+        final loadedProposals = await _repository.getProposals(
+          stations,
+          authenticatedUserId: proposalUserId,
+        );
+        if (generation != _loadGeneration) return;
+        if (proposalFetchGeneration == _proposalFetchGeneration) {
+          _proposalContextUserId = proposalUserId;
+          if (!_sameProposalData(proposals, loadedProposals) ||
+              _proposalCountByState.isEmpty) {
+            proposals = loadedProposals;
+            _cacheProposalStates();
+          }
+          _applySelectedStateFilters();
         }
-        _applySelectedStateFilters();
+      } catch (error, stackTrace) {
+        if (generation != _loadGeneration) return;
+        infrastructureWarningMessage ??=
+            'Infrastructure is available, but proposal activity could not be '
+            'refreshed.';
+        debugPrint(
+            'Proposal refresh failed without hiding infrastructure: $error');
+        debugPrintStack(stackTrace: stackTrace);
       }
       final currentUserId = _repository.authenticatedUserId;
       if (currentUserId != _proposalContextUserId) {
@@ -353,22 +367,32 @@ class PlanningViewModel extends ChangeNotifier {
       analyzingGaps = true;
       analysisStatusMessage =
           'Analyzing $_selectedState infrastructure coverage…';
-      final areas = await _repository.getGaps(
-        stations,
-        selectedState: _selectedState,
-        stationCountsByState: _stationCountByState,
-      );
-      if (generation != _loadGeneration) return;
-      _analysisByState[_selectedState] = areas;
-      _priorityAreas = areas;
-      analysisStatusMessage = _analysisReadyMessage(_selectedState, areas);
-      lastAnalysisCacheHit = false;
-      _rebuildStateOverviewSummaries();
-      debugPrint(
-        'PlanningViewModel state analysis stored: '
-        'instance=${identityHashCode(this)}, state=$_selectedState, '
-        'stationCount=${stations.length}, resultCount=${areas.length}.',
-      );
+      try {
+        final areas = await _repository.getGaps(
+          stations,
+          selectedState: _selectedState,
+          stationCountsByState: _stationCountByState,
+        );
+        if (generation != _loadGeneration) return;
+        _analysisByState[_selectedState] = areas;
+        _priorityAreas = areas;
+        analysisStatusMessage = _analysisReadyMessage(_selectedState, areas);
+        lastAnalysisCacheHit = false;
+        _rebuildStateOverviewSummaries();
+        debugPrint(
+          'PlanningViewModel state analysis stored: '
+          'instance=${identityHashCode(this)}, state=$_selectedState, '
+          'stationCount=${stations.length}, resultCount=${areas.length}.',
+        );
+      } catch (error, stackTrace) {
+        if (generation != _loadGeneration) return;
+        analysisErrorMessage =
+            'Infrastructure is available, but coverage analysis could not be '
+            'completed. Retry.';
+        analysisStatusMessage = analysisErrorMessage;
+        debugPrint('Initial coverage analysis failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
     } catch (error, stackTrace) {
       if (generation != _loadGeneration) return;
       errorMessage =
@@ -381,6 +405,8 @@ class PlanningViewModel extends ChangeNotifier {
       debugPrintStack(stackTrace: stackTrace);
     }
     if (generation != _loadGeneration) return;
+    _loadInProgress = false;
+    infrastructureRefreshing = false;
     analyzingGaps = false;
     loading = false;
     notifyListeners();
@@ -391,6 +417,60 @@ class PlanningViewModel extends ChangeNotifier {
       'stations=${stations.length}, proposals=${proposals.length}, '
       'selectedState=$_selectedState, priorityAreas=${_priorityAreas.length}.',
     );
+  }
+
+  bool _applyInfrastructureSnapshot(InfrastructureCacheSnapshot snapshot) {
+    final loadedStations = List<ChargingStation>.unmodifiable(
+      snapshot.existingStations,
+    );
+    final loadedPlannedRows = List<ChargingStation>.unmodifiable(
+      snapshot.proposedStations,
+    );
+    final loadedPlanned = List<PlannedChargingLocation>.unmodifiable(
+      loadedPlannedRows.map(PlannedChargingLocation.fromStation),
+    );
+    stationCount = loadedStations.length;
+    final stationDataChanged = !_sameStationData(stations, loadedStations);
+    final stationSpatialDataChanged =
+        !_sameStationSpatialData(stations, loadedStations);
+    final plannedDataChanged =
+        !_samePlannedData(plannedLocations, loadedPlanned);
+    var analysisCacheInvalidated = false;
+    if (stationSpatialDataChanged) {
+      _analysisGeneration++;
+      _repository.invalidateStationDataCaches();
+      _analysisByState.clear();
+      _priorityAreas = const [];
+      analysisCacheInvalidated = true;
+      debugPrint(
+        'PlanningViewModel cleared state-analysis cache because the '
+        'complete Existing location dataset changed.',
+      );
+    }
+    if (stationDataChanged) stations = loadedStations;
+    if (plannedDataChanged || _plannedStateById.isEmpty) {
+      plannedLocations = loadedPlanned;
+      _plannedContextCache.clear();
+    }
+    allMevnetLocations = snapshot.stations;
+
+    final rebuildStationStateCache =
+        stationDataChanged || _stateOverviewSummaries.isEmpty;
+    if (rebuildStationStateCache) _cacheStationStates();
+    if (plannedDataChanged || _plannedStateById.isEmpty) {
+      _cachePlannedStates();
+    }
+    _applySelectedStateFilters();
+    final stationFingerprint = _repository.prepareStationFingerprint(stations);
+    debugPrint(
+      'Infrastructure snapshot applied: total=${snapshot.stations.length}, '
+      'existing=${loadedStations.length}, planned=${loadedPlanned.length}, '
+      'stationFingerprint=$stationFingerprint, '
+      'stateCacheRebuilt=$rebuildStationStateCache, '
+      'analysisCacheInvalidated=$analysisCacheInvalidated, '
+      'markerCacheInvalidated=$stationDataChanged.',
+    );
+    return stationDataChanged || plannedDataChanged;
   }
 
   Future<void> selectState(
@@ -540,6 +620,11 @@ class PlanningViewModel extends ChangeNotifier {
 
   Future<void> retrySelectedStateAnalysis() =>
       runSelectedStateAnalysis(force: true);
+
+  /// Debug/support hook only. Infrastructure is public shared data, so logout
+  /// does not clear this cache automatically.
+  Future<void> clearInfrastructureCache() =>
+      _repository.clearInfrastructureCache();
 
   String _analysisReadyMessage(String state, List<GapArea> areas) =>
       areas.isEmpty
