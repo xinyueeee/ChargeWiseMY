@@ -1,12 +1,20 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/proposal.dart';
 import '../services/analysis_profile.dart';
+import '../services/infrastructure_cache_service.dart';
 import '../services/planning_repository.dart';
+import '../services/proposal_photo_service.dart';
 import '../services/state_boundary_service.dart';
 
 class PlanningViewModel extends ChangeNotifier {
   PlanningViewModel(this._repository) {
+    _authSubscription = _repository.authenticatedUserChanges.listen(
+      _handleAuthenticatedUserChanged,
+    );
     debugPrint(
       'PlanningViewModel created: instance=${identityHashCode(this)}.',
     );
@@ -16,21 +24,40 @@ class PlanningViewModel extends ChangeNotifier {
   final StateBoundaryService _stateBoundaries = StateBoundaryService();
 
   List<Proposal> proposals = [];
+  List<ChargingStation> allMevnetLocations = [];
+  // Existing-only by design. Coverage analysis and teammate consumers that
+  // depend on `stations` must never receive Newly Proposed locations.
   List<ChargingStation> stations = [];
+  List<PlannedChargingLocation> plannedLocations = [];
   List<ChargingStation> _selectedStations = const [];
+  List<PlannedChargingLocation> _selectedPlannedLocations = const [];
+  List<ChargingStation> _selectedPlannedMapLocations = const [];
   List<Proposal> _selectedProposals = const [];
+  List<Proposal> _selectedMapProposals = const [];
   List<GapArea> _priorityAreas = const [];
   List<StateRegion> _regions = const [];
   Map<String, String?> _stationStateById = const {};
   Map<String, String?> _proposalStateById = const {};
+  Map<String, String?> _plannedStateById = const {};
   Map<String, int> _stationCountByState = const {};
+  Map<String, int> _installedChargerCountByState = const {};
+  Map<String, int> _acChargerCountByState = const {};
+  Map<String, int> _dcChargerCountByState = const {};
   Map<String, int> _proposalCountByState = const {};
+  Map<String, int> _plannedLocationCountByState = const {};
+  Map<String, int> _plannedChargerCountByState = const {};
   List<StateOverviewSummary> _stateOverviewSummaries = const [];
   final Map<String, List<GapArea>> _analysisByState = {};
+  final Map<String, PlannedInfrastructureContext> _plannedContextCache = {};
 
   int stationCount = 0;
   bool loading = true;
+  bool homeInfrastructureReady = false;
   bool analyzingGaps = false;
+  bool infrastructureRefreshing = false;
+  bool usingCachedInfrastructure = false;
+  DateTime? infrastructureCachedAt;
+  String? infrastructureWarningMessage;
   String? errorMessage;
   String? analysisErrorMessage;
   String? analysisStatusMessage;
@@ -38,30 +65,114 @@ class PlanningViewModel extends ChangeNotifier {
   String _selectedState = malaysiaSelection;
   int _loadGeneration = 0;
   int _analysisGeneration = 0;
+  int _proposalFetchGeneration = 0;
   int _notifyListenersCount = 0;
+  String? _proposalContextUserId;
+  StreamSubscription<String?>? _authSubscription;
+  bool _disposed = false;
+  bool _loadInProgress = false;
 
   String get selectedState => _selectedState;
   List<String> get stateOptions => _stateBoundaries.stateOptions;
   List<StateRegion> get stateRegions => _regions;
   List<StateOverviewSummary> get stateOverviewSummaries =>
       _stateOverviewSummaries;
-  StateRegion? get selectedRegion =>
-      _stateBoundaries.regionFor(_selectedState);
+  StateRegion? get selectedRegion => _stateBoundaries.regionFor(_selectedState);
   GeoBounds? get selectedMapBounds =>
       selectedRegion?.bounds ?? _stateBoundaries.malaysiaBounds;
   AnalysisProfileDefinition get selectedAnalysisProfile =>
       AnalysisProfileConfig.definitionFor(_selectedState);
 
+  String? stateForStation(String stationId) => _stationStateById[stationId];
+
   List<ChargingStation> get selectedStations => _selectedStations;
+  List<PlannedChargingLocation> get selectedPlannedLocations =>
+      _selectedPlannedLocations;
   List<Proposal> get selectedProposals => _selectedProposals;
-  List<ChargingStation> get mapStations =>
-      _selectedState == malaysiaSelection ? const [] : _selectedStations;
+  List<Proposal> get myProposals => List<Proposal>.unmodifiable(
+        proposals.where(_repository.ownsProposal),
+      );
+  List<Proposal> get communityProposals => List<Proposal>.unmodifiable(
+        proposals.where((proposal) => !_repository.ownsProposal(proposal)),
+      );
+  Proposal? proposalById(String id) {
+    for (final proposal in proposals) {
+      if (proposal.id == id) return proposal;
+    }
+    return null;
+  }
+
+  // Existing-only source. MapPanel decides whether national consumers render
+  // these locations or replace them with Planning summary badges.
+  List<ChargingStation> get mapStations => _selectedStations;
   List<Proposal> get mapProposals =>
-      _selectedState == malaysiaSelection ? const [] : _selectedProposals;
+      _selectedState == malaysiaSelection ? const [] : _selectedMapProposals;
+  List<ChargingStation> get mapPlannedLocations =>
+      _selectedState == malaysiaSelection
+          ? const []
+          : _selectedPlannedMapLocations;
   List<GapArea> get mapPriorityAreas =>
       _selectedState == malaysiaSelection ? const [] : _priorityAreas;
 
   int get selectedStationCount => _selectedStations.length;
+  int get selectedInstalledChargerCount => _selectedStations.fold(
+        0,
+        (sum, station) => sum + (station.chargerCount ?? 0),
+      );
+  int get selectedAcChargerCount => _selectedStations.fold(
+        0,
+        (sum, station) => sum + (station.acChargerCount ?? 0),
+      );
+  int get selectedDcChargerCount => _selectedStations.fold(
+        0,
+        (sum, station) => sum + (station.dcChargerCount ?? 0),
+      );
+  int get selectedPlannedLocationCount => _selectedPlannedLocations.length;
+  int get selectedPlannedChargerCount => _selectedPlannedLocations.fold(
+        0,
+        (sum, location) => sum + location.proposedChargerCount,
+      );
+
+  PlannedInfrastructureContext plannedContextAt(
+    double latitude,
+    double longitude, {
+    double radiusKm = 25,
+  }) {
+    final cacheKey = '${latitude.toStringAsFixed(6)}|'
+        '${longitude.toStringAsFixed(6)}|${radiusKm.toStringAsFixed(3)}';
+    final cached = _plannedContextCache[cacheKey];
+    if (cached != null) return cached;
+    PlannedChargingLocation? nearest;
+    var nearestKm = double.infinity;
+    var nearbyCount = 0;
+    var nearbyChargers = 0;
+    for (final location in plannedLocations) {
+      final distance = _distanceKm(
+        latitude,
+        longitude,
+        location.latitude,
+        location.longitude,
+      );
+      if (distance < nearestKm) {
+        nearestKm = distance;
+        nearest = location;
+      }
+      if (distance <= radiusKm) {
+        nearbyCount++;
+        nearbyChargers += location.proposedChargerCount;
+      }
+    }
+    final result = PlannedInfrastructureContext(
+      nearestDistanceKm: nearest == null ? null : nearestKm,
+      nearbyLocationCount: nearbyCount,
+      nearbyProposedChargerCount: nearbyChargers,
+      radiusKm: radiusKm,
+      nearestLocation: nearest,
+    );
+    _plannedContextCache[cacheKey] = result;
+    return result;
+  }
+
   int get proposalCount => _selectedProposals.length;
   int get communitySupportCount => _selectedProposals.fold(
         0,
@@ -81,16 +192,16 @@ class PlanningViewModel extends ChangeNotifier {
   double get averageCoverageScore => _priorityAreas.isEmpty
       ? 0
       : _priorityAreas.fold<double>(
-              0,
-              (sum, area) => sum + area.coverageScore,
+            0,
+            (sum, area) => sum + area.coverageScore,
           ) /
           _priorityAreas.length;
   double get averageLocalStationLocationCount => _priorityAreas.isEmpty
       ? 0
       : _priorityAreas.fold<double>(
-              0,
-              (sum, area) => sum + area.localStationLocationCount,
-            ) /
+            0,
+            (sum, area) => sum + area.localStationLocationCount,
+          ) /
           _priorityAreas.length;
   bool get hasAnalysisForSelectedState =>
       _analysisByState.containsKey(_selectedState);
@@ -107,8 +218,7 @@ class PlanningViewModel extends ChangeNotifier {
     }
     final highAreas =
         _priorityAreas.where((area) => area.priority == 'High').toList();
-    final moreThanTenKm =
-        highAreas.where((area) => area.distance > 10).length;
+    final moreThanTenKm = highAreas.where((area) => area.distance > 10).length;
     if (highAreas.isNotEmpty && moreThanTenKm * 2 >= highAreas.length) {
       return '$moreThanTenKm of ${highAreas.length} high-priority areas '
           'are more than 10 km from an existing charging station.';
@@ -122,6 +232,7 @@ class PlanningViewModel extends ChangeNotifier {
 
   @override
   void notifyListeners() {
+    if (_disposed) return;
     _notifyListenersCount++;
     debugPrint(
       'PlanningViewModel notifyListeners: '
@@ -132,10 +243,16 @@ class PlanningViewModel extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (_loadInProgress) return;
+    _loadInProgress = true;
     final initializationStopwatch = Stopwatch()..start();
+    final homeReadyStopwatch = Stopwatch()..start();
     final generation = ++_loadGeneration;
     _analysisGeneration++;
-    loading = true;
+    loading = stations.isEmpty;
+    homeInfrastructureReady = stations.isNotEmpty;
+    infrastructureRefreshing = true;
+    infrastructureWarningMessage = null;
     analyzingGaps = false;
     errorMessage = null;
     analysisErrorMessage = null;
@@ -143,73 +260,139 @@ class PlanningViewModel extends ChangeNotifier {
     lastAnalysisCacheHit = null;
     notifyListeners();
     try {
-      final stationResults = await Future.wait([
-        _repository.getStationCount(),
-        _repository.getStations(),
-        _stateBoundaries.load(),
-      ]);
-      if (generation != _loadGeneration) return;
+      final boundariesFuture = _stateBoundaries.load();
+      var homeReadyLogged = homeInfrastructureReady;
+      var initialCachedAnalysisStarted = false;
+      await for (final update in _repository.synchronizeInfrastructure()) {
+        if (generation != _loadGeneration) return;
+        if (_regions.isEmpty) _regions = await boundariesFuture;
+        if (generation != _loadGeneration) return;
 
-      stationCount = stationResults[0] as int;
-      final loadedStations = stationResults[1] as List<ChargingStation>;
-      _regions = stationResults[2] as List<StateRegion>;
-      final stationDataChanged = !_sameStationData(stations, loadedStations);
-      var analysisCacheInvalidated = false;
-      if (stationDataChanged) {
-        _repository.invalidateStationDataCaches();
-        stations = loadedStations;
-        _analysisByState.clear();
-        _priorityAreas = const [];
-        analysisCacheInvalidated = true;
-        debugPrint(
-          'PlanningViewModel cleared state-analysis cache because the '
-          'complete station dataset changed.',
+        final snapshot = update.snapshot;
+        final dataChanged =
+            snapshot == null ? false : _applyInfrastructureSnapshot(snapshot);
+        switch (update.phase) {
+          case InfrastructureLoadPhase.cacheReady:
+            usingCachedInfrastructure = true;
+            infrastructureCachedAt = snapshot?.cachedAt;
+            break;
+          case InfrastructureLoadPhase.remoteExistingReady:
+            break;
+          case InfrastructureLoadPhase.remoteFresh:
+            usingCachedInfrastructure = false;
+            infrastructureCachedAt = snapshot?.cachedAt;
+            infrastructureRefreshing = false;
+            infrastructureWarningMessage = null;
+            break;
+          case InfrastructureLoadPhase.remoteFailed:
+            infrastructureRefreshing = false;
+            if (update.hasUsableInfrastructure) {
+              infrastructureWarningMessage = usingCachedInfrastructure
+                  ? 'Showing saved infrastructure data. Some information may '
+                      'not be up to date.'
+                  : 'Fresh infrastructure data could not be fully loaded. '
+                      'Previously available data remains visible.';
+            } else {
+              throw update.error ??
+                  StateError('No charging infrastructure is available.');
+            }
+            break;
+        }
+
+        if (stations.isNotEmpty) {
+          homeInfrastructureReady = true;
+          loading = false;
+          if (!homeReadyLogged) {
+            homeReadyLogged = true;
+            homeReadyStopwatch.stop();
+            debugPrint(
+              'Home infrastructure ready: existing=${stations.length}, '
+              'source=${usingCachedInfrastructure ? 'sqlite-cache' : 'supabase'}, '
+              'duration=${homeReadyStopwatch.elapsedMilliseconds}ms, '
+              'planningInitializationContinues=true.',
+            );
+          }
+        }
+        if (dataChanged ||
+            update.phase == InfrastructureLoadPhase.cacheReady ||
+            update.phase == InfrastructureLoadPhase.remoteFresh ||
+            update.phase == InfrastructureLoadPhase.remoteFailed) {
+          notifyListeners();
+        }
+        if (!initialCachedAnalysisStarted &&
+            homeInfrastructureReady &&
+            _priorityAreas.isEmpty) {
+          initialCachedAnalysisStarted = true;
+          // Coverage analysis is local and Existing-only, so cached physical
+          // locations are safe to analyze while Supabase revalidates them.
+          unawaited(runSelectedStateAnalysis());
+        }
+      }
+      if (generation != _loadGeneration) return;
+      if (stations.isEmpty) {
+        throw StateError('No valid Existing charging locations were loaded.');
+      }
+
+      final proposalUserId = _repository.authenticatedUserId;
+      final proposalFetchGeneration = ++_proposalFetchGeneration;
+      try {
+        final loadedProposals = await _repository.getProposals(
+          stations,
+          authenticatedUserId: proposalUserId,
         );
+        if (generation != _loadGeneration) return;
+        if (proposalFetchGeneration == _proposalFetchGeneration) {
+          _proposalContextUserId = proposalUserId;
+          if (!_sameProposalData(proposals, loadedProposals) ||
+              _proposalCountByState.isEmpty) {
+            proposals = loadedProposals;
+            _cacheProposalStates();
+          }
+          _applySelectedStateFilters();
+        }
+      } catch (error, stackTrace) {
+        if (generation != _loadGeneration) return;
+        infrastructureWarningMessage ??=
+            'Infrastructure is available, but proposal activity could not be '
+            'refreshed.';
+        debugPrint(
+            'Proposal refresh failed without hiding infrastructure: $error');
+        debugPrintStack(stackTrace: stackTrace);
       }
-      final rebuildStateCache =
-          stationDataChanged || _stateOverviewSummaries.isEmpty;
-      if (rebuildStateCache) {
-        _cacheStationStates();
+      final currentUserId = _repository.authenticatedUserId;
+      if (currentUserId != _proposalContextUserId) {
+        unawaited(_refreshProposalsAfterAuthChange(currentUserId));
       }
-      final stationFingerprint =
-          _repository.prepareStationFingerprint(stations);
-      debugPrint(
-        'Station refresh audit: stationRowsFetched=${stations.length}, '
-        'stationFingerprint=$stationFingerprint, '
-        'stateCacheRebuilt=$rebuildStateCache, '
-        'analysisCacheInvalidated=$analysisCacheInvalidated, '
-        'markerCacheInvalidated=$stationDataChanged.',
-      );
-      _applySelectedStateFilters();
-
-      final loadedProposals = await _repository.getProposals(stations);
-      if (generation != _loadGeneration) return;
-      if (!_sameProposalData(proposals, loadedProposals) ||
-          _proposalCountByState.isEmpty) {
-        proposals = loadedProposals;
-        _cacheProposalStates();
-      }
-      _applySelectedStateFilters();
 
       analyzingGaps = true;
       analysisStatusMessage =
           'Analyzing $_selectedState infrastructure coverage…';
-      final areas = await _repository.getGaps(
-        stations,
-        selectedState: _selectedState,
-        stationCountsByState: _stationCountByState,
-      );
-      if (generation != _loadGeneration) return;
-      _analysisByState[_selectedState] = areas;
-      _priorityAreas = areas;
-      analysisStatusMessage = _analysisReadyMessage(_selectedState, areas);
-      lastAnalysisCacheHit = false;
-      _rebuildStateOverviewSummaries();
-      debugPrint(
-        'PlanningViewModel state analysis stored: '
-        'instance=${identityHashCode(this)}, state=$_selectedState, '
-        'stationCount=${stations.length}, resultCount=${areas.length}.',
-      );
+      try {
+        final areas = await _repository.getGaps(
+          stations,
+          selectedState: _selectedState,
+          stationCountsByState: _stationCountByState,
+        );
+        if (generation != _loadGeneration) return;
+        _analysisByState[_selectedState] = areas;
+        _priorityAreas = areas;
+        analysisStatusMessage = _analysisReadyMessage(_selectedState, areas);
+        lastAnalysisCacheHit = false;
+        _rebuildStateOverviewSummaries();
+        debugPrint(
+          'PlanningViewModel state analysis stored: '
+          'instance=${identityHashCode(this)}, state=$_selectedState, '
+          'stationCount=${stations.length}, resultCount=${areas.length}.',
+        );
+      } catch (error, stackTrace) {
+        if (generation != _loadGeneration) return;
+        analysisErrorMessage =
+            'Infrastructure is available, but coverage analysis could not be '
+            'completed. Retry.';
+        analysisStatusMessage = analysisErrorMessage;
+        debugPrint('Initial coverage analysis failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
     } catch (error, stackTrace) {
       if (generation != _loadGeneration) return;
       errorMessage =
@@ -222,6 +405,8 @@ class PlanningViewModel extends ChangeNotifier {
       debugPrintStack(stackTrace: stackTrace);
     }
     if (generation != _loadGeneration) return;
+    _loadInProgress = false;
+    infrastructureRefreshing = false;
     analyzingGaps = false;
     loading = false;
     notifyListeners();
@@ -232,6 +417,60 @@ class PlanningViewModel extends ChangeNotifier {
       'stations=${stations.length}, proposals=${proposals.length}, '
       'selectedState=$_selectedState, priorityAreas=${_priorityAreas.length}.',
     );
+  }
+
+  bool _applyInfrastructureSnapshot(InfrastructureCacheSnapshot snapshot) {
+    final loadedStations = List<ChargingStation>.unmodifiable(
+      snapshot.existingStations,
+    );
+    final loadedPlannedRows = List<ChargingStation>.unmodifiable(
+      snapshot.proposedStations,
+    );
+    final loadedPlanned = List<PlannedChargingLocation>.unmodifiable(
+      loadedPlannedRows.map(PlannedChargingLocation.fromStation),
+    );
+    stationCount = loadedStations.length;
+    final stationDataChanged = !_sameStationData(stations, loadedStations);
+    final stationSpatialDataChanged =
+        !_sameStationSpatialData(stations, loadedStations);
+    final plannedDataChanged =
+        !_samePlannedData(plannedLocations, loadedPlanned);
+    var analysisCacheInvalidated = false;
+    if (stationSpatialDataChanged) {
+      _analysisGeneration++;
+      _repository.invalidateStationDataCaches();
+      _analysisByState.clear();
+      _priorityAreas = const [];
+      analysisCacheInvalidated = true;
+      debugPrint(
+        'PlanningViewModel cleared state-analysis cache because the '
+        'complete Existing location dataset changed.',
+      );
+    }
+    if (stationDataChanged) stations = loadedStations;
+    if (plannedDataChanged || _plannedStateById.isEmpty) {
+      plannedLocations = loadedPlanned;
+      _plannedContextCache.clear();
+    }
+    allMevnetLocations = snapshot.stations;
+
+    final rebuildStationStateCache =
+        stationDataChanged || _stateOverviewSummaries.isEmpty;
+    if (rebuildStationStateCache) _cacheStationStates();
+    if (plannedDataChanged || _plannedStateById.isEmpty) {
+      _cachePlannedStates();
+    }
+    _applySelectedStateFilters();
+    final stationFingerprint = _repository.prepareStationFingerprint(stations);
+    debugPrint(
+      'Infrastructure snapshot applied: total=${snapshot.stations.length}, '
+      'existing=${loadedStations.length}, planned=${loadedPlanned.length}, '
+      'stationFingerprint=$stationFingerprint, '
+      'stateCacheRebuilt=$rebuildStationStateCache, '
+      'analysisCacheInvalidated=$analysisCacheInvalidated, '
+      'markerCacheInvalidated=$stationDataChanged.',
+    );
+    return stationDataChanged || plannedDataChanged;
   }
 
   Future<void> selectState(
@@ -361,8 +600,7 @@ class PlanningViewModel extends ChangeNotifier {
           requestedState != _selectedState) {
         return;
       }
-      analysisErrorMessage =
-          'Unable to analyze $requestedState. Retry.';
+      analysisErrorMessage = 'Unable to analyze $requestedState. Retry.';
       analysisStatusMessage = analysisErrorMessage;
       analysisStopwatch.stop();
       debugPrint(
@@ -383,6 +621,11 @@ class PlanningViewModel extends ChangeNotifier {
   Future<void> retrySelectedStateAnalysis() =>
       runSelectedStateAnalysis(force: true);
 
+  /// Debug/support hook only. Infrastructure is public shared data, so logout
+  /// does not clear this cache automatically.
+  Future<void> clearInfrastructureCache() =>
+      _repository.clearInfrastructureCache();
+
   String _analysisReadyMessage(String state, List<GapArea> areas) =>
       areas.isEmpty
           ? 'No qualifying infrastructure gaps were detected in $state.'
@@ -391,6 +634,15 @@ class PlanningViewModel extends ChangeNotifier {
   void _cacheStationStates() {
     final assignments = <String, String?>{};
     final counts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final installedChargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final acChargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final dcChargerCounts = <String, int>{
       for (final region in _regions) region.name: 0,
     };
     var unassigned = 0;
@@ -406,10 +658,20 @@ class PlanningViewModel extends ChangeNotifier {
         unassignedStations.add(station);
       } else {
         counts[state] = (counts[state] ?? 0) + 1;
+        installedChargerCounts[state] =
+            (installedChargerCounts[state] ?? 0) + (station.chargerCount ?? 0);
+        acChargerCounts[state] =
+            (acChargerCounts[state] ?? 0) + (station.acChargerCount ?? 0);
+        dcChargerCounts[state] =
+            (dcChargerCounts[state] ?? 0) + (station.dcChargerCount ?? 0);
       }
     }
     _stationStateById = Map<String, String?>.unmodifiable(assignments);
     _stationCountByState = Map<String, int>.unmodifiable(counts);
+    _installedChargerCountByState =
+        Map<String, int>.unmodifiable(installedChargerCounts);
+    _acChargerCountByState = Map<String, int>.unmodifiable(acChargerCounts);
+    _dcChargerCountByState = Map<String, int>.unmodifiable(dcChargerCounts);
     _rebuildStateOverviewSummaries();
     final sortedCounts = Map<String, int>.fromEntries(
       counts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
@@ -469,6 +731,43 @@ class PlanningViewModel extends ChangeNotifier {
     );
   }
 
+  void _cachePlannedStates() {
+    final assignments = <String, String?>{};
+    final locationCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    final chargerCounts = <String, int>{
+      for (final region in _regions) region.name: 0,
+    };
+    var unassigned = 0;
+    var sourceStateDifferences = 0;
+    for (final location in plannedLocations) {
+      final state = _stateBoundaries.stateFor(
+        location.latitude,
+        location.longitude,
+      );
+      assignments[location.id] = state;
+      if (state == null) {
+        unassigned++;
+      } else {
+        locationCounts[state] = (locationCounts[state] ?? 0) + 1;
+        chargerCounts[state] =
+            (chargerCounts[state] ?? 0) + location.proposedChargerCount;
+        if (location.state != null && location.state != state) {
+          sourceStateDifferences++;
+        }
+      }
+    }
+    _plannedStateById = Map.unmodifiable(assignments);
+    _plannedLocationCountByState = Map.unmodifiable(locationCounts);
+    _plannedChargerCountByState = Map.unmodifiable(chargerCounts);
+    _rebuildStateOverviewSummaries();
+    debugPrint('MEVnet proposed state reconciliation: '
+        'total=${plannedLocations.length}, assigned='
+        '${plannedLocations.length - unassigned}, unassigned=$unassigned, '
+        'sourceVsGeoJsonDifferences=$sourceStateDifferences.');
+  }
+
   void _rebuildStateOverviewSummaries() {
     _stateOverviewSummaries = List<StateOverviewSummary>.unmodifiable([
       for (final region in _regions)
@@ -476,7 +775,15 @@ class PlanningViewModel extends ChangeNotifier {
           name: region.name,
           labelPoint: region.labelPoint,
           existingStationCount: _stationCountByState[region.name] ?? 0,
+          installedChargerCount:
+              _installedChargerCountByState[region.name] ?? 0,
+          acChargerCount: _acChargerCountByState[region.name] ?? 0,
+          dcChargerCount: _dcChargerCountByState[region.name] ?? 0,
           proposedStationCount: _proposalCountByState[region.name] ?? 0,
+          mevnetProposedLocationCount:
+              _plannedLocationCountByState[region.name] ?? 0,
+          mevnetProposedChargerCount:
+              _plannedChargerCountByState[region.name] ?? 0,
           priorityAreaCount: _analysisByState[region.name]?.length,
         ),
     ]);
@@ -490,7 +797,12 @@ class PlanningViewModel extends ChangeNotifier {
   void _applySelectedStateFilters() {
     if (_selectedState == malaysiaSelection) {
       _selectedStations = stations;
+      _selectedPlannedLocations = plannedLocations;
+      _selectedPlannedMapLocations = List.unmodifiable(
+        plannedLocations.map((item) => item.mapLocation),
+      );
       _selectedProposals = proposals;
+      _selectedMapProposals = const [];
       return;
     }
     _selectedStations = List<ChargingStation>.unmodifiable(
@@ -498,16 +810,26 @@ class PlanningViewModel extends ChangeNotifier {
         (station) => _stationStateById[station.id] == _selectedState,
       ),
     );
+    _selectedPlannedLocations = List<PlannedChargingLocation>.unmodifiable(
+      plannedLocations.where(
+        (location) => _plannedStateById[location.id] == _selectedState,
+      ),
+    );
+    _selectedPlannedMapLocations = List.unmodifiable(
+      _selectedPlannedLocations.map((item) => item.mapLocation),
+    );
     _selectedProposals = List<Proposal>.unmodifiable(
       proposals.where(
         (proposal) => _proposalStateById[proposal.id] == _selectedState,
       ),
     );
+    _selectedMapProposals = List<Proposal>.unmodifiable(
+      _selectedProposals.where((proposal) => !proposal.isRejected),
+    );
   }
 
   void _logSelectedStateConsistency({required String source}) {
-    final high =
-        _priorityAreas.where((area) => area.priority == 'High').length;
+    final high = _priorityAreas.where((area) => area.priority == 'High').length;
     final medium =
         _priorityAreas.where((area) => area.priority == 'Medium').length;
     final low = _priorityAreas.where((area) => area.priority == 'Low').length;
@@ -521,50 +843,159 @@ class PlanningViewModel extends ChangeNotifier {
     );
   }
 
-  Future<void> react(Proposal proposal, bool like) async {
-    if (proposal.reaction == 0) {
-      await _repository.reactToProposal(proposal, like);
-      proposal.reaction = like ? 1 : -1;
-      notifyListeners();
-    }
+  Future<void> setReaction(
+    Proposal proposal,
+    ProposalReaction? reaction,
+  ) async {
+    await _repository.setProposalReaction(proposal, reaction);
+    _replaceProposalLocally(proposal.withReaction(reaction));
+    await _refreshAfterPersistedMutation('reaction update');
   }
 
-  String recommendation(Proposal proposal) =>
-      proposal.demand == 'High' &&
-              proposal.distance > 5 &&
-              proposal.displayedSupports > 30
-          ? 'Suitable Location'
-          : 'Needs Further Review';
+  bool ownsProposal(Proposal proposal) => _repository.ownsProposal(proposal);
+  bool canOwnerEdit(Proposal proposal) =>
+      ownsProposal(proposal) && proposal.canOwnerEdit;
+  bool canOwnerDelete(Proposal proposal) =>
+      ownsProposal(proposal) && proposal.canOwnerDelete;
 
   Future<void> setStatus(Proposal proposal, String status) async {
     await _repository.updateStatus(proposal.id, status);
     proposal.status = status;
     notifyListeners();
+    await _refreshAfterPersistedMutation('status update');
   }
 
-  Future<void> submitProposal(Proposal proposal) async {
-    await _repository.submitProposal(proposal);
-    await _refreshProposals();
+  Future<String> submitProposal(Proposal proposal) async {
+    final proposalId = await _repository.submitProposal(proposal);
+    await _refreshAfterPersistedMutation(
+      'creation (proposalId=$proposalId)',
+    );
+    return proposalId;
   }
 
   Future<void> updateProposal(Proposal proposal) async {
     await _repository.updateProposal(proposal);
-    await _refreshProposals();
+    _replaceProposalLocally(proposal);
+    await _refreshAfterPersistedMutation('edit');
   }
 
-  Future<void> deleteProposal(String proposalId) async {
-    await _repository.deleteProposal(proposalId);
-    await _refreshProposals();
+  Future<void> uploadProposalPhoto({
+    required String proposalId,
+    required ProposalPhotoUpload upload,
+    String? previousPath,
+  }) async {
+    final path = await _repository.uploadProposalPhoto(
+      proposalId: proposalId,
+      upload: upload,
+      previousPath: previousPath,
+    );
+    final proposal = proposalById(proposalId);
+    if (proposal != null) {
+      _replaceProposalLocally(proposal.withSitePhotoPath(path));
+    }
+    await _refreshAfterPersistedMutation('photo upload');
+  }
+
+  Future<void> removeProposalPhoto({
+    required String proposalId,
+    required String path,
+  }) async {
+    await _repository.removeProposalPhoto(
+      proposalId: proposalId,
+      path: path,
+    );
+    final proposal = proposalById(proposalId);
+    if (proposal != null) {
+      _replaceProposalLocally(proposal.withSitePhotoPath(null));
+    }
+    await _refreshAfterPersistedMutation('photo removal');
+  }
+
+  Future<void> deleteProposal(Proposal proposal) async {
+    await _repository.deleteProposal(proposal);
+    proposals = List<Proposal>.unmodifiable(
+      proposals.where((item) => item.id != proposal.id),
+    );
+    _cacheProposalStates();
+    _applySelectedStateFilters();
+    notifyListeners();
+    await _refreshAfterPersistedMutation('deletion');
+  }
+
+  void _replaceProposalLocally(Proposal proposal) {
+    final index = proposals.indexWhere((item) => item.id == proposal.id);
+    if (index < 0) return;
+    final updated = List<Proposal>.of(proposals)..[index] = proposal;
+    proposals = List<Proposal>.unmodifiable(updated);
+    _cacheProposalStates();
+    _applySelectedStateFilters();
+    notifyListeners();
+  }
+
+  Future<void> _refreshAfterPersistedMutation(String operation) async {
+    try {
+      await _refreshProposals();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal $operation persisted, but the follow-up refresh failed: '
+          'error=$error. Local state remains updated and the shared '
+          'collection will reconcile on the next refresh.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    }
   }
 
   Future<void> _refreshProposals() async {
-    final loadedProposals = await _repository.getProposals(stations);
-    if (!_sameProposalData(proposals, loadedProposals)) {
+    await _refreshProposalsForUser(_repository.authenticatedUserId);
+  }
+
+  void _handleAuthenticatedUserChanged(String? userId) {
+    if (_disposed || stations.isEmpty || userId == _proposalContextUserId) {
+      return;
+    }
+    unawaited(_refreshProposalsAfterAuthChange(userId));
+  }
+
+  Future<void> _refreshProposalsAfterAuthChange(String? userId) async {
+    try {
+      await _refreshProposalsForUser(userId);
+    } catch (_) {
+      // The detailed, sanitized failure is logged by the shared refresh path.
+      // Infrastructure remains usable and the next authenticated refresh can
+      // reconcile the user's reaction selection.
+    }
+  }
+
+  Future<void> _refreshProposalsForUser(String? userId) async {
+    final generation = ++_proposalFetchGeneration;
+    try {
+      final loadedProposals = await _repository.getProposals(
+        stations,
+        authenticatedUserId: userId,
+      );
+      if (_disposed ||
+          generation != _proposalFetchGeneration ||
+          userId != _repository.authenticatedUserId) {
+        return;
+      }
+      _proposalContextUserId = userId;
+      if (_sameProposalData(proposals, loadedProposals)) return;
       proposals = loadedProposals;
       _cacheProposalStates();
+      _applySelectedStateFilters();
+      notifyListeners();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint(
+          'Proposal refresh failed for the current authenticated context: '
+          'error=$error.',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      rethrow;
     }
-    _applySelectedStateFilters();
-    notifyListeners();
   }
 
   bool _sameStationData(
@@ -575,13 +1006,20 @@ class PlanningViewModel extends ChangeNotifier {
     for (var index = 0; index < current.length; index++) {
       final a = current[index];
       final b = incoming[index];
-      if (a.id != b.id ||
-          a.latitude != b.latitude ||
-          a.longitude != b.longitude ||
-          a.name != b.name ||
-          a.chargerType != b.chargerType) {
-        return false;
-      }
+      if (!a.hasSameRuntimeDataAs(b)) return false;
+    }
+    return true;
+  }
+
+  bool _sameStationSpatialData(
+    List<ChargingStation> current,
+    List<ChargingStation> incoming,
+  ) {
+    if (current.length != incoming.length) return false;
+    for (var index = 0; index < current.length; index++) {
+      final a = current[index];
+      final b = incoming[index];
+      if (!a.hasSameSpatialIdentityAs(b)) return false;
     }
     return true;
   }
@@ -601,19 +1039,62 @@ class PlanningViewModel extends ChangeNotifier {
           a.area != b.area ||
           a.charger != b.charger ||
           a.demand != b.demand ||
+          a.distance != b.distance ||
           a.supports != b.supports ||
-          a.reaction != b.reaction ||
-          a.reactionIncludedInSupports != b.reactionIncludedInSupports ||
+          a.opposes != b.opposes ||
+          a.currentUserReaction != b.currentUserReaction ||
           a.locationLabel != b.locationLabel ||
           a.state != b.state ||
           a.nearestTown != b.nearestTown ||
           a.createdAt != b.createdAt ||
           a.createdBy != b.createdBy ||
+          a.ownerUserId != b.ownerUserId ||
+          a.sitePhotoPath != b.sitePhotoPath ||
           a.latitude != b.latitude ||
           a.longitude != b.longitude) {
         return false;
       }
     }
     return true;
+  }
+
+  bool _samePlannedData(
+    List<PlannedChargingLocation> current,
+    List<PlannedChargingLocation> incoming,
+  ) {
+    if (current.length != incoming.length) return false;
+    for (var index = 0; index < current.length; index++) {
+      final a = current[index];
+      final b = incoming[index];
+      if (!a.hasSameRuntimeDataAs(b)) return false;
+    }
+    return true;
+  }
+
+  static double _distanceKm(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const earthRadiusKm = 6371.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLon = (lon2 - lon1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) *
+            math.cos(lat2 * math.pi / 180) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    return earthRadiusKm * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _loadGeneration++;
+    _analysisGeneration++;
+    _proposalFetchGeneration++;
+    _authSubscription?.cancel();
+    super.dispose();
   }
 }

@@ -1,0 +1,49 @@
+\set ON_ERROR_STOP on
+
+-- REVIEW ONLY: this file has not been executed. It changes only the dedicated
+-- MEVnet staging table and never touches public.charging_stations.
+begin;
+
+truncate table public.charging_stations_mevnet_staging;
+
+\copy public.charging_stations_mevnet_staging (
+  station_id,
+  station_name,
+  address,
+  latitude,
+  longitude,
+  charger_type,
+  charger_count,
+  ac_charger_count,
+  dc_charger_count,
+  status,
+  indoor_outdoor,
+  source,
+  mevnet_object_id,
+  source_url,
+  data_date,
+  source_data_date_original,
+  state,
+  state_original,
+  pbt,
+  pbt_code,
+  location,
+  proposed_charger_count,
+  category,
+  indoor_count,
+  outdoor_count,
+  network_counts,
+  coordinate_valid,
+  include_for_existing_coverage
+) from 'tools/mevnet/staging/mevnet_staging.csv' with (format csv, header true);
+
+commit;
+
+select status, count(*)
+from public.charging_stations_mevnet_staging
+group by status
+order by status;
+
+select count(*) as existing_locations_ready_for_coverage
+from public.charging_stations_mevnet_staging
+where include_for_existing_coverage;

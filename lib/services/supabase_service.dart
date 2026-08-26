@@ -3,12 +3,21 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  final SupabaseClient client = Supabase.instance.client;
-
-  // Temporary identity until Supabase Auth is introduced.
+  /// Placeholder id used only as a defensive fallback when a feedback screen
+  /// somehow renders without a signed-in session (every such screen sits
+  /// behind `AuthGate`, so this should never actually be hit).
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
 
-  Future<List<Map<String, dynamic>>> getChargingStations() async {
+  final SupabaseClient client = Supabase.instance.client;
+
+  String? get authenticatedUserId => client.auth.currentUser?.id;
+
+  Stream<String?> get authenticatedUserChanges => client.auth.onAuthStateChange
+      .map((state) => state.session?.user.id)
+      .distinct();
+
+  Future<List<Map<String, dynamic>>> getChargingStations(
+      {String? status}) async {
     const pageSize = 1000;
     final stations = <Map<String, dynamic>>[];
     var offset = 0;
@@ -20,9 +29,15 @@ class SupabaseService {
     while (true) {
       pageNumber++;
       final pageStopwatch = Stopwatch()..start();
-      final page = await client
-          .from('charging_stations')
-          .select('station_id, station_name, latitude, longitude, charger_type')
+      final query = client.from('charging_stations').select(
+            'station_id, station_name, latitude, longitude, charger_type, '
+            'address, charger_count, ac_charger_count, dc_charger_count, '
+            'proposed_charger_count, state, pbt, category, status, '
+            'indoor_outdoor, mevnet_object_id, source, source_url, data_date, '
+            'imported_at',
+          );
+      final filteredQuery = status == null ? query : query.eq('status', status);
+      final page = await filteredQuery
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
       pageStopwatch.stop();
@@ -36,7 +51,8 @@ class SupabaseService {
       stations.addAll(rows);
       debugPrint(
         'Supabase station pagination: page=$pageNumber, '
-        'rows=${rows.length}, duration=${pageStopwatch.elapsedMilliseconds}ms.',
+        'status=${status ?? 'all'}, rows=${rows.length}, '
+        'duration=${pageStopwatch.elapsedMilliseconds}ms.',
       );
       if (rows.length < pageSize) break;
       offset += pageSize;
@@ -44,7 +60,7 @@ class SupabaseService {
     totalStopwatch.stop();
     debugPrint(
       'Supabase station pagination complete: pages=$pageNumber, '
-      'rows=${stations.length}, sequential=true, '
+      'rows=${stations.length}, status=${status ?? 'all'}, sequential=true, '
       'uniqueStationIds=${seenStationIds.length}, '
       'duplicatePageRows=$duplicateRows, '
       'duration=${totalStopwatch.elapsedMilliseconds}ms.',
@@ -66,51 +82,94 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  Future<void> ensureMockUser() async {
-    // Once a real Supabase Auth session exists, requests run as the
-    // `authenticated` role and RLS only allows writing your own row, so
-    // this hardcoded placeholder upsert would be rejected. Only needed
-    // for pre-auth/anonymous testing.
-    if (client.auth.currentSession != null) return;
-    await client.from('users').upsert({
-      'id': mockUserId,
-      'full_name': 'ChargeWise Demo User',
-      'email': 'demo.user@chargewise.my',
-      'role': 'driver',
-    });
+  Future<String> ensureActingUser() async {
+    final userId = authenticatedUserId;
+    if (userId == null) {
+      throw const AuthException(
+        'Authentication is required for proposal operations.',
+      );
+    }
+    return userId;
   }
 
-  Future<void> addReaction(
-      {required String proposalId, required String reaction}) async {
-    await client.from('proposal_reactions').insert({
-      'proposal_id': proposalId,
-      'user_id': mockUserId,
-      'reaction': reaction,
-    });
+  Future<void> setProposalReaction({
+    required String proposalId,
+    required String? reaction,
+  }) async {
+    final userId = await ensureActingUser();
+    if (reaction == null) {
+      final deleted = await client
+          .from('proposal_reactions')
+          .delete()
+          .eq('proposal_id', proposalId)
+          .eq('user_id', userId)
+          .select('reaction')
+          .maybeSingle();
+      if (deleted == null) {
+        throw StateError('Proposal reaction was not removed.');
+      }
+      return;
+    }
+    final updated = await client
+        .from('proposal_reactions')
+        .upsert(
+          {
+            'proposal_id': proposalId,
+            'user_id': userId,
+            'reaction': reaction,
+          },
+          onConflict: 'proposal_id,user_id',
+        )
+        .select('reaction')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError('Proposal reaction was not saved.');
+    }
   }
 
   Future<void> updateProposalStatus(String proposalId, String status) async {
-    await client
+    final updated = await client
         .from('proposals')
-        .update({'status': status.toLowerCase().replaceAll(' ', '_')}).eq(
-            'proposal_id', proposalId);
+        .update({'status': status})
+        .eq('proposal_id', proposalId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError(
+        'Proposal status was not updated by the authenticated administrator.',
+      );
+    }
   }
 
   Future<void> updateProposal(
     String proposalId,
     Map<String, dynamic> values,
   ) async {
-    await client.from('proposals').update(values).eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    final updated = await client
+        .from('proposals')
+        .update(values)
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError('Proposal was not updated by its owner.');
+    }
   }
 
   Future<void> deleteProposal(String proposalId) async {
-    await client.from('proposals').delete().eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    final deleted = await client
+        .from('proposals')
+        .delete()
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (deleted == null) {
+      throw StateError('Proposal was not deleted by its owner.');
+    }
   }
 
   // --- Module 3: fault reports (driver-facing) ---------------------------
