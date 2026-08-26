@@ -1,0 +1,126 @@
+﻿{
+    "generated_at_utc":  "2026-08-21T13:02:21.5526239Z",
+    "source":  "MEVnet",
+    "source_url":  "https://gisdev.planmalaysia.gov.my/server/rest/services/Hosted/MEVnet_EVCB/FeatureServer/0",
+    "source_max_record_count":  1000,
+    "requested_page_size":  1000,
+    "pages_retrieved":  5,
+    "total_records":  4477,
+    "status_counts":  [
+                          {
+                              "status":  "Existing",
+                              "count":  1374
+                          },
+                          {
+                              "status":  "Newly Proposed",
+                              "count":  3103
+                          }
+                      ],
+    "state_counts":  [
+                         {
+                             "state":  "Johor",
+                             "total":  540,
+                             "existing":  136,
+                             "newly_proposed":  404
+                         },
+                         {
+                             "state":  "Kedah",
+                             "total":  213,
+                             "existing":  41,
+                             "newly_proposed":  172
+                         },
+                         {
+                             "state":  "Kelantan",
+                             "total":  130,
+                             "existing":  11,
+                             "newly_proposed":  119
+                         },
+                         {
+                             "state":  "Kuala Lumpur",
+                             "total":  577,
+                             "existing":  346,
+                             "newly_proposed":  231
+                         },
+                         {
+                             "state":  "Labuan",
+                             "total":  17,
+                             "existing":  0,
+                             "newly_proposed":  17
+                         },
+                         {
+                             "state":  "Melaka",
+                             "total":  112,
+                             "existing":  39,
+                             "newly_proposed":  73
+                         },
+                         {
+                             "state":  "Negeri Sembilan",
+                             "total":  155,
+                             "existing":  42,
+                             "newly_proposed":  113
+                         },
+                         {
+                             "state":  "Pahang",
+                             "total":  197,
+                             "existing":  53,
+                             "newly_proposed":  144
+                         },
+                         {
+                             "state":  "Penang",
+                             "total":  295,
+                             "existing":  135,
+                             "newly_proposed":  160
+                         },
+                         {
+                             "state":  "Perak",
+                             "total":  233,
+                             "existing":  62,
+                             "newly_proposed":  171
+                         },
+                         {
+                             "state":  "Perlis",
+                             "total":  22,
+                             "existing":  1,
+                             "newly_proposed":  21
+                         },
+                         {
+                             "state":  "Putrajaya",
+                             "total":  53,
+                             "existing":  12,
+                             "newly_proposed":  41
+                         },
+                         {
+                             "state":  "Sabah",
+                             "total":  195,
+                             "existing":  17,
+                             "newly_proposed":  178
+                         },
+                         {
+                             "state":  "Sarawak",
+                             "total":  262,
+                             "existing":  41,
+                             "newly_proposed":  221
+                         },
+                         {
+                             "state":  "Selangor",
+                             "total":  1334,
+                             "existing":  418,
+                             "newly_proposed":  916
+                         },
+                         {
+                             "state":  "Terengganu",
+                             "total":  142,
+                             "existing":  20,
+                             "newly_proposed":  122
+                         }
+                     ],
+    "valid_coordinate_records":  4474,
+    "missing_coordinate_records":  3,
+    "invalid_coordinate_records":  0,
+    "missing_name_records":  0,
+    "duplicate_coordinate_groups":  1,
+    "records_in_duplicate_coordinate_groups":  2,
+    "existing_location_records_for_coverage":  1374,
+    "existing_chargers_represented":  4161,
+    "proposed_chargers_represented":  11959
+}

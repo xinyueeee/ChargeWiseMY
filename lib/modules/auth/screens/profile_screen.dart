@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
+import '../../charging/screens/charging_screen.dart';
+import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../services/auth_service.dart';
 import '../widgets/profile_widgets.dart';
 import 'change_password_screen.dart';
 import 'edit_profile_screen.dart';
+import 'saved_stations_screen.dart';
 import 'vehicle_list_screen.dart';
 
 const _labelColor = Color(0xFF1F2937);
@@ -13,8 +17,18 @@ const _hintColor = Color(0xFF9AA5B1);
 const _primaryGreen = Color(0xFF00B894);
 
 const _monthNames = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 String _formatMemberSince(String? isoDate) {
@@ -97,7 +111,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       bottomNavigationBar: FloatingBottomNav(
         currentTab: 'Profile',
-        onPlanningTap: () => Navigator.of(context).pop(),
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
+        ),
+        onPlanningTap: () => _switchTo(
+          context,
+          const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
+        ),
       ),
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>?>(
@@ -354,6 +378,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 24),
                   const Text(
+                    'Saved Stations',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: _labelColor,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ProfileSectionCard(
+                    children: [
+                      ProfileActionRow(
+                        icon: Icons.favorite_border,
+                        title: 'Saved Stations',
+                        subtitle: 'View charging stations you\'ve saved.',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SavedStationsScreen(),
+                          ),
+                        ),
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
                     'Account',
                     style: TextStyle(
                       fontSize: 14,
@@ -433,6 +482,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
       ),
+    );
+  }
+
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
     );
   }
 }

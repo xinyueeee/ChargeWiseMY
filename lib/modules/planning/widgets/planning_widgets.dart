@@ -95,6 +95,48 @@ class PlanningLoadingState extends StatelessWidget {
       );
 }
 
+class InfrastructureDataNotice extends StatelessWidget {
+  const InfrastructureDataNotice({
+    super.key,
+    required this.message,
+  });
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        liveRegion: true,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8E8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFF0D89A)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.cloud_off_outlined,
+                size: 18,
+                color: Color(0xFF8A6414),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF684B0E),
+                        height: 1.3,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
 class PlanningErrorState extends StatelessWidget {
   const PlanningErrorState({
     super.key,
@@ -260,7 +302,10 @@ class AppCard extends StatelessWidget {
             ),
           ],
         ),
-        child: child,
+        // AppCard is frequently used with InkWell, ListTile and ExpansionTile.
+        // A transparent Material preserves this card's decoration while giving
+        // those descendants a valid ink-rendering ancestor.
+        child: Material(type: MaterialType.transparency, child: child),
       );
 }
 
@@ -322,6 +367,7 @@ class MapPanel extends StatefulWidget {
     this.stations = const [],
     this.proposals = const [],
     this.priorityAreas = const [],
+    this.selectedPriorityAreaId,
     this.stateRegions = const [],
     this.stateOverviews = const [],
     this.selectedState = malaysiaSelection,
@@ -332,12 +378,17 @@ class MapPanel extends StatefulWidget {
     this.mapPadding = const EdgeInsets.all(12),
     this.onTap,
     this.onStateSelected,
+    this.stationIconResolver,
+    this.onStationTap,
+    this.showNationalStateBadges = true,
+    this.showStationsInNationalView = false,
   });
   final double height;
   final bool gaps;
   final List<ChargingStation> stations;
   final List<Proposal> proposals;
   final List<GapArea> priorityAreas;
+  final String? selectedPriorityAreaId;
   final List<StateRegion> stateRegions;
   final List<StateOverviewSummary> stateOverviews;
   final String selectedState;
@@ -348,6 +399,24 @@ class MapPanel extends StatefulWidget {
   final EdgeInsets mapPadding;
   final ValueChanged<LatLng>? onTap;
   final StateSelectionCallback? onStateSelected;
+
+  /// Overrides the individual-station marker icon per station (e.g. to
+  /// color-code by charger type). Leave null to keep the default station
+  /// icon used by the national planning dashboard.
+  final BitmapDescriptor Function(ChargingStation station)? stationIconResolver;
+
+  /// Called when an individual station marker is tapped (e.g. to show a
+  /// details sheet). Leave null to keep the default info-window-only
+  /// behavior used by the national planning dashboard.
+  final ValueChanged<ChargingStation>? onStationTap;
+
+  /// Planning uses national MEVnet summary badges. Simpler consumer maps such
+  /// as Home can disable them while retaining tappable state polygons.
+  final bool showNationalStateBadges;
+
+  /// Home renders its Existing-only station source at Malaysia zoom. Planning
+  /// keeps the lighter national polygon-and-summary presentation.
+  final bool showStationsInNationalView;
 
   @override
   State<MapPanel> createState() => _MapPanelState();
@@ -402,8 +471,6 @@ class _MapPanelState extends State<MapPanel> {
   bool _visibleRefreshPending = false;
   bool _forceNextVisibleRefresh = false;
   int _stationDataGeneration = 0;
-  int _lastVisibleStationCount = 0;
-  int _lastSpatialBucketCount = 0;
   bool _preparingMarkers = true;
   bool _platformViewCreated = false;
   int _stateBadgeGeneration = 0;
@@ -471,29 +538,43 @@ class _MapPanelState extends State<MapPanel> {
     final selectionChanged = oldWidget.selectedState != widget.selectedState;
     final stateOverviewDataChanged =
         !identical(oldWidget.stateOverviews, widget.stateOverviews);
-    if (selectionChanged || stateOverviewDataChanged) {
+    final nationalBadgeModeChanged =
+        oldWidget.showNationalStateBadges != widget.showNationalStateBadges ||
+            oldWidget.showStationsInNationalView !=
+                widget.showStationsInNationalView;
+    if (selectionChanged ||
+        stateOverviewDataChanged ||
+        nationalBadgeModeChanged) {
       _stateBadgeGeneration++;
     }
     if (!identical(oldWidget.stateRegions, widget.stateRegions) ||
         selectionChanged) {
       _statePolygons = _buildStatePolygons();
     }
-    if (selectionChanged ||
-        oldWidget.focusBounds != widget.focusBounds) {
+    if (selectionChanged || oldWidget.focusBounds != widget.focusBounds) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _focusSelectedRegion(reason: 'state-selection-change');
       });
     }
     if (widget.gaps) {
       _markers = const {};
-      if (!identical(oldWidget.priorityAreas, widget.priorityAreas)) {
+      final selectedPriorityChanged =
+          oldWidget.selectedPriorityAreaId != widget.selectedPriorityAreaId;
+      if (!identical(oldWidget.priorityAreas, widget.priorityAreas) ||
+          selectedPriorityChanged) {
         _priorityCircles = _buildPriorityCircles();
+      }
+      if (selectedPriorityChanged) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _focusSelectedPriorityArea();
+        });
       }
       return;
     }
     _prepareOverlays(
       selectionChanged: selectionChanged,
       stateOverviewDataChanged: stateOverviewDataChanged,
+      nationalBadgeModeChanged: nationalBadgeModeChanged,
       stationDataChanged: !identical(oldWidget.stations, widget.stations),
       proposalDataChanged: !identical(oldWidget.proposals, widget.proposals),
       priorityDataChanged:
@@ -526,17 +607,26 @@ class _MapPanelState extends State<MapPanel> {
     bool force = false,
     bool selectionChanged = false,
     bool stateOverviewDataChanged = false,
+    bool nationalBadgeModeChanged = false,
     bool stationDataChanged = false,
     bool proposalDataChanged = false,
     bool priorityDataChanged = false,
   }) {
     if (_icons == null) return;
 
-    if (widget.selectedState == malaysiaSelection) {
+    if (widget.selectedState == malaysiaSelection &&
+        !widget.showStationsInNationalView) {
       _visibleStationMarkers = const {};
       _renderedProposalMarkers = const {};
       _priorityCircles = const {};
-      if (force || selectionChanged || stateOverviewDataChanged) {
+      if (!widget.showNationalStateBadges) {
+        _nationalStateMarkers = const {};
+        _markers = const {};
+        _preparingMarkers = false;
+      } else if (force ||
+          selectionChanged ||
+          stateOverviewDataChanged ||
+          nationalBadgeModeChanged) {
         _markers = const {};
         _requestNationalStateMarkers();
       }
@@ -576,6 +666,7 @@ class _MapPanelState extends State<MapPanel> {
     final icons = _icons;
     if (!mounted ||
         icons == null ||
+        !widget.showNationalStateBadges ||
         widget.selectedState != malaysiaSelection) {
       return;
     }
@@ -584,7 +675,12 @@ class _MapPanelState extends State<MapPanel> {
     _preparingMarkers = true;
     Future.wait([
       for (final summary in summaries)
-        icons.stateBadgeForCount(summary.existingStationCount).then(
+        icons
+            .stateBadgeForCount(
+              summary.existingStationCount +
+                  summary.mevnetProposedLocationCount,
+            )
+            .then(
               (icon) => Marker(
                 markerId: MarkerId('state_count_${summary.name}'),
                 position: LatLng(
@@ -596,8 +692,12 @@ class _MapPanelState extends State<MapPanel> {
                 zIndexInt: 5,
                 infoWindow: InfoWindow(
                   title: summary.name,
-                  snippet: '${summary.existingStationCount} existing stations · '
-                      '${summary.proposedStationCount} proposed\n'
+                  snippet:
+                      'Existing locations: ${summary.existingStationCount}\n'
+                      'Installed EVCB: ${summary.installedChargerCount}\n'
+                      'MEVnet Proposed locations: ${summary.mevnetProposedLocationCount}\n'
+                      'Proposed EVCB: ${summary.mevnetProposedChargerCount}\n'
+                      'Community proposals: ${summary.proposedStationCount}\n'
                       '${summary.priorityAreaCount == null ? 'Priority analysis not run' : '${summary.priorityAreaCount} priority areas'}\n'
                       'Tap to explore this state',
                 ),
@@ -655,12 +755,15 @@ class _MapPanelState extends State<MapPanel> {
         Marker(
           markerId: MarkerId('proposal_${proposal.id}'),
           position: LatLng(proposal.latitude!, proposal.longitude!),
-          icon: _icons!.proposal,
+          icon:
+              proposal.isApproved ? _icons!.approvedProposal : _icons!.proposal,
           infoWindow: InfoWindow(
             title: proposal.city,
-            snippet: proposal.state == null
-                ? 'Proposed station · ${proposal.status}'
-                : '${proposal.status} · ${proposal.state}',
+            snippet: 'Status: Community Proposal · ${proposal.status}\n'
+                'Expected Usage: ${proposal.demand} · '
+                'Support: ${proposal.supportCount} · '
+                'Not Support: ${proposal.opposeCount}'
+                '${proposal.state == null ? '' : '\n${proposal.state}'}',
           ),
         ),
       );
@@ -754,13 +857,14 @@ class _MapPanelState extends State<MapPanel> {
             _visibleStationMarkers.keys.toSet(),
           );
           _lastProcessedStationSource = stationSource;
-          _lastVisibleStationCount = selection.visibleBeforeLimit;
-          _lastSpatialBucketCount = selection.spatialBuckets;
 
           if (sourceUnchanged &&
               tierUnchanged &&
               markerIdsUnchanged &&
               !forceRefresh) {
+            if (_preparingMarkers && mounted) {
+              setState(() => _preparingMarkers = false);
+            }
             stopwatch.stop();
             _logVisibleMarkerUpdate(
               reason: refreshReason,
@@ -794,6 +898,7 @@ class _MapPanelState extends State<MapPanel> {
             _presentationTier = tier;
             _visibleStationMarkers = selection.markers;
             _markers = combinedMarkers;
+            _preparingMarkers = false;
           });
           stopwatch.stop();
           _logVisibleMarkerUpdate(
@@ -815,6 +920,13 @@ class _MapPanelState extends State<MapPanel> {
             'duration=${stopwatch.elapsedMilliseconds}ms, error=$error.',
           );
           debugPrintStack(stackTrace: stackTrace);
+          if (mounted && _preparingMarkers) {
+            setState(() {
+              _preparingMarkers = false;
+              _mapError =
+                  'Charging-location markers could not be prepared. Try moving the map.';
+            });
+          }
         }
       } while (_visibleRefreshPending && mounted);
     } finally {
@@ -918,9 +1030,7 @@ class _MapPanelState extends State<MapPanel> {
     if (limited.length > markerLimit) {
       limited.sort((a, b) {
         final countComparison = b.count.compareTo(a.count);
-        return countComparison != 0
-            ? countComparison
-            : a.key.compareTo(b.key);
+        return countComparison != 0 ? countComparison : a.key.compareTo(b.key);
       });
       limited.removeRange(markerLimit, limited.length);
     }
@@ -937,7 +1047,7 @@ class _MapPanelState extends State<MapPanel> {
           position: LatLng(aggregate.latitude, aggregate.longitude),
           icon: _icons!.aggregateForCount(aggregate.count),
           infoWindow: InfoWindow(
-            title: '${aggregate.count} existing stations',
+            title: '${aggregate.count} charging locations',
             snippet: tier == _StationPresentationTier.national
                 ? 'National overview'
                 : 'Regional overview',
@@ -970,14 +1080,12 @@ class _MapPanelState extends State<MapPanel> {
       }
     }
     final stableSample = _stableIndividualSample(visible, markerLimit);
-    final sourceUnchanged =
-        identical(_lastProcessedStationSource, stations);
+    final sourceUnchanged = identical(_lastProcessedStationSource, stations);
     final markers = <String, Marker>{};
     for (final station in stableSample.stations) {
       final markerKey = 'station_${station.id}';
       markers[markerKey] = sourceUnchanged
-          ? _visibleStationMarkers[markerKey] ??
-              _createStationMarker(station)
+          ? _visibleStationMarkers[markerKey] ?? _createStationMarker(station)
           : _createStationMarker(station);
     }
     return _RenderedStationSelection(
@@ -1002,8 +1110,7 @@ class _MapPanelState extends State<MapPanel> {
 
     var cellSize = .02;
     while (true) {
-      final representatives =
-          <String, _StationBucketRepresentative>{};
+      final representatives = <String, _StationBucketRepresentative>{};
       for (final station in visible) {
         final cell = _fixedGridCell(
           station.latitude,
@@ -1012,8 +1119,8 @@ class _MapPanelState extends State<MapPanel> {
         );
         final latitudeDelta = station.latitude - cell.centerLatitude;
         final longitudeDelta = station.longitude - cell.centerLongitude;
-        final distanceSquared = latitudeDelta * latitudeDelta +
-            longitudeDelta * longitudeDelta;
+        final distanceSquared =
+            latitudeDelta * latitudeDelta + longitudeDelta * longitudeDelta;
         final current = representatives[cell.key];
         if (current == null ||
             distanceSquared < current.distanceSquared ||
@@ -1054,13 +1161,23 @@ class _MapPanelState extends State<MapPanel> {
   }
 
   Marker _createStationMarker(ChargingStation station) => Marker(
-        markerId: MarkerId('station_${station.id}'),
+        markerId: MarkerId(station.status == 'MEVnet Proposed'
+            ? 'mevnet_proposed_${station.id}'
+            : 'station_${station.id}'),
         position: LatLng(station.latitude, station.longitude),
-        icon: _icons!.station,
-        clusterManagerId: _existingStationsClusterId,
+        icon: widget.stationIconResolver?.call(station) ??
+            (station.status == 'MEVnet Proposed'
+                ? _icons!.planned
+                : _icons!.station),
+        clusterManagerId: station.status == 'MEVnet Proposed'
+            ? null
+            : _existingStationsClusterId,
+        onTap: widget.onStationTap == null
+            ? null
+            : () => widget.onStationTap!(station),
         infoWindow: InfoWindow(
           title: station.name,
-          snippet: station.chargerType,
+          snippet: station.planningInfoWindowSnippet,
         ),
       );
 
@@ -1114,12 +1231,19 @@ class _MapPanelState extends State<MapPanel> {
         Marker(
           markerId: MarkerId('proposal_${proposal.id}'),
           position: LatLng(proposal.latitude!, proposal.longitude!),
-          icon: _icons!.proposal,
+          icon:
+              proposal.isApproved ? _icons!.approvedProposal : _icons!.proposal,
           infoWindow: InfoWindow(
             title: proposal.city,
             snippet: proposal.state == null
-                ? 'Proposed station · ${proposal.status}'
-                : '${proposal.status} · ${proposal.state}',
+                ? 'Status: Community Proposal · ${proposal.status}\n'
+                    'Expected Usage: ${proposal.demand} · '
+                    'Support: ${proposal.supportCount} · '
+                    'Not Support: ${proposal.opposeCount}'
+                : 'Status: Community Proposal · ${proposal.status}\n'
+                    'Expected Usage: ${proposal.demand} · '
+                    'Support: ${proposal.supportCount} · '
+                    'Not Support: ${proposal.opposeCount}\n${proposal.state}',
           ),
         ),
       );
@@ -1231,14 +1355,15 @@ class _MapPanelState extends State<MapPanel> {
           : area.priority == 'Medium'
               ? Colors.orange
               : Colors.green;
+      final selected = area.id == widget.selectedPriorityAreaId;
       circles.add(
         Circle(
           circleId: CircleId('priority_${area.id}'),
           center: LatLng(area.latitude!, area.longitude!),
-          radius: 4000,
-          fillColor: color.withValues(alpha: .16),
+          radius: selected ? 4800 : 4000,
+          fillColor: color.withValues(alpha: selected ? .28 : .16),
           strokeColor: color.withValues(alpha: .9),
-          strokeWidth: 2,
+          strokeWidth: selected ? 4 : 2,
         ),
       );
     }
@@ -1249,6 +1374,29 @@ class _MapPanelState extends State<MapPanel> {
       'invalid=$invalidCoordinates.',
     );
     return Set.unmodifiable(circles);
+  }
+
+  Future<void> _focusSelectedPriorityArea() async {
+    final controller = _mapController;
+    final selectedId = widget.selectedPriorityAreaId;
+    if (!mounted || controller == null || selectedId == null) return;
+    GapArea? selected;
+    for (final area in widget.priorityAreas) {
+      if (area.id == selectedId) {
+        selected = area;
+        break;
+      }
+    }
+    if (selected?.latitude == null || selected?.longitude == null) return;
+    try {
+      await controller.animateCamera(CameraUpdate.newLatLngZoom(
+        LatLng(selected!.latitude!, selected.longitude!),
+        11,
+      ));
+    } catch (error, stackTrace) {
+      debugPrint('Priority-area camera focus failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   void _handleMapCreated(GoogleMapController controller) {
@@ -1272,8 +1420,9 @@ class _MapPanelState extends State<MapPanel> {
         _requestVisibleStationRefresh(reason: 'map-created');
       });
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusSelectedRegion(reason: 'map-created');
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _focusSelectedRegion(reason: 'map-created');
+      if (widget.gaps) await _focusSelectedPriorityArea();
     });
   }
 
@@ -1284,14 +1433,12 @@ class _MapPanelState extends State<MapPanel> {
   @override
   Widget build(BuildContext c) {
     _buildCount++;
-    final markersPassedToGoogleMap =
-        widget.gaps ? const <Marker>{} : _markers;
+    final markersPassedToGoogleMap = widget.gaps ? const <Marker>{} : _markers;
     final usesStationClustering = !widget.gaps &&
         widget.stations.isNotEmpty &&
         _presentationTier == _StationPresentationTier.individual;
-    final clusterManagersPassedToGoogleMap = usesStationClustering
-        ? _clusterManagers
-        : const <ClusterManager>{};
+    final clusterManagersPassedToGoogleMap =
+        usesStationClustering ? _clusterManagers : const <ClusterManager>{};
     final clusterAssignedMarkerCount =
         usesStationClustering ? _visibleStationMarkers.length : 0;
     debugPrint(
@@ -1307,76 +1454,76 @@ class _MapPanelState extends State<MapPanel> {
       'createdGoogleMapViews=$_createdPlatformViewCount.',
     );
     return ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: SizedBox(
-          height: widget.height,
-          child: Stack(
-            children: [
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: widget.initialTarget,
-                  zoom: widget.initialZoom,
-                ),
-                gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                  Factory<OneSequenceGestureRecognizer>(
-                    () => EagerGestureRecognizer(),
-                  ),
-                },
-                zoomControlsEnabled: true,
-                myLocationButtonEnabled: false,
-                mapToolbarEnabled: false,
-                rotateGesturesEnabled: false,
-                tiltGesturesEnabled: false,
-                padding: widget.mapPadding,
-                onTap: widget.onTap,
-                markers: markersPassedToGoogleMap,
-                circles: _priorityCircles,
-                polygons: _statePolygons,
-                clusterManagers: clusterManagersPassedToGoogleMap,
-                onMapCreated: _handleMapCreated,
-                onCameraIdle: _handleCameraIdle,
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        height: widget.height,
+        child: Stack(
+          children: [
+            GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: widget.initialTarget,
+                zoom: widget.initialZoom,
               ),
-              if (_preparingMarkers)
-                Center(
-                  child: Semantics(
-                    label: 'Preparing map markers',
-                    child: CircularProgressIndicator.adaptive(),
-                  ),
+              gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                Factory<OneSequenceGestureRecognizer>(
+                  () => EagerGestureRecognizer(),
                 ),
-              if (_mapError != null)
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_outlined,
-                            color: Colors.orange,
-                            size: 20,
+              },
+              zoomControlsEnabled: true,
+              myLocationButtonEnabled: false,
+              mapToolbarEnabled: false,
+              rotateGesturesEnabled: false,
+              tiltGesturesEnabled: false,
+              padding: widget.mapPadding,
+              onTap: widget.onTap,
+              markers: markersPassedToGoogleMap,
+              circles: _priorityCircles,
+              polygons: _statePolygons,
+              clusterManagers: clusterManagersPassedToGoogleMap,
+              onMapCreated: _handleMapCreated,
+              onCameraIdle: _handleCameraIdle,
+            ),
+            if (_preparingMarkers)
+              Center(
+                child: Semantics(
+                  label: 'Preparing map markers',
+                  child: CircularProgressIndicator.adaptive(),
+                ),
+              ),
+            if (_mapError != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_outlined,
+                          color: Colors.orange,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _mapError!,
+                            style: const TextStyle(fontSize: 12),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _mapError!,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -1429,8 +1576,12 @@ class _PaddedMapBounds {
 
   static double _normalizeLongitude(double longitude) {
     var normalized = longitude;
-    while (normalized > 180) normalized -= 360;
-    while (normalized < -180) normalized += 360;
+    while (normalized > 180) {
+      normalized -= 360;
+    }
+    while (normalized < -180) {
+      normalized += 360;
+    }
     return normalized;
   }
 }
@@ -1545,6 +1696,8 @@ class _MarkerIcons {
   const _MarkerIcons({
     required this.station,
     required this.proposal,
+    required this.approvedProposal,
+    required this.planned,
     required this.aggregateBadges,
   });
 
@@ -1561,6 +1714,8 @@ class _MarkerIcons {
 
   final BitmapDescriptor station;
   final BitmapDescriptor proposal;
+  final BitmapDescriptor approvedProposal;
+  final BitmapDescriptor planned;
   final Map<int, BitmapDescriptor> aggregateBadges;
 
   static Future<_MarkerIcons>? _cache;
@@ -1606,8 +1761,13 @@ class _MarkerIcons {
         const ImageConfiguration(size: Size(32, 32)),
         'assets/icons/proposed_station.png',
       ),
-      aggregateBadges:
-          Map<int, BitmapDescriptor>.unmodifiable(aggregateBadges),
+      approvedProposal: BitmapDescriptor.defaultMarkerWithHue(
+        BitmapDescriptor.hueViolet,
+      ),
+      planned: BitmapDescriptor.defaultMarkerWithHue(
+        BitmapDescriptor.hueAzure,
+      ),
+      aggregateBadges: Map<int, BitmapDescriptor>.unmodifiable(aggregateBadges),
     );
     stopwatch.stop();
     debugPrint(
@@ -1752,11 +1912,11 @@ class StatusChip extends StatelessWidget {
   final String status;
   @override
   Widget build(BuildContext c) {
-    final color = status == 'Approved'
+    final color = status == Proposal.statusApproved
         ? green
-        : status == 'Rejected'
+        : status == Proposal.statusRejected
             ? Colors.red
-            : status == 'Pending'
+            : status == Proposal.statusPending
                 ? Colors.orange
                 : blue;
     return Semantics(
@@ -1843,7 +2003,8 @@ class ProposalCard extends StatelessWidget {
               children: [
                 _CompactInfo(
                   icon: Icons.group_outlined,
-                  label: '${proposal.displayedSupports} supports',
+                  label: '${proposal.supportCount} Support · '
+                      '${proposal.opposeCount} Not Support',
                   color: green,
                 ),
                 _CompactInfo(
@@ -1876,20 +2037,25 @@ class FloatingBottomNav extends StatelessWidget {
   const FloatingBottomNav({
     super.key,
     this.currentTab = 'Planning',
+    this.onHomeTap,
+    this.onChargingTap,
     this.onProfileTap,
     this.onPlanningTap,
   });
 
   final String currentTab;
 
-  /// Home/Charging/Feedback don't have screens yet, so they stay inert;
-  /// Planning and Profile become tappable once a caller opts in.
+  /// Feedback doesn't have a screen yet, so it stays inert;
+  /// Home, Charging, Planning and Profile become tappable once a caller
+  /// opts in.
+  final VoidCallback? onHomeTap;
+  final VoidCallback? onChargingTap;
   final VoidCallback? onProfileTap;
   final VoidCallback? onPlanningTap;
 
   @override
   Widget build(BuildContext c) => SafeArea(
-      child: Container(
+        child: Container(
           margin: const EdgeInsets.fromLTRB(16, 6, 16, 10),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
@@ -1903,17 +2069,23 @@ class FloatingBottomNav extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: _Nav(
-                  Icons.home_outlined,
-                  'Home',
-                  selected: currentTab == 'Home',
+                child: GestureDetector(
+                  onTap: onHomeTap,
+                  child: _Nav(
+                    Icons.home_outlined,
+                    'Home',
+                    selected: currentTab == 'Home',
+                  ),
                 ),
               ),
               Expanded(
-                child: _Nav(
-                  Icons.bolt_outlined,
-                  'Charging',
-                  selected: currentTab == 'Charging',
+                child: GestureDetector(
+                  onTap: onChargingTap,
+                  child: _Nav(
+                    Icons.bolt_outlined,
+                    'Charging',
+                    selected: currentTab == 'Charging',
+                  ),
                 ),
               ),
               Expanded(
