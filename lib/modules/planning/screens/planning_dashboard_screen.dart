@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/navigation/app_route_observer.dart';
+import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../charging/screens/charging_screen.dart';
+import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
 import '../services/state_boundary_service.dart';
@@ -22,6 +25,14 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
   PageRoute<dynamic>? _subscribedRoute;
   bool _mapMounted = true;
   bool _legendExpanded = false;
+  bool _showExisting = true;
+  bool _showMevnetProposed = true;
+  bool _showCommunityProposals = true;
+  List<ChargingStation>? _lastExistingMapSource;
+  List<ChargingStation>? _lastPlannedMapSource;
+  bool? _lastShowExisting;
+  bool? _lastShowPlanned;
+  List<ChargingStation> _cachedInfrastructureMapLocations = const [];
 
   @override
   void initState() {
@@ -36,8 +47,7 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
-    if (route is! PageRoute<dynamic> ||
-        identical(route, _subscribedRoute)) {
+    if (route is! PageRoute<dynamic> || identical(route, _subscribedRoute)) {
       return;
     }
     if (_subscribedRoute != null) {
@@ -92,277 +102,486 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                   message: 'Loading infrastructure planning data…',
                 )
               : SafeArea(
-                  child: ListView(
-                    padding: planningPagePadding,
-                    children: [
-                      PlanningSectionTitle(
-                        'Infrastructure Planning',
-                        subtitle:
-                            'Plan smarter. Build better. Power the future.',
-                        trailing: IconButton(
-                          tooltip: 'Refresh planning data',
-                          onPressed: vm.load,
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ),
-                      planningSectionGap,
-                      if (vm.errorMessage != null) ...[
-                        PlanningErrorState(
-                          message: vm.errorMessage!,
-                          onRetry: vm.load,
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text(
-                              'Planning region',
-                              style: TextStyle(
-                                color: planningTextColor,
-                                fontWeight: FontWeight.w700,
-                              ),
+                  child: OrientationBuilder(
+                    builder: (context, orientation) {
+                      final size = MediaQuery.sizeOf(context);
+                      final useSplitLayout = size.width >= 700 ||
+                          (orientation == Orientation.landscape &&
+                              size.width >= 540 &&
+                              size.height <= 620);
+                      if (useSplitLayout) {
+                        return _buildLandscapeDashboard(context, vm, size);
+                      }
+                      return ListView(
+                        padding: planningPagePadding,
+                        children: [
+                          PlanningSectionTitle(
+                            'Infrastructure Planning',
+                            subtitle:
+                                'Plan smarter. Build better. Power the future.',
+                            trailing: _buildRefreshControl(vm),
+                          ),
+                          planningSectionGap,
+                          if (vm.errorMessage != null) ...[
+                            PlanningErrorState(
+                              message: vm.errorMessage!,
+                              onRetry: vm.load,
                             ),
-                            const SizedBox(height: 10),
-                            DropdownButtonFormField<String>(
-                              value: vm.selectedState,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                prefixIcon: Icon(Icons.map_outlined),
-                                labelText: 'Malaysian state or territory',
-                                border: OutlineInputBorder(),
-                              ),
-                              items: [
-                                for (final state in vm.stateOptions)
-                                  DropdownMenuItem<String>(
-                                    value: state,
-                                    child: Text(
-                                      state,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                              ],
-                              onChanged: (state) {
-                                if (state != null) {
-                                  vm.selectState(
-                                    state,
-                                    source: 'dashboard-dropdown',
-                                  );
-                                }
-                              },
-                            ),
-                            if (vm.selectedState != malaysiaSelection) ...[
-                              const SizedBox(height: 10),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: InputChip(
-                                  avatar: const Icon(
-                                    Icons.location_on_outlined,
-                                    size: 17,
-                                    color: green,
-                                  ),
-                                  label: Text(vm.selectedState),
-                                  deleteIcon: const Icon(Icons.close, size: 17),
-                                  deleteButtonTooltipMessage:
-                                      'Return to Malaysia Overview',
-                                  onDeleted: () => vm.selectState(
-                                    malaysiaSelection,
-                                    source: 'state-chip-clear',
-                                  ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 10),
-                            AnalysisStatusPanel(
-                              message: vm.analysisStatusMessage ??
-                                  '${vm.selectedState} analysis ready',
-                              analyzing: vm.analyzingGaps,
-                              hasError: vm.analysisErrorMessage != null,
-                              onRetry: vm.analysisErrorMessage == null
-                                  ? null
-                                  : vm.retrySelectedStateAnalysis,
-                            ),
+                            const SizedBox(height: 16),
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      if (_mapMounted)
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            MapPanel(
-                              height: 300,
-                              stations: vm.mapStations,
-                              proposals: vm.mapProposals,
-                              priorityAreas: vm.mapPriorityAreas,
-                              stateRegions: vm.stateRegions,
-                              stateOverviews: vm.stateOverviewSummaries,
-                              selectedState: vm.selectedState,
-                              focusBounds: vm.selectedMapBounds,
-                              analysisCacheHit: vm.lastAnalysisCacheHit,
-                              onStateSelected: (state, source) => vm.selectState(
-                                state,
-                                source: source,
-                              ),
+                          if (vm.infrastructureWarningMessage != null) ...[
+                            InfrastructureDataNotice(
+                              message: vm.infrastructureWarningMessage!,
                             ),
-                            if (vm.selectedState != malaysiaSelection)
-                              Positioned(
-                                top: 10,
-                                left: 10,
-                                child: _CompactMapLegend(
-                                  expanded: _legendExpanded,
-                                  onToggle: () => setState(
-                                    () => _legendExpanded = !_legendExpanded,
-                                  ),
-                                ),
-                              ),
+                            const SizedBox(height: 16),
                           ],
-                        )
-                      else
-                        const SizedBox(height: 300),
-                      if (vm.selectedState == malaysiaSelection) ...[
-                        const SizedBox(height: 8),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.touch_app_outlined,
-                              size: 17,
-                              color: planningMutedTextColor,
+                          _buildPlanningRegionCard(vm),
+                          const SizedBox(height: 18),
+                          _buildMapExplorer(vm, height: 285),
+                          planningSectionGap,
+                          PlanningSectionTitle(
+                            'Infrastructure Summary',
+                            subtitle: vm.selectedState == malaysiaSelection
+                                ? 'Physical charging locations across Malaysia'
+                                : 'Physical charging locations in ${vm.selectedState}',
+                          ),
+                          const SizedBox(height: 12),
+                          _InfrastructureSummaryCard(
+                            locations: vm.selectedStationCount,
+                            chargers: vm.selectedInstalledChargerCount,
+                            acChargers: vm.selectedAcChargerCount,
+                            dcChargers: vm.selectedDcChargerCount,
+                            plannedLocations: vm.selectedPlannedLocationCount,
+                            plannedChargers: vm.selectedPlannedChargerCount,
+                          ),
+                          planningSectionGap,
+                          PlanningSectionTitle(
+                            'Planning Activity',
+                            subtitle: vm.selectedState == malaysiaSelection
+                                ? 'Proposal and coverage-gap work across Malaysia'
+                                : 'Proposal and coverage-gap work in ${vm.selectedState}',
+                          ),
+                          const SizedBox(height: 12),
+                          _PlanningActivityCard(
+                            pendingProposals: _proposalStatusCount(
+                              vm.selectedProposals,
+                              Proposal.statusPending,
                             ),
-                            SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Tap a state to explore its charging infrastructure',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: planningMutedTextColor,
-                                  fontSize: 12,
-                                ),
-                              ),
+                            approvedProposals: _proposalStatusCount(
+                              vm.selectedProposals,
+                              Proposal.statusApproved,
                             ),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: 18),
-                      PlanningSectionTitle(
-                        'Infrastructure Overview',
-                        subtitle: vm.selectedState == malaysiaSelection
-                            ? 'Current nationwide planning summary'
-                            : 'Current planning summary for ${vm.selectedState}',
-                      ),
-                      const SizedBox(height: 12),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final columns = constraints.maxWidth >= 700 ? 4 : 2;
-                          return GridView.count(
-                            crossAxisCount: columns,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                            childAspectRatio:
-                                constraints.maxWidth < 360 ? 1.05 : 1.22,
-                            children: [
-                            StatisticCard(
-                              value: '${vm.selectedStationCount}',
-                              label: 'Existing Stations',
-                              icon: Icons.bolt,
-                              color: green,
-                              width: double.infinity,
+                            highPriorityAreas: vm.highPriorityAreaCount,
+                          ),
+                          planningSectionGap,
+                          _buildQuickActions(context),
+                          planningSectionGap,
+                          _PlanningInsightsCard(
+                            highPriorityAreas: vm.highPriorityAreaCount,
+                            pendingProposals: _proposalStatusCount(
+                              vm.selectedProposals,
+                              Proposal.statusPending,
                             ),
-                            StatisticCard(
-                              value: '${vm.proposalCount}',
-                              label: 'Proposed Stations',
-                              icon: Icons.ev_station,
-                              color: blue,
-                              width: double.infinity,
-                            ),
-                            StatisticCard(
-                              value: '${vm.highPriorityAreaCount}',
-                              label: 'High Priority Areas',
-                              icon: Icons.insights,
-                              color: Colors.orange,
-                              width: double.infinity,
-                            ),
-                            StatisticCard(
-                              value: '${vm.communitySupportCount}',
-                              label: 'Community Support',
-                              icon: Icons.group_outlined,
-                              color: Colors.deepPurple,
-                              width: double.infinity,
-                            ),
-                            ],
-                          );
-                        },
-                      ),
-                      planningSectionGap,
-                      const PlanningSectionTitle(
-                        'Quick Actions',
-                        subtitle: 'Create proposals or review coverage',
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: green,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(50),
-                        ),
-                        onPressed: () => _push(
-                          context,
-                          const NewProposalScreen(),
-                        ),
-                        icon: const Icon(Icons.add_location_alt_outlined),
-                        label: const Text('Add Proposed Station'),
-                      ),
-                      const SizedBox(height: 10),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final proposalsButton = OutlinedButton.icon(
-                            onPressed: () => _push(
-                              context,
-                              const ProposalListScreen(),
-                            ),
-                            icon: const Icon(Icons.article_outlined),
-                            label: const Text('View Proposals'),
-                          );
-                          final gapButton = OutlinedButton.icon(
-                            onPressed: () => _push(
-                              context,
-                              const GapAnalysisScreen(),
-                            ),
-                            icon: const Icon(Icons.analytics_outlined),
-                            label: const Text('Gap Analysis'),
-                          );
-                          if (constraints.maxWidth < 420) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                proposalsButton,
-                                const SizedBox(height: 10),
-                                gapButton,
-                              ],
-                            );
-                          }
-                          return Row(
-                            children: [
-                              Expanded(child: proposalsButton),
-                              const SizedBox(width: 10),
-                              Expanded(child: gapButton),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+                            averageGapDistance: vm.averageGapDistance,
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 );
         },
       ),
       bottomNavigationBar: FloatingBottomNav(
-        onProfileTap: () => _push(context, const ProfileScreen()),
+        currentTab: 'Planning',
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
+        ),
+        onProfileTap: () => _switchTo(
+          context,
+          const ProfileScreen(),
+          DriverRouteNames.profile,
+        ),
       ),
     );
+  }
+
+  Widget _buildLandscapeDashboard(
+    BuildContext context,
+    PlanningViewModel vm,
+    Size size,
+  ) {
+    final pending =
+        _proposalStatusCount(vm.selectedProposals, Proposal.statusPending);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+          child: PlanningSectionTitle(
+            'Infrastructure Planning',
+            subtitle: 'Plan smarter. Build better. Power the future.',
+            trailing: _buildRefreshControl(vm),
+          ),
+        ),
+        if (vm.errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _InlinePlanningError(
+              message: vm.errorMessage!,
+              onRetry: vm.load,
+            ),
+          ),
+        if (vm.infrastructureWarningMessage != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: InfrastructureDataNotice(
+              message: vm.infrastructureWarningMessage!,
+            ),
+          ),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: size.width * .39,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 14, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildPlanningRegionCard(vm),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Infrastructure Summary',
+                        style: TextStyle(
+                          color: planningTextColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      _InfrastructureSummaryCard(
+                        locations: vm.selectedStationCount,
+                        chargers: vm.selectedInstalledChargerCount,
+                        acChargers: vm.selectedAcChargerCount,
+                        dcChargers: vm.selectedDcChargerCount,
+                        plannedLocations: vm.selectedPlannedLocationCount,
+                        plannedChargers: vm.selectedPlannedChargerCount,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Planning Activity',
+                        style: TextStyle(
+                          color: planningTextColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      _PlanningActivityCard(
+                        pendingProposals: pending,
+                        approvedProposals: _proposalStatusCount(
+                          vm.selectedProposals,
+                          Proposal.statusApproved,
+                        ),
+                        highPriorityAreas: vm.highPriorityAreaCount,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildQuickActions(context),
+                      const SizedBox(height: 12),
+                      _PlanningInsightsCard(
+                        highPriorityAreas: vm.highPriorityAreaCount,
+                        pendingProposals: pending,
+                        averageGapDistance: vm.averageGapDistance,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const VerticalDivider(width: 1, color: Color(0xFFE6EAF0)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 20, 16),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Reserve room for the section heading, context strip,
+                      // spacing, and the optional national-map hint. The map
+                      // then consumes only the height this panel truly owns.
+                      final chromeHeight =
+                          vm.selectedState == malaysiaSelection ? 132.0 : 106.0;
+                      final mapHeight = (constraints.maxHeight - chromeHeight)
+                          .clamp(96.0, 480.0);
+                      return _buildMapExplorer(vm, height: mapHeight);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRefreshControl(PlanningViewModel vm) {
+    if (!vm.infrastructureRefreshing) {
+      return IconButton(
+        tooltip: 'Refresh planning data',
+        onPressed: vm.load,
+        icon: const Icon(Icons.refresh),
+      );
+    }
+    return const SizedBox(
+      width: 48,
+      height: 48,
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator.adaptive(strokeWidth: 2.4),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlanningRegionCard(PlanningViewModel vm) => AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Planning Region',
+              style: TextStyle(
+                color: planningTextColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              key: ValueKey('dashboard-state-${vm.selectedState}'),
+              initialValue: vm.selectedState,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.map_outlined),
+                labelText: 'State or territory',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: [
+                for (final state in vm.stateOptions)
+                  DropdownMenuItem<String>(
+                    value: state,
+                    child: Text(state, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (state) {
+                if (state != null) {
+                  vm.selectState(state, source: 'dashboard-dropdown');
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (vm.analyzingGaps)
+                  const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator.adaptive(strokeWidth: 2),
+                  )
+                else
+                  Icon(
+                    vm.analysisErrorMessage == null
+                        ? Icons.check_circle_outline
+                        : Icons.error_outline,
+                    size: 18,
+                    color: vm.analysisErrorMessage == null ? green : Colors.red,
+                  ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    vm.analysisStatusMessage ??
+                        '${vm.selectedState} analysis ready',
+                    style: const TextStyle(
+                      color: planningMutedTextColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                if (vm.analysisErrorMessage != null)
+                  TextButton(
+                    onPressed: vm.retrySelectedStateAnalysis,
+                    child: const Text('Retry'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildQuickActions(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Quick Actions',
+            style: TextStyle(
+              color: planningTextColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 7),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: green,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(46),
+            ),
+            onPressed: () => _push(context, const NewProposalScreen()),
+            icon: const Icon(Icons.add_location_alt_outlined, size: 19),
+            label: const Text('Add Proposal'),
+          ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final proposalsButton = OutlinedButton.icon(
+                onPressed: () => _push(context, const ProposalListScreen()),
+                icon: const Icon(Icons.article_outlined, size: 18),
+                label: const Text('View Proposals'),
+              );
+              final gapButton = OutlinedButton.icon(
+                onPressed: () => _push(context, const GapAnalysisScreen()),
+                icon: const Icon(Icons.analytics_outlined, size: 18),
+                label: const Text('Gap Analysis'),
+              );
+              if (constraints.maxWidth < 330) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    proposalsButton,
+                    const SizedBox(height: 8),
+                    gapButton
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: proposalsButton),
+                  const SizedBox(width: 8),
+                  Expanded(child: gapButton),
+                ],
+              );
+            },
+          ),
+        ],
+      );
+
+  Widget _buildMapExplorer(PlanningViewModel vm, {required double height}) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlanningSectionTitle(
+            'Interactive Map',
+            subtitle: vm.selectedState == malaysiaSelection
+                ? 'Select a state to explore local infrastructure'
+                : 'Explore locations, proposals, and priority areas',
+          ),
+          const SizedBox(height: 8),
+          if (_mapMounted)
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                MapPanel(
+                  height: height,
+                  stations: _infrastructureMapLocations(vm),
+                  proposals:
+                      _showCommunityProposals ? vm.mapProposals : const [],
+                  priorityAreas: vm.mapPriorityAreas,
+                  stateRegions: vm.stateRegions,
+                  stateOverviews: vm.stateOverviewSummaries,
+                  selectedState: vm.selectedState,
+                  focusBounds: vm.selectedMapBounds,
+                  analysisCacheHit: vm.lastAnalysisCacheHit,
+                  onStateSelected: (state, source) => vm.selectState(
+                    state,
+                    source: source,
+                  ),
+                ),
+                if (vm.selectedState != malaysiaSelection)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: _CompactMapLegend(
+                      expanded: _legendExpanded,
+                      onToggle: () => setState(
+                        () => _legendExpanded = !_legendExpanded,
+                      ),
+                      showExisting: _showExisting,
+                      showMevnetProposed: _showMevnetProposed,
+                      showCommunityProposals: _showCommunityProposals,
+                      onExistingChanged: (value) =>
+                          setState(() => _showExisting = value),
+                      onMevnetProposedChanged: (value) =>
+                          setState(() => _showMevnetProposed = value),
+                      onCommunityProposalsChanged: (value) =>
+                          setState(() => _showCommunityProposals = value),
+                    ),
+                  ),
+              ],
+            )
+          else
+            SizedBox(height: height),
+          const SizedBox(height: 8),
+          _MapContextCard(
+            locations: vm.selectedStationCount,
+            chargers: vm.selectedInstalledChargerCount,
+            activeProposals: _activeProposalCount(vm.selectedProposals),
+            priorityAreas: vm.highPriorityAreaCount,
+            plannedLocations: vm.selectedPlannedLocationCount,
+          ),
+          if (vm.selectedState == malaysiaSelection) ...[
+            const SizedBox(height: 6),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.touch_app_outlined,
+                  size: 16,
+                  color: planningMutedTextColor,
+                ),
+                SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    'Tap a state to explore local charging infrastructure',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: planningMutedTextColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      );
+
+  List<ChargingStation> _infrastructureMapLocations(PlanningViewModel vm) {
+    final existing = vm.mapStations;
+    final planned = vm.mapPlannedLocations;
+    if (identical(existing, _lastExistingMapSource) &&
+        identical(planned, _lastPlannedMapSource) &&
+        _showExisting == _lastShowExisting &&
+        _showMevnetProposed == _lastShowPlanned) {
+      return _cachedInfrastructureMapLocations;
+    }
+    _lastExistingMapSource = existing;
+    _lastPlannedMapSource = planned;
+    _lastShowExisting = _showExisting;
+    _lastShowPlanned = _showMevnetProposed;
+    _cachedInfrastructureMapLocations = List.unmodifiable([
+      if (_showExisting) ...existing,
+      if (_showMevnetProposed) ...planned,
+    ]);
+    return _cachedInfrastructureMapLocations;
   }
 
   void _push(BuildContext context, Widget page) {
@@ -371,16 +590,439 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
       MaterialPageRoute<void>(builder: (_) => page),
     );
   }
+
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
+    );
+  }
+
+  static int _proposalStatusCount(
+    Iterable<Proposal> proposals,
+    String status,
+  ) =>
+      proposals.where((proposal) => proposal.status == status).length;
+
+  static int _activeProposalCount(Iterable<Proposal> proposals) =>
+      proposals.where((proposal) => proposal.isActive).length;
+}
+
+class _InlinePlanningError extends StatelessWidget {
+  const _InlinePlanningError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 19),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: planningMutedTextColor),
+              ),
+            ),
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
+        ),
+      );
+}
+
+class _InfrastructureSummaryCard extends StatelessWidget {
+  const _InfrastructureSummaryCard({
+    required this.locations,
+    required this.chargers,
+    required this.acChargers,
+    required this.dcChargers,
+    required this.plannedLocations,
+    required this.plannedChargers,
+  });
+
+  final int locations;
+  final int chargers;
+  final int acChargers;
+  final int dcChargers;
+  final int plannedLocations;
+  final int plannedChargers;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        padding: const EdgeInsets.all(14),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontal = constraints.maxWidth >= 420;
+            final metrics = [
+              _DashboardPrimaryMetric(
+                icon: Icons.location_on_outlined,
+                label: 'Charging Locations',
+                value: '$locations',
+                color: green,
+              ),
+              _DashboardPrimaryMetric(
+                icon: Icons.ev_station_outlined,
+                label: 'Installed Chargers',
+                value: '$chargers',
+                color: blue,
+              ),
+            ];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.bolt_outlined, color: green),
+                    SizedBox(width: 8),
+                    Text(
+                      'Charging Infrastructure',
+                      style: TextStyle(
+                        color: planningTextColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (horizontal)
+                  Row(
+                    children: [
+                      Expanded(child: metrics.first),
+                      const SizedBox(
+                        height: 42,
+                        child: VerticalDivider(color: Color(0xFFE6EAF0)),
+                      ),
+                      Expanded(child: metrics.last),
+                    ],
+                  )
+                else
+                  Column(
+                    children: [
+                      metrics.first,
+                      const Divider(height: 24, color: Color(0xFFE6EAF0)),
+                      metrics.last,
+                    ],
+                  ),
+                const SizedBox(height: 10),
+                Text(
+                  'AC $acChargers · DC $dcChargers',
+                  style: const TextStyle(
+                    color: planningMutedTextColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Divider(height: 24, color: Color(0xFFE6EAF0)),
+                Row(
+                  children: [
+                    const Icon(Icons.add_location_alt_outlined,
+                        color: Color(0xFF4F6EF7)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'MEVnet Proposed\n$plannedLocations locations · '
+                        '$plannedChargers proposed EVCB',
+                        style: const TextStyle(
+                          color: planningTextColor,
+                          height: 1.35,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+}
+
+class _DashboardPrimaryMetric extends StatelessWidget {
+  const _DashboardPrimaryMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: planningMutedTextColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _PlanningActivityCard extends StatelessWidget {
+  const _PlanningActivityCard({
+    required this.pendingProposals,
+    required this.approvedProposals,
+    required this.highPriorityAreas,
+  });
+
+  final int pendingProposals;
+  final int approvedProposals;
+  final int highPriorityAreas;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Proposal Activity',
+              style: TextStyle(
+                color: planningTextColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 9),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _ActivityPill(
+                  icon: Icons.schedule_outlined,
+                  text: 'Pending $pendingProposals',
+                  color: const Color(0xFFF39C12),
+                ),
+                _ActivityPill(
+                  icon: Icons.check_circle_outline,
+                  text: 'Approved $approvedProposals',
+                  color: green,
+                ),
+                _ActivityPill(
+                  icon: Icons.insights_outlined,
+                  text: 'Priority $highPriorityAreas',
+                  color: const Color(0xFFE67E22),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _ActivityPill extends StatelessWidget {
+  const _ActivityPill({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: color),
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: TextStyle(color: color, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      );
+}
+
+class _MapContextCard extends StatelessWidget {
+  const _MapContextCard({
+    required this.locations,
+    required this.chargers,
+    required this.activeProposals,
+    required this.priorityAreas,
+    required this.plannedLocations,
+  });
+
+  final int locations;
+  final int chargers;
+  final int activeProposals;
+  final int priorityAreas;
+  final int plannedLocations;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 10,
+          children: [
+            _MapContextMetric(value: '$locations', label: 'locations'),
+            _MapContextMetric(value: '$chargers', label: 'installed chargers'),
+            _MapContextMetric(
+                value: '$activeProposals', label: 'active proposals'),
+            _MapContextMetric(value: '$priorityAreas', label: 'priority areas'),
+            _MapContextMetric(
+              value: '$plannedLocations',
+              label: 'MEVnet planned',
+            ),
+          ],
+        ),
+      );
+}
+
+class _MapContextMetric extends StatelessWidget {
+  const _MapContextMetric({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => RichText(
+        text: TextSpan(
+          style: const TextStyle(color: planningMutedTextColor, fontSize: 13),
+          children: [
+            TextSpan(
+              text: '$value ',
+              style: const TextStyle(
+                color: planningTextColor,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            TextSpan(text: label),
+          ],
+        ),
+      );
+}
+
+class _PlanningInsightsCard extends StatelessWidget {
+  const _PlanningInsightsCard({
+    required this.highPriorityAreas,
+    required this.pendingProposals,
+    required this.averageGapDistance,
+  });
+
+  final int highPriorityAreas;
+  final int pendingProposals;
+  final double averageGapDistance;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Planning Insights',
+              style: TextStyle(
+                color: planningTextColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 9),
+            _InsightLine(
+              icon: Icons.insights_outlined,
+              text: highPriorityAreas == 0
+                  ? 'No high-priority coverage gaps are currently ranked.'
+                  : '$highPriorityAreas high-priority coverage gap${highPriorityAreas == 1 ? '' : 's'} need attention.',
+            ),
+            const SizedBox(height: 8),
+            _InsightLine(
+              icon: Icons.rate_review_outlined,
+              text: pendingProposals == 0
+                  ? 'No proposals are awaiting action.'
+                  : '$pendingProposals proposal${pendingProposals == 1 ? '' : 's'} await${pendingProposals == 1 ? 's' : ''} action.',
+            ),
+            const SizedBox(height: 8),
+            _InsightLine(
+              icon: Icons.route_outlined,
+              text: averageGapDistance <= 0
+                  ? 'No ranked coverage-gap distance is available for this selection.'
+                  : 'Ranked gaps average ${averageGapDistance.toStringAsFixed(1)} km to the nearest charging location.',
+            ),
+          ],
+        ),
+      );
+}
+
+class _InsightLine extends StatelessWidget {
+  const _InsightLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 19, color: green),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style:
+                  const TextStyle(color: planningMutedTextColor, height: 1.35),
+            ),
+          ),
+        ],
+      );
 }
 
 class _CompactMapLegend extends StatelessWidget {
   const _CompactMapLegend({
     required this.expanded,
     required this.onToggle,
+    required this.showExisting,
+    required this.showMevnetProposed,
+    required this.showCommunityProposals,
+    required this.onExistingChanged,
+    required this.onMevnetProposedChanged,
+    required this.onCommunityProposalsChanged,
   });
 
   final bool expanded;
   final VoidCallback onToggle;
+  final bool showExisting;
+  final bool showMevnetProposed;
+  final bool showCommunityProposals;
+  final ValueChanged<bool> onExistingChanged;
+  final ValueChanged<bool> onMevnetProposedChanged;
+  final ValueChanged<bool> onCommunityProposalsChanged;
 
   @override
   Widget build(BuildContext context) => AppCard(
@@ -413,24 +1055,41 @@ class _CompactMapLegend extends StatelessWidget {
             ),
             if (expanded) ...[
               const Divider(height: 10),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(6, 2, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _MapLegendItem(
+                    _MapLayerToggle(
                       asset: 'assets/icons/station_lightning.png',
                       label: 'Existing',
+                      value: showExisting,
+                      onChanged: onExistingChanged,
                     ),
                     SizedBox(height: 7),
-                    _MapLegendItem(
+                    _MapLayerToggle(
+                      icon: Icons.location_on_outlined,
+                      iconColor: Color(0xFF4F6EF7),
+                      label: 'MEVnet Proposed',
+                      value: showMevnetProposed,
+                      onChanged: onMevnetProposedChanged,
+                    ),
+                    SizedBox(height: 7),
+                    _MapLayerToggle(
                       asset: 'assets/icons/proposed_station.png',
-                      label: 'Proposed',
+                      label: 'Community Proposals',
+                      value: showCommunityProposals,
+                      onChanged: onCommunityProposalsChanged,
                     ),
-                    SizedBox(height: 7),
-                    _MapLegendItem(
-                      asset: 'assets/icons/high_priority.png',
-                      label: 'Priority gap',
+                    const Padding(
+                      padding: EdgeInsets.only(left: 25, top: 2),
+                      child: Text(
+                        'Blue active · Violet approved',
+                        style: TextStyle(
+                          color: planningMutedTextColor,
+                          fontSize: 10,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -441,19 +1100,45 @@ class _CompactMapLegend extends StatelessWidget {
       );
 }
 
-class _MapLegendItem extends StatelessWidget {
-  const _MapLegendItem({required this.asset, required this.label});
+class _MapLayerToggle extends StatelessWidget {
+  const _MapLayerToggle({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.asset,
+    this.icon,
+    this.iconColor,
+  });
 
-  final String asset;
   final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String? asset;
+  final IconData? icon;
+  final Color? iconColor;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(asset, width: 18, height: 18),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
+  Widget build(BuildContext context) => InkWell(
+        onTap: () => onChanged(!value),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 20,
+              child: Checkbox(
+                value: value,
+                visualDensity: VisualDensity.compact,
+                onChanged: (next) => onChanged(next ?? value),
+              ),
+            ),
+            const SizedBox(width: 5),
+            if (asset != null)
+              Image.asset(asset!, width: 17, height: 17)
+            else
+              Icon(icon, size: 17, color: iconColor),
+            const SizedBox(width: 5),
+            Text(label, style: const TextStyle(fontSize: 11)),
+          ],
+        ),
       );
 }
