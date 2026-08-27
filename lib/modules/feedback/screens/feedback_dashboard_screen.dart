@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../charging/screens/charging_screen.dart';
+import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../models/fault_report.dart';
 import '../viewmodels/feedback_viewmodel.dart';
@@ -9,16 +12,11 @@ import '../widgets/feedback_widgets.dart';
 import 'my_reports_screen.dart';
 import 'new_report_screen.dart';
 import 'report_details_screen.dart';
+import 'report_map_screen.dart';
 
 /// Entry point for the driver-facing Feedback tab — hero banner, report
 /// counts, quick actions, and a preview of recent reports. Reached via
 /// `FloatingBottomNav`'s "Feedback" tab.
-///
-/// "Report an Issue", "Nearby Issues", "View All" and tapping into a report
-/// all still show a "coming soon" snackbar for now — those destination
-/// screens (the report form, the nearby-issues map, and the full "My
-/// Reports" list) haven't been built yet; this screen is otherwise fully
-/// wired against live data.
 class FeedbackDashboardScreen extends StatelessWidget {
   const FeedbackDashboardScreen({super.key});
 
@@ -145,7 +143,7 @@ class FeedbackDashboardScreen extends StatelessWidget {
                         title: 'Nearby Issues',
                         subtitle: 'View reported issues near you',
                         color: blue,
-                        onTap: () => _comingSoon(context, 'Nearby Issues map'),
+                        onTap: () => _openNearbyIssues(context),
                       ),
                       const SizedBox(width: 10),
                       QuickActionCard(
@@ -210,10 +208,21 @@ class FeedbackDashboardScreen extends StatelessWidget {
         ),
         bottomNavigationBar: FloatingBottomNav(
           currentTab: 'Feedback',
-          onPlanningTap: () => Navigator.of(context).pop(),
-          onProfileTap: () => Navigator.push(
+          onHomeTap: () => returnToDriverHome(context),
+          onChargingTap: () => _switchTo(
             context,
-            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+            const ChargingScreen(),
+            DriverRouteNames.charging,
+          ),
+          onPlanningTap: () => _switchTo(
+            context,
+            const PlanningDashboardScreen(),
+            DriverRouteNames.planning,
+          ),
+          onProfileTap: () => _switchTo(
+            context,
+            const ProfileScreen(),
+            DriverRouteNames.profile,
           ),
         ),
       );
@@ -234,10 +243,15 @@ class FeedbackDashboardScreen extends StatelessWidget {
     );
   }
 
-  void _comingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature is coming soon.')),
+  void _openNearbyIssues(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const ReportMapScreen()),
     );
+  }
+
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(context, routeName: routeName, builder: (_) => page);
   }
 
   void _showHowItWorks(BuildContext context) {

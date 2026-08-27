@@ -12,6 +12,7 @@ import '../../auth/services/auth_service.dart';
 import '../../charging/screens/charging_screen.dart';
 import '../../charging/services/charging_service.dart';
 import '../../charging/widgets/charging_widgets.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../../planning/models/proposal.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/services/state_boundary_service.dart';
@@ -643,6 +644,10 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         onProfileTap: () => _switchTo(
           const ProfileScreen(),
           DriverRouteNames.profile,
+        ),
+        onFeedbackTap: () => _switchTo(
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
         ),
       ),
     );

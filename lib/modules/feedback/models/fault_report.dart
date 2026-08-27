@@ -6,8 +6,13 @@ import '../../planning/models/proposal.dart' show CoordinateParser;
 const List<String> kFaultReportCategories = [
   'Broken Connector',
   'Not Charging',
+  'Slow Charging',
   'Damaged Screen',
   'Payment Issue',
+  'Blocked Access',
+  'Physical Damage / Vandalism',
+  'Safety Hazard',
+  'Incorrect Location / Signage',
   'Other',
 ];
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../charging/screens/charging_screen.dart';
+import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../models/fault_report.dart';
 import '../viewmodels/feedback_viewmodel.dart';
@@ -306,14 +309,29 @@ class _MyReportsScreenState extends State<MyReportsScreen>
         ),
         bottomNavigationBar: FloatingBottomNav(
           currentTab: 'Feedback',
+          onHomeTap: () => returnToDriverHome(context),
+          onChargingTap: () => _switchTo(
+            context,
+            const ChargingScreen(),
+            DriverRouteNames.charging,
+          ),
           onFeedbackTap: () => Navigator.of(context).pop(),
-          onPlanningTap: () =>
-              Navigator.of(context).popUntil((route) => route.isFirst),
-          onProfileTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+          onPlanningTap: () => _switchTo(
+            context,
+            const PlanningDashboardScreen(),
+            DriverRouteNames.planning,
+          ),
+          onProfileTap: () => _switchTo(
+            context,
+            const ProfileScreen(),
+            DriverRouteNames.profile,
           ),
         ),
       );
+
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(context, routeName: routeName, builder: (_) => page);
+  }
 
   void _openFilterSheet(BuildContext context) {
     var draft = _categoryFilter;

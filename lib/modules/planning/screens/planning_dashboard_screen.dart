@@ -205,7 +205,11 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           const ProfileScreen(),
           DriverRouteNames.profile,
         ),
-        onFeedbackTap: () => _push(context, const FeedbackDashboardScreen()),
+        onFeedbackTap: () => _switchTo(
+          context,
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
+        ),
       ),
     );
   }
