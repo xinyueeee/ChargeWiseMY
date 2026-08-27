@@ -123,10 +123,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const PlanningDashboardScreen(),
           DriverRouteNames.planning,
         ),
-        onFeedbackTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => const FeedbackDashboardScreen(),
-          ),
+        onFeedbackTap: () => _switchTo(
+          context,
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
         ),
       ),
       body: SafeArea(

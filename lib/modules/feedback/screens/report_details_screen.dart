@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../charging/screens/charging_screen.dart';
+import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/screens/proposal_location_map_screen.dart';
 import '../../planning/services/proposal_location_service.dart';
 import '../../planning/widgets/planning_widgets.dart';
@@ -228,15 +231,26 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         ),
         bottomNavigationBar: FloatingBottomNav(
           currentTab: 'Feedback',
+          onHomeTap: () => returnToDriverHome(context),
+          onChargingTap: () => _switchTo(
+            const ChargingScreen(),
+            DriverRouteNames.charging,
+          ),
           onFeedbackTap: () => Navigator.of(context).pop(),
-          onPlanningTap: () =>
-              Navigator.of(context).popUntil((route) => route.isFirst),
-          onProfileTap: () => Navigator.push(
-            context,
-            MaterialPageRoute<void>(builder: (_) => const ProfileScreen()),
+          onPlanningTap: () => _switchTo(
+            const PlanningDashboardScreen(),
+            DriverRouteNames.planning,
+          ),
+          onProfileTap: () => _switchTo(
+            const ProfileScreen(),
+            DriverRouteNames.profile,
           ),
         ),
       );
+
+  void _switchTo(Widget page, String routeName) {
+    openDriverModule(context, routeName: routeName, builder: (_) => page);
+  }
 
   Future<void> _viewOnMap() async {
     final latitude = report.latitude;

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../../../core/navigation/driver_navigation.dart';
 import '../../../services/notification_service.dart';
 import '../../auth/screens/profile_screen.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../../home/widgets/station_details_sheet.dart';
 import '../../planning/models/proposal.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
@@ -247,6 +248,10 @@ class _ChargingScreenState extends State<ChargingScreen> {
         onProfileTap: () => _switchTo(
           const ProfileScreen(),
           DriverRouteNames.profile,
+        ),
+        onFeedbackTap: () => _switchTo(
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
         ),
       ),
     );
