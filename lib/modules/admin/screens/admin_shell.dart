@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../../auth/services/auth_service.dart';
+import '../../planning/admin/screens/admin_planning_dashboard_screen.dart';
+import '../../planning/admin/screens/admin_proposal_details_screen.dart';
+import '../../planning/admin/screens/admin_proposal_list_screen.dart';
+import '../../planning/admin/models/proposal_assessment.dart';
+import '../../planning/admin/viewmodels/admin_planning_viewmodel.dart';
+import '../services/feedback_admin_repository.dart';
+import '../viewmodels/admin_feedback_viewmodel.dart';
+import 'admin_feedback_dashboard_screen.dart';
 
 const _green = Color(0xFF00B894);
 const _textColor = Color(0xFF101B40);
@@ -27,68 +37,158 @@ class _AdminShellState extends State<AdminShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: _textColor,
-        titleSpacing: 20,
-        title: const Text(
-          'Admin Portal',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: _textColor,
-          ),
-        ),
-        actions: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: _green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.shield_outlined, color: _green, size: 14),
-                SizedBox(width: 4),
-                Text(
-                  'Admin',
+        backgroundColor: const Color(0xFFF8F9FC),
+        appBar: _tabIndex >= 3
+            ? AppBar(
+                backgroundColor: Colors.white,
+                elevation: 0,
+                foregroundColor: _textColor,
+                titleSpacing: 20,
+                title: const Text(
+                  'Admin Portal',
                   style: TextStyle(
-                    color: _green,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: _textColor,
                   ),
                 ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: () => AuthService().logout(),
-            icon: const Icon(Icons.logout, color: _mutedTextColor),
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: IndexedStack(
-          index: _tabIndex,
-          children: [
-            const _ComingSoon(label: 'Dashboard'),
-            const _ComingSoon(label: 'Proposals'),
-            const _ComingSoon(label: 'AI Planning'),
-            const _ComingSoon(label: 'Feedback Management'),
-            const _ComingSoon(label: 'Admin'),
-          ],
+                actions: [_adminBadge(), _logoutButton()],
+              )
+            : null,
+        body: SafeArea(
+          // Same breakpoint and rail pattern as the Driver root screens
+          // (`DriverNavigationShell`, >=700 logical px): a bottom bar wastes
+          // vertical space once the device is wide enough for a rail, and
+          // Admin previously kept the bottom bar in landscape/tablet
+          // regardless of width.
+          child: useDriverNavigationRail(context)
+              ? Row(
+                  children: [
+                    _AdminNavigationRail(
+                      selectedIndex: _tabIndex,
+                      tabs: _tabs,
+                      onTap: (index) => setState(() => _tabIndex = index),
+                    ),
+                    const VerticalDivider(width: 1, color: Color(0xFFE9EDF3)),
+                    Expanded(child: _adminTabs()),
+                  ],
+                )
+              : _adminTabs(),
         ),
-      ),
-      bottomNavigationBar: _AdminBottomNav(
-        selectedIndex: _tabIndex,
-        tabs: _tabs,
-        onTap: (index) => setState(() => _tabIndex = index),
-      ),
+        bottomNavigationBar: useDriverNavigationRail(context)
+            ? null
+            : _AdminBottomNav(
+                selectedIndex: _tabIndex,
+                tabs: _tabs,
+                onTap: (index) => setState(() => _tabIndex = index),
+              ),
     );
   }
+
+  Widget _adminTabs() => IndexedStack(
+        index: _tabIndex,
+        children: [
+          const AdminPlanningDashboardScreen(),
+          const AdminProposalListScreen(),
+          const _AdminAssistantEntry(),
+          ChangeNotifierProvider(
+            create: (_) =>
+                AdminFeedbackViewModel(FeedbackAdminRepository())..load(),
+            child: const AdminFeedbackDashboardScreen(),
+          ),
+          const _ComingSoon(label: 'Admin'),
+        ],
+      );
+
+  Widget _adminBadge() => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: _green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: _green, size: 14),
+            SizedBox(width: 4),
+            Text(
+              'Admin',
+              style: TextStyle(
+                color: _green,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _logoutButton() => IconButton(
+        onPressed: () => AuthService().logout(),
+        icon: const Icon(Icons.logout, color: _mutedTextColor),
+        tooltip: 'Logout',
+      );
+}
+
+class _AdminAssistantEntry extends StatelessWidget {
+  const _AdminAssistantEntry();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('AI Planning Assistant'),
+          centerTitle: true,
+          backgroundColor: Colors.white,
+          foregroundColor: _textColor,
+          elevation: 0,
+        ),
+        body: Consumer<AdminPlanningViewModel>(
+          builder: (context, viewModel, _) {
+            final proposals = viewModel.proposals;
+            if (proposals.isEmpty) {
+              return const Center(
+                child: Text(
+                  'No proposals are available for assessment.',
+                  style: TextStyle(color: _mutedTextColor),
+                ),
+              );
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: proposals.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final proposal = proposals[index];
+                final assessment = viewModel.assessmentFor(proposal);
+                return Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.psychology_outlined, color: _green),
+                    title: Text(
+                      proposal.city,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      assessment == null
+                          ? 'Assessment is being prepared'
+                          : '${assessment.outcome.label} · ${assessment.score}/100',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => AdminProposalDetailsScreen(
+                          proposalId: proposal.id,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      );
 }
 
 class _ComingSoon extends StatelessWidget {
@@ -118,6 +218,64 @@ class _AdminTab {
   const _AdminTab({required this.icon, required this.label});
   final IconData icon;
   final String label;
+}
+
+/// Wide-layout equivalent of [_AdminBottomNav], following the same rail
+/// styling `DriverNavigationShell` uses for the Driver root screens.
+class _AdminNavigationRail extends StatelessWidget {
+  const _AdminNavigationRail({
+    required this.selectedIndex,
+    required this.tabs,
+    required this.onTap,
+  });
+
+  final int selectedIndex;
+  final List<_AdminTab> tabs;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        right: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            // Short landscape + enlarged text both make each destination
+            // taller; scrolling keeps every tab reachable instead of
+            // overflowing, matching DriverNavigationShell's rail.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: NavigationRail(
+                  selectedIndex: selectedIndex,
+                  labelType: NavigationRailLabelType.all,
+                  groupAlignment: 0,
+                  backgroundColor: Colors.white,
+                  indicatorColor: const Color(0x1A00B894),
+                  selectedIconTheme: const IconThemeData(color: _green),
+                  selectedLabelTextStyle: const TextStyle(
+                    color: _green,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                  unselectedIconTheme:
+                      const IconThemeData(color: _mutedTextColor),
+                  unselectedLabelTextStyle: const TextStyle(
+                    color: _mutedTextColor,
+                    fontSize: 12,
+                  ),
+                  destinations: [
+                    for (final tab in tabs)
+                      NavigationRailDestination(
+                        icon: Icon(tab.icon),
+                        label: Text(tab.label),
+                      ),
+                  ],
+                  onDestinationSelected: onTap,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class _AdminBottomNav extends StatelessWidget {

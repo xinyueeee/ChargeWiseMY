@@ -1,12 +1,23 @@
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  final SupabaseClient client = Supabase.instance.client;
-
+  /// Placeholder id used only as a defensive fallback when a feedback screen
+  /// somehow renders without a signed-in session (every such screen sits
+  /// behind `AuthGate`, so this should never actually be hit).
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
 
-  Future<List<Map<String, dynamic>>> getChargingStations() async {
+  final SupabaseClient client = Supabase.instance.client;
+
+  String? get authenticatedUserId => client.auth.currentUser?.id;
+
+  Stream<String?> get authenticatedUserChanges => client.auth.onAuthStateChange
+      .map((state) => state.session?.user.id)
+      .distinct();
+
+  Future<List<Map<String, dynamic>>> getChargingStations(
+      {String? status}) async {
     const pageSize = 1000;
     final stations = <Map<String, dynamic>>[];
     var offset = 0;
@@ -18,12 +29,15 @@ class SupabaseService {
     while (true) {
       pageNumber++;
       final pageStopwatch = Stopwatch()..start();
-      final page = await client
-          .from('charging_stations')
-          .select(
+      final query = client.from('charging_stations').select(
             'station_id, station_name, latitude, longitude, charger_type, '
-            'address, available_ports, status, indoor_outdoor',
-          )
+            'address, charger_count, ac_charger_count, dc_charger_count, '
+            'proposed_charger_count, state, pbt, category, status, '
+            'indoor_outdoor, mevnet_object_id, source, source_url, data_date, '
+            'imported_at',
+          );
+      final filteredQuery = status == null ? query : query.eq('status', status);
+      final page = await filteredQuery
           .order('station_id', ascending: true)
           .range(offset, offset + pageSize - 1);
       pageStopwatch.stop();
@@ -37,7 +51,8 @@ class SupabaseService {
       stations.addAll(rows);
       debugPrint(
         'Supabase station pagination: page=$pageNumber, '
-        'rows=${rows.length}, duration=${pageStopwatch.elapsedMilliseconds}ms.',
+        'status=${status ?? 'all'}, rows=${rows.length}, '
+        'duration=${pageStopwatch.elapsedMilliseconds}ms.',
       );
       if (rows.length < pageSize) break;
       offset += pageSize;
@@ -45,7 +60,7 @@ class SupabaseService {
     totalStopwatch.stop();
     debugPrint(
       'Supabase station pagination complete: pages=$pageNumber, '
-      'rows=${stations.length}, sequential=true, '
+      'rows=${stations.length}, status=${status ?? 'all'}, sequential=true, '
       'uniqueStationIds=${seenStationIds.length}, '
       'duplicatePageRows=$duplicateRows, '
       'duration=${totalStopwatch.elapsedMilliseconds}ms.',
@@ -67,46 +82,243 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  Future<void> ensureMockUser() async {
-    if (client.auth.currentSession != null) return;
-    await client.from('users').upsert({
-      'id': mockUserId,
-      'full_name': 'ChargeWise Demo User',
-      'email': 'demo.user@chargewise.my',
-      'role': 'driver',
-    });
+  Future<String> ensureActingUser() async {
+    final userId = authenticatedUserId;
+    if (userId == null) {
+      throw const AuthException(
+        'Authentication is required for proposal operations.',
+      );
+    }
+    return userId;
   }
 
-  Future<void> addReaction(
-      {required String proposalId, required String reaction}) async {
-    await client.from('proposal_reactions').insert({
-      'proposal_id': proposalId,
-      'user_id': mockUserId,
-      'reaction': reaction,
-    });
+  Future<void> setProposalReaction({
+    required String proposalId,
+    required String? reaction,
+  }) async {
+    final userId = await ensureActingUser();
+    if (reaction == null) {
+      final deleted = await client
+          .from('proposal_reactions')
+          .delete()
+          .eq('proposal_id', proposalId)
+          .eq('user_id', userId)
+          .select('reaction')
+          .maybeSingle();
+      if (deleted == null) {
+        throw StateError('Proposal reaction was not removed.');
+      }
+      return;
+    }
+    final updated = await client
+        .from('proposal_reactions')
+        .upsert(
+          {
+            'proposal_id': proposalId,
+            'user_id': userId,
+            'reaction': reaction,
+          },
+          onConflict: 'proposal_id,user_id',
+        )
+        .select('reaction')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError('Proposal reaction was not saved.');
+    }
   }
 
   Future<void> updateProposalStatus(String proposalId, String status) async {
-    await client
+    final updated = await client
         .from('proposals')
-        .update({'status': status.toLowerCase().replaceAll(' ', '_')}).eq(
-            'proposal_id', proposalId);
+        .update({'status': status})
+        .eq('proposal_id', proposalId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError(
+        'Proposal status was not updated by the authenticated administrator.',
+      );
+    }
   }
 
   Future<void> updateProposal(
     String proposalId,
     Map<String, dynamic> values,
   ) async {
-    await client.from('proposals').update(values).eq(
-          'proposal_id',
-          proposalId,
-        );
+    final userId = await ensureActingUser();
+    final updated = await client
+        .from('proposals')
+        .update(values)
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (updated == null) {
+      throw StateError('Proposal was not updated by its owner.');
+    }
   }
 
   Future<void> deleteProposal(String proposalId) async {
-    await client.from('proposals').delete().eq(
-          'proposal_id',
-          proposalId,
+    final userId = await ensureActingUser();
+    final deleted = await client
+        .from('proposals')
+        .delete()
+        .eq('proposal_id', proposalId)
+        .eq('user_id', userId)
+        .select('proposal_id')
+        .maybeSingle();
+    if (deleted == null) {
+      throw StateError('Proposal was not deleted by its owner.');
+    }
+  }
+
+  // --- Module 3: fault reports (driver-facing) ---------------------------
+
+  Future<List<Map<String, dynamic>>> getFaultReports() async {
+    final response = await client
+        .from('fault_reports')
+        .select()
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Inserts a report and returns its generated `report_id` — needed by
+  /// [FeedbackRepository] to upload the photo under the right storage path
+  /// once the row exists (see `uploadFaultReportPhoto`).
+  Future<String> insertFaultReport(Map<String, dynamic> values) async {
+    final row = await client
+        .from('fault_reports')
+        .insert(values)
+        .select('report_id')
+        .single();
+    return row['report_id'] as String;
+  }
+
+  Future<void> updateFaultReport(
+    String reportId,
+    Map<String, dynamic> values,
+  ) async {
+    await client.from('fault_reports').update(values).eq(
+          'report_id',
+          reportId,
         );
+  }
+
+  Future<void> deleteFaultReport(String reportId) async {
+    await client.from('fault_reports').delete().eq(
+          'report_id',
+          reportId,
+        );
+  }
+
+  /// Uploads one photo of a report (up to `kFaultReportMaxPhotos` total,
+  /// distinguished by [index]) and returns its public URL.
+  Future<String> uploadFaultReportPhoto(
+    String reportId,
+    XFile file, {
+    required int index,
+  }) async {
+    final userId = client.auth.currentUser?.id ?? mockUserId;
+    final bytes = await file.readAsBytes();
+    final extension = file.name.contains('.')
+        ? file.name.split('.').last.toLowerCase()
+        : 'jpg';
+    final path = '$userId/$reportId/$index.$extension';
+    await client.storage.from('fault_report_photos').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: file.mimeType),
+        );
+    return client.storage.from('fault_report_photos').getPublicUrl(path);
+  }
+
+  // --- Module 3: fault reports + maintenance (admin-facing) --------------
+  //
+  // `getFaultReports()` above already returns every report regardless of
+  // caller — the `fault_reports_select_all_authenticated` RLS policy gives
+  // every signed-in user community-wide read access (needed for the
+  // driver's "Nearby Issues" map). Only *writing* another user's report
+  // needs the admin-only `fault_reports_admin_full_access` policy, so no
+  // separate admin read method is needed here.
+
+  /// Looks up display names for a set of user ids — used to attach
+  /// `FaultReport.reporterName` after the fact, since `fault_reports` itself
+  /// only stores `user_id`.
+  Future<Map<String, String>> getUserNames(Iterable<String> userIds) async {
+    final ids = userIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final rows = await client
+        .from('users')
+        .select('id, full_name')
+        .inFilter('id', ids);
+    return {
+      for (final row in List<Map<String, dynamic>>.from(rows))
+        row['id'] as String: (row['full_name'] as String?)?.trim().isNotEmpty ==
+                true
+            ? row['full_name'] as String
+            : 'Unknown driver',
+    };
+  }
+
+  /// Writes a fault report's lifecycle status and stamps the matching
+  /// timestamp/actor columns. [status] is the raw lowercase/snake_case DB
+  /// value ('submitted' / 'verified' / 'in_progress' / 'resolved') — callers
+  /// map the display value down before calling this (see
+  /// `AdminFeedbackRepository`).
+  Future<void> updateFaultReportStatus(
+    String reportId,
+    String status, {
+    String? adminId,
+  }) async {
+    await client.from('fault_reports').update({
+      'status': status,
+      if (status == 'verified') 'verified_at': DateTime.now().toIso8601String(),
+      if (status == 'verified') 'verified_by': adminId,
+      if (status == 'in_progress')
+        'in_progress_at': DateTime.now().toIso8601String(),
+      if (status == 'resolved')
+        'resolved_at': DateTime.now().toIso8601String(),
+    }).eq('report_id', reportId);
+  }
+
+  Future<void> updateFaultReportPriority(String reportId, String priority) async {
+    await client
+        .from('fault_reports')
+        .update({'priority': priority}).eq('report_id', reportId);
+  }
+
+  Future<List<Map<String, dynamic>>> getMaintenanceRecords() async {
+    final response = await client
+        .from('maintenance_records')
+        .select()
+        .order('maintenance_date', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Inserts a maintenance record and returns its generated `record_id`.
+  Future<String> insertMaintenanceRecord(Map<String, dynamic> values) async {
+    final row = await client
+        .from('maintenance_records')
+        .insert(values)
+        .select('record_id')
+        .single();
+    return row['record_id'] as String;
+  }
+
+  Future<void> updateMaintenanceRecord(
+    String recordId,
+    Map<String, dynamic> values,
+  ) async {
+    await client
+        .from('maintenance_records')
+        .update(values)
+        .eq('record_id', recordId);
+  }
+
+  Future<void> deleteMaintenanceRecord(String recordId) async {
+    await client
+        .from('maintenance_records')
+        .delete()
+        .eq('record_id', recordId);
   }
 }

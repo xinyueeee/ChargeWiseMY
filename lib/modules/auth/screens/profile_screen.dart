@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/navigation/driver_navigation.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../../charging/screens/charging_screen.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../services/auth_service.dart';
@@ -16,8 +19,18 @@ const _hintColor = Color(0xFF9AA5B1);
 const _primaryGreen = Color(0xFF00B894);
 
 const _monthNames = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 String _formatMemberSince(String? isoDate) {
@@ -80,9 +93,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await _authService.logout();
+    // AuthGate swaps its content back to Login once signed out, but that
+    // happens on the root route underneath this pushed screen. Pop back to
+    // it so the user actually sees Login instead of staying on this page.
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
+
+  /// Destinations for this screen, shared by the bottom bar and the
+
+  /// side rail so both surfaces stay identical.
+
+  DriverNavigationConfig _navConfig(BuildContext context) =>
+      DriverNavigationConfig(
+        currentTab: 'Profile',
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
+        ),
+        onPlanningTap: () => _switchTo(
+          context,
+          const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
+        ),
+        onFeedbackTap: () => _switchTo(
+          context,
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -95,383 +136,378 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0,
         foregroundColor: Colors.black,
       ),
-      bottomNavigationBar: FloatingBottomNav(
-        currentTab: 'Profile',
-        onHomeTap: () => Navigator.of(context).popUntil(
-          (route) => route.isFirst,
-        ),
-        onChargingTap: () => _switchTo(context, const ChargingScreen()),
-        onPlanningTap: () => _switchTo(
-          context,
-          const PlanningDashboardScreen(),
-        ),
-      ),
-      body: SafeArea(
-        child: FutureBuilder<Map<String, dynamic>?>(
-          future: _profileFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.cloud_off, color: Colors.redAccent),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Unable to load profile. Check your connection and try again.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      TextButton.icon(
-                        onPressed: _reload,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Try again'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            final profile = snapshot.data ?? const {};
-            final fullName =
-                (profile['full_name'] as String?)?.trim().isNotEmpty == true
-                    ? profile['full_name'] as String
-                    : 'Driver';
-            final email = (profile['email'] as String?) ??
-                _authService.currentUser?.email ??
-                '-';
-            final phone = (profile['phone_number'] as String?)?.trim();
-            final avatarUrl = (profile['avatar_url'] as String?)?.trim();
-            final memberSince = _formatMemberSince(
-              profile['created_at'] as String?,
-            );
-
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Center(
-                    child: Text(
-                      'View and manage your personal information.',
-                      style: TextStyle(color: _hintColor, fontSize: 13),
+      bottomNavigationBar: _navConfig(context).bottomBarFor(context),
+      body: DriverNavigationShell(
+        config: _navConfig(context),
+        child: SafeArea(
+          child: FutureBuilder<Map<String, dynamic>?>(
+            future: _profileFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.cloud_off, color: Colors.redAccent),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Unable to load profile. Check your connection and try again.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: _reload,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try again'),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  ProfileSectionCard(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Stack(
-                              children: [
-                                Container(
-                                  width: 56,
-                                  height: 56,
-                                  clipBehavior: Clip.antiAlias,
-                                  decoration: BoxDecoration(
-                                    color: _primaryGreen.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: avatarUrl == null || avatarUrl.isEmpty
-                                      ? const Icon(
-                                          Icons.person,
-                                          color: _primaryGreen,
-                                          size: 30,
-                                        )
-                                      : Image.network(
-                                          avatarUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(
-                                            Icons.person,
-                                            color: _primaryGreen,
-                                            size: 30,
-                                          ),
-                                        ),
-                                ),
-                                if (_uploadingAvatar)
+                );
+              }
+
+              final profile = snapshot.data ?? const {};
+              final fullName =
+                  (profile['full_name'] as String?)?.trim().isNotEmpty == true
+                      ? profile['full_name'] as String
+                      : 'Driver';
+              final email = (profile['email'] as String?) ??
+                  _authService.currentUser?.email ??
+                  '-';
+              final phone = (profile['phone_number'] as String?)?.trim();
+              final avatarUrl = (profile['avatar_url'] as String?)?.trim();
+              final memberSince = _formatMemberSince(
+                profile['created_at'] as String?,
+              );
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Center(
+                      child: Text(
+                        'View and manage your personal information.',
+                        style: TextStyle(color: _hintColor, fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ProfileSectionCard(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Stack(
+                                children: [
                                   Container(
                                     width: 56,
                                     height: 56,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black38,
+                                    clipBehavior: Clip.antiAlias,
+                                    decoration: BoxDecoration(
+                                      color: _primaryGreen.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Center(
-                                      child: SizedBox(
+                                    child:
+                                        avatarUrl == null || avatarUrl.isEmpty
+                                            ? const Icon(
+                                                Icons.person,
+                                                color: _primaryGreen,
+                                                size: 30,
+                                              )
+                                            : Image.network(
+                                                avatarUrl,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, __, ___) =>
+                                                    const Icon(
+                                                  Icons.person,
+                                                  color: _primaryGreen,
+                                                  size: 30,
+                                                ),
+                                              ),
+                                  ),
+                                  if (_uploadingAvatar)
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black38,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: GestureDetector(
+                                      onTap: _uploadingAvatar
+                                          ? null
+                                          : _pickAndUploadAvatar,
+                                      child: Container(
                                         width: 20,
                                         height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                                        decoration: BoxDecoration(
                                           color: Colors.white,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: const Color(0xFFE9EDF3),
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.camera_alt_outlined,
+                                          size: 12,
+                                          color: _labelColor,
                                         ),
                                       ),
-                                    ),
-                                  ),
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: GestureDetector(
-                                    onTap: _uploadingAvatar
-                                        ? null
-                                        : _pickAndUploadAvatar,
-                                    child: Container(
-                                      width: 20,
-                                      height: 20,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: const Color(0xFFE9EDF3),
-                                        ),
-                                      ),
-                                      child: const Icon(
-                                        Icons.camera_alt_outlined,
-                                        size: 12,
-                                        color: _labelColor,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    fullName,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: _labelColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    email,
-                                    style: const TextStyle(
-                                      color: _hintColor,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Member since $memberSince',
-                                    style: const TextStyle(
-                                      color: _hintColor,
-                                      fontSize: 12,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: () async {
-                                final updated =
-                                    await Navigator.of(context).push(
-                                  MaterialPageRoute<bool>(
-                                    builder: (_) => EditProfileScreen(
-                                      fullName: fullName,
-                                      phoneNumber: phone ?? '',
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      fullName,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: _labelColor,
+                                      ),
                                     ),
-                                  ),
-                                );
-                                if (updated == true) _reload();
-                              },
-                              icon: const Icon(Icons.edit_outlined, size: 16),
-                              label: const Text('Edit Profile'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Personal Information',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: _labelColor,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ProfileSectionCard(
-                    children: [
-                      ProfileInfoRow(
-                        icon: Icons.person_outline,
-                        label: 'Full Name',
-                        value: fullName,
-                      ),
-                      ProfileInfoRow(
-                        icon: Icons.mail_outline,
-                        label: 'Email',
-                        value: email,
-                      ),
-                      ProfileInfoRow(
-                        icon: Icons.phone_outlined,
-                        label: 'Phone Number',
-                        value: (phone == null || phone.isEmpty) ? '-' : phone,
-                      ),
-                      ProfileInfoRow(
-                        icon: Icons.calendar_today_outlined,
-                        label: 'Member Since',
-                        value: memberSince,
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Vehicles',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: _labelColor,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ProfileSectionCard(
-                    children: [
-                      ProfileActionRow(
-                        icon: Icons.directions_car_outlined,
-                        title: 'My Vehicles',
-                        subtitle: 'Manage your registered vehicles.',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const VehicleListScreen(),
-                          ),
-                        ),
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Saved Stations',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: _labelColor,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ProfileSectionCard(
-                    children: [
-                      ProfileActionRow(
-                        icon: Icons.favorite_border,
-                        title: 'Saved Stations',
-                        subtitle: 'View charging stations you\'ve saved.',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const SavedStationsScreen(),
-                          ),
-                        ),
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Account',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: _labelColor,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ProfileSectionCard(
-                    children: [
-                      ProfileActionRow(
-                        icon: Icons.lock_outline,
-                        title: 'Change Password',
-                        subtitle: 'Update your password for better security.',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const ChangePasswordScreen(),
-                          ),
-                        ),
-                      ),
-                      ProfileActionRow(
-                        icon: Icons.logout,
-                        title: 'Logout',
-                        subtitle: 'Sign out from your account.',
-                        onTap: _logout,
-                        showDivider: false,
-                        destructive: true,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _primaryGreen.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          color: _primaryGreen,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Your Information',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: _labelColor,
-                                  fontSize: 13,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      email,
+                                      style: const TextStyle(
+                                        color: _hintColor,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Member since $memberSince',
+                                      style: const TextStyle(
+                                        color: _hintColor,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Keep your information updated to enjoy a '
-                                'better experience.',
-                                style: TextStyle(
-                                  color: _hintColor,
-                                  fontSize: 12,
-                                ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final updated =
+                                      await Navigator.of(context).push(
+                                    MaterialPageRoute<bool>(
+                                      builder: (_) => EditProfileScreen(
+                                        fullName: fullName,
+                                        phoneNumber: phone ?? '',
+                                      ),
+                                    ),
+                                  );
+                                  if (updated == true) _reload();
+                                },
+                                icon: const Icon(Icons.edit_outlined, size: 16),
+                                label: const Text('Edit Profile'),
                               ),
                             ],
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Personal Information',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _labelColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ProfileSectionCard(
+                      children: [
+                        ProfileInfoRow(
+                          icon: Icons.person_outline,
+                          label: 'Full Name',
+                          value: fullName,
+                        ),
+                        ProfileInfoRow(
+                          icon: Icons.mail_outline,
+                          label: 'Email',
+                          value: email,
+                        ),
+                        ProfileInfoRow(
+                          icon: Icons.phone_outlined,
+                          label: 'Phone Number',
+                          value: (phone == null || phone.isEmpty) ? '-' : phone,
+                        ),
+                        ProfileInfoRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: 'Member Since',
+                          value: memberSince,
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Vehicles',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _labelColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ProfileSectionCard(
+                      children: [
+                        ProfileActionRow(
+                          icon: Icons.directions_car_outlined,
+                          title: 'My Vehicles',
+                          subtitle: 'Manage your registered vehicles.',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const VehicleListScreen(),
+                            ),
+                          ),
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Saved Stations',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _labelColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ProfileSectionCard(
+                      children: [
+                        ProfileActionRow(
+                          icon: Icons.favorite_border,
+                          title: 'Saved Stations',
+                          subtitle: 'View charging stations you\'ve saved.',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const SavedStationsScreen(),
+                            ),
+                          ),
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Account',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _labelColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ProfileSectionCard(
+                      children: [
+                        ProfileActionRow(
+                          icon: Icons.lock_outline,
+                          title: 'Change Password',
+                          subtitle: 'Update your password for better security.',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ChangePasswordScreen(),
+                            ),
+                          ),
+                        ),
+                        ProfileActionRow(
+                          icon: Icons.logout,
+                          title: 'Logout',
+                          subtitle: 'Sign out from your account.',
+                          onTap: _logout,
+                          showDivider: false,
+                          destructive: true,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _primaryGreen.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: _primaryGreen,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Your Information',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _labelColor,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'Keep your information updated to enjoy a '
+                                  'better experience.',
+                                  style: TextStyle(
+                                    color: _hintColor,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  void _switchTo(BuildContext context, Widget page) {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page),
+  void _switchTo(BuildContext context, Widget page, String routeName) {
+    openDriverModule(
+      context,
+      routeName: routeName,
+      builder: (_) => page,
     );
   }
 }

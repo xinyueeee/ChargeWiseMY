@@ -96,6 +96,11 @@ class NotificationService {
   }
 
   Future<void> cancel(String reminderId) async {
+    // init() is idempotent and now started in the background from main(),
+    // not awaited before the first frame; every public method here must
+    // still guarantee it has completed before touching the plugin, exactly
+    // as scheduleReminder() already does.
+    await init();
     await Workmanager().cancelByUniqueName(reminderId);
     await _plugin.cancel(notificationIdFor(reminderId));
   }

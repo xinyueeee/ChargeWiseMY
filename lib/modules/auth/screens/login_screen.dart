@@ -39,7 +39,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       // Navigation on success is handled by the auth-state listener in
       // AuthGate, so nothing further to do here.
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint('Login error: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_friendlyError(error))),

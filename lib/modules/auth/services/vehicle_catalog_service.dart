@@ -9,6 +9,9 @@ class VehicleMake {
   final List<String> models;
 }
 
+/// Loads the Malaysia-focused EV make/model catalog from
+/// assets/data/ev_makes_models.json, so the list can be updated by editing
+/// that file instead of changing app code.
 class VehicleCatalogService {
   static List<VehicleMake>? _cache;
 

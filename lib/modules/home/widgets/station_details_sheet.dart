@@ -16,7 +16,8 @@ Future<void> showStationDetailsSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => _StationDetailsSheet(station: station, distanceKm: distanceKm),
+    builder: (_) =>
+        _StationDetailsSheet(station: station, distanceKm: distanceKm),
   );
 }
 
@@ -91,6 +92,13 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
   Widget build(BuildContext context) {
     final station = widget.station;
     final address = station.address?.trim();
+    final pbt = station.pbt?.trim();
+    final state = station.state?.trim();
+    final locationContext = <String>[
+      if (pbt != null && pbt.isNotEmpty) pbt,
+      if (state != null && state.isNotEmpty) state,
+    ].join(', ');
+    final hasAddress = address != null && address.isNotEmpty;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
@@ -124,7 +132,8 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: green.withValues(alpha: .1),
                     borderRadius: BorderRadius.circular(20),
@@ -162,27 +171,26 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
             const SizedBox(height: 16),
             _DetailRow(
               icon: Icons.location_on_outlined,
-              label: 'Address',
-              value: address == null || address.isEmpty ? 'Not available' : address,
+              label: hasAddress ? 'Address' : 'Location context',
+              value: hasAddress
+                  ? address
+                  : locationContext.isEmpty
+                      ? 'Not available'
+                      : locationContext,
             ),
             _DetailRow(
               icon: Icons.power_outlined,
-              label: 'Available Ports',
-              value: station.availablePorts?.toString() ?? 'Not available',
+              label: 'Installed Chargers',
+              value: station.chargerCount?.toString() ?? 'Not available',
             ),
-            _DetailRow(
-              icon: Icons.info_outline,
-              label: 'Status',
-              value: station.status ?? 'Not available',
-            ),
-            _DetailRow(
-              icon: station.indoorOutdoor == 'Indoor'
-                  ? Icons.home_outlined
-                  : Icons.park_outlined,
-              label: 'Indoor / Outdoor',
-              value: station.indoorOutdoor ?? 'Not available',
-              showDivider: false,
-            ),
+            if (station.acChargerCount != null ||
+                station.dcChargerCount != null)
+              _DetailRow(
+                icon: Icons.electrical_services_outlined,
+                label: 'Charger mix',
+                value:
+                    'AC: ${station.acChargerCount ?? 0} · DC: ${station.dcChargerCount ?? 0}',
+              ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -196,10 +204,12 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+              style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50)),
               onPressed: _loading || _updating ? null : _toggleSaved,
               icon: Icon(_saved ? Icons.favorite : Icons.favorite_border),
-              label: Text(_saved ? 'Saved to Favourites' : 'Save to Favourites'),
+              label:
+                  Text(_saved ? 'Saved to Favourites' : 'Save to Favourites'),
             ),
             const SizedBox(height: 10),
             Container(
@@ -215,7 +225,8 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
                   Expanded(
                     child: Text(
                       'Opens Google Maps for turn-by-turn directions to this station.',
-                      style: TextStyle(fontSize: 11, color: planningMutedTextColor),
+                      style: TextStyle(
+                          fontSize: 11, color: planningMutedTextColor),
                     ),
                   ),
                 ],
@@ -233,13 +244,11 @@ class _DetailRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.showDivider = true,
   });
 
   final IconData icon;
   final String label;
   final String value;
-  final bool showDivider;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -250,7 +259,8 @@ class _DetailRow extends StatelessWidget {
               children: [
                 Icon(icon, size: 17, color: green),
                 const SizedBox(width: 10),
-                Text(label, style: const TextStyle(color: planningMutedTextColor)),
+                Text(label,
+                    style: const TextStyle(color: planningMutedTextColor)),
                 const Spacer(),
                 Flexible(
                   child: Text(
@@ -265,7 +275,7 @@ class _DetailRow extends StatelessWidget {
               ],
             ),
           ),
-          if (showDivider) const Divider(height: 1),
+          const Divider(height: 1),
         ],
       );
 }
