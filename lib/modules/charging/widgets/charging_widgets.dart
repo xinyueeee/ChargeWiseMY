@@ -5,13 +5,11 @@ import '../../planning/widgets/planning_widgets.dart';
 
 const chargingDcColor = Colors.orange;
 const chargingAcColor = Colors.deepPurple;
-const chargingUltraColor = Colors.cyan;
 
-const chargerTypes = ['AC Charger', 'DC Fast Charger', 'Ultra Fast Charger'];
+const chargerTypes = ['AC Charger', 'DC Fast Charger'];
 
 Color colorForChargerType(String? chargerType) {
   final type = (chargerType ?? '').toLowerCase();
-  if (type.contains('ultra')) return chargingUltraColor;
   if (type.contains('dc')) return chargingDcColor;
   return chargingAcColor;
 }

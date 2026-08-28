@@ -756,7 +756,8 @@ class _SessionTile extends StatelessWidget {
                 PopupMenuItem(
                   value: 'delete',
                   child: ListTile(
-                    leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+                    leading:
+                        Icon(Icons.delete_outline, color: Colors.redAccent),
                     title: Text('Delete Session'),
                   ),
                 ),
@@ -786,56 +787,88 @@ void _showSessionDetails(BuildContext context, Map<String, dynamic> session) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                ChargerTypeIcon(chargerType: chargerType),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        session['station_name'] as String,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: planningTextColor,
-                        ),
-                      ),
-                      Text(
-                        formatSessionDate(sessionAt),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: planningMutedTextColor,
-                        ),
-                      ),
-                    ],
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDDE3EA),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 20),
-            _SessionDetailRow(label: 'Charger Type', value: chargerType),
-            _SessionDetailRow(
-              label: 'Charging Power',
-              value: '${power.toStringAsFixed(0)} kW',
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ChargerTypeIcon(chargerType: chargerType),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                session['station_name'] as String,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: planningTextColor,
+                                ),
+                              ),
+                              Text(
+                                formatSessionDate(sessionAt),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: planningMutedTextColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _SessionDetailRow(
+                        label: 'Charger Type', value: chargerType),
+                    _SessionDetailRow(
+                      label: 'Charging Power',
+                      value: '${power.toStringAsFixed(0)} kW',
+                    ),
+                    _SessionDetailRow(
+                      label: 'Energy Added',
+                      value: '${energy.toStringAsFixed(1)} kWh',
+                    ),
+                    _SessionDetailRow(
+                      label: 'Duration',
+                      value: formatDuration(duration),
+                    ),
+                    _SessionDetailRow(
+                      label: 'Cost',
+                      value: 'RM${cost.toStringAsFixed(2)}',
+                    ),
+                    if (vehicleLabel != null && vehicleLabel.isNotEmpty)
+                      _SessionDetailRow(label: 'Vehicle', value: vehicleLabel),
+                    if (notes != null && notes.isNotEmpty)
+                      _SessionDetailRow(label: 'Additional Info', value: notes),
+                  ],
+                ),
+              ),
             ),
-            _SessionDetailRow(
-              label: 'Energy Added',
-              value: '${energy.toStringAsFixed(1)} kWh',
-            ),
-            _SessionDetailRow(label: 'Duration', value: formatDuration(duration)),
-            _SessionDetailRow(label: 'Cost', value: 'RM${cost.toStringAsFixed(2)}'),
-            if (vehicleLabel != null && vehicleLabel.isNotEmpty)
-              _SessionDetailRow(label: 'Vehicle', value: vehicleLabel),
-            if (notes != null && notes.isNotEmpty)
-              _SessionDetailRow(label: 'Additional Info', value: notes),
           ],
         ),
       ),

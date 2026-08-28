@@ -23,10 +23,9 @@ import '../widgets/station_details_sheet.dart';
 
 const _malaysiaFallback = LatLng(3.1390, 101.6869); // Kuala Lumpur
 const _dcColor = Colors.orange;
-const _ultraColor = Colors.cyan;
 const _acColor = Colors.deepPurple;
 
-enum _ChargerGroup { ac, dc, ultra }
+enum _ChargerGroup { ac, dc }
 
 /// Groups thousands so large location counts stay readable.
 String _formatCount(int value) => value.toString().replaceAllMapped(
@@ -36,7 +35,6 @@ String _formatCount(int value) => value.toString().replaceAllMapped(
 
 _ChargerGroup _chargerGroup(ChargingStation station) {
   final type = station.chargerType.toLowerCase();
-  if (type.contains('ultra')) return _ChargerGroup.ultra;
   if (type.contains('dc')) return _ChargerGroup.dc;
   return _ChargerGroup.ac;
 }
@@ -45,8 +43,6 @@ BitmapDescriptor _iconForStation(ChargingStation station) {
   switch (_chargerGroup(station)) {
     case _ChargerGroup.dc:
       return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-    case _ChargerGroup.ultra:
-      return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan);
     case _ChargerGroup.ac:
       return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
   }
@@ -269,9 +265,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           (_chargerFilter == 'DC' &&
               _chargerGroup(station) == _ChargerGroup.dc) ||
           (_chargerFilter == 'AC' &&
-              _chargerGroup(station) == _ChargerGroup.ac) ||
-          (_chargerFilter == 'Ultra' &&
-              _chargerGroup(station) == _ChargerGroup.ultra);
+              _chargerGroup(station) == _ChargerGroup.ac);
       final matchesSearch =
           query.isEmpty || station.name.toLowerCase().contains(query);
       return matchesFilter && matchesSearch;
@@ -335,9 +329,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                   .length;
               final acCount = homeStations
                   .where((s) => _chargerGroup(s) == _ChargerGroup.ac)
-                  .length;
-              final ultraCount = homeStations
-                  .where((s) => _chargerGroup(s) == _ChargerGroup.ultra)
                   .length;
 
               return ListView(
@@ -499,7 +490,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                     ),
                   if (_mapMounted)
                     MapPanel(
-                      height: 300,
+                      height: 220,
                       stations: homeStations,
                       stateRegions: vm.stateRegions,
                       stateOverviews: vm.stateOverviewSummaries,
@@ -573,10 +564,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                       DropdownMenuItem(value: 'AC', child: Text('AC Charger')),
                       DropdownMenuItem(
                           value: 'DC', child: Text('DC Fast Charger')),
-                      DropdownMenuItem(
-                        value: 'Ultra',
-                        child: Text('Ultra Fast Charger'),
-                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -626,16 +613,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                           label: 'AC',
                           icon: Icons.bolt,
                           color: _acColor,
-                          width: double.infinity,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: StatisticCard(
-                          value: '$ultraCount',
-                          label: 'Ultra Fast',
-                          icon: Icons.bolt,
-                          color: _ultraColor,
                           width: double.infinity,
                         ),
                       ),

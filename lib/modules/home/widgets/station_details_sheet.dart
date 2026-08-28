@@ -100,136 +100,195 @@ class _StationDetailsSheetState extends State<_StationDetailsSheet> {
     ].join(', ');
     final hasAddress = address != null && address.isNotEmpty;
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDDE3EA),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text(
-              station.name,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: planningTextColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: green.withValues(alpha: .1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    station.chargerType,
-                    style: const TextStyle(
-                      color: green,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
+                    color: const Color(0xFFDDE3EA),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                if (widget.distanceKm != null)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.location_on_outlined,
-                        size: 15,
-                        color: planningMutedTextColor,
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      station.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: planningTextColor,
                       ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '${widget.distanceKm!.toStringAsFixed(1)} km away',
-                        style: const TextStyle(
-                          color: planningMutedTextColor,
-                          fontSize: 12,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: green.withValues(alpha: .1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            station.chargerType,
+                            style: const TextStyle(
+                              color: green,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        if (widget.distanceKm != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.location_on_outlined,
+                                size: 15,
+                                color: planningMutedTextColor,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${widget.distanceKm!.toStringAsFixed(1)} km away',
+                                style: const TextStyle(
+                                  color: planningMutedTextColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailRow(
+                      icon: Icons.location_on_outlined,
+                      label: hasAddress ? 'Address' : 'Location context',
+                      value: hasAddress
+                          ? address
+                          : locationContext.isEmpty
+                              ? 'Not available'
+                              : locationContext,
+                    ),
+                    _DetailRow(
+                      icon: Icons.power_outlined,
+                      label: 'Installed Chargers',
+                      value:
+                          station.chargerCount?.toString() ?? 'Not available',
+                    ),
+                    if (station.acChargerCount != null ||
+                        station.dcChargerCount != null)
+                      _DetailRow(
+                        icon: Icons.electrical_services_outlined,
+                        label: 'Charger mix',
+                        value:
+                            'AC: ${station.acChargerCount ?? 0} · DC: ${station.dcChargerCount ?? 0}',
+                      ),
+                    if (station.status != null &&
+                        station.status!.trim().isNotEmpty)
+                      _DetailRow(
+                        icon: Icons.info_outline,
+                        label: 'Status',
+                        value: station.status!,
+                      ),
+                    if (station.proposedChargerCount > 0)
+                      _DetailRow(
+                        icon: Icons.pending_actions_outlined,
+                        label: 'Proposed Chargers',
+                        value: station.proposedChargerCount.toString(),
+                      ),
+                    if (station.indoorOutdoor != null &&
+                        station.indoorOutdoor!.trim().isNotEmpty)
+                      _DetailRow(
+                        icon: Icons.roofing_outlined,
+                        label: 'Indoor / Outdoor',
+                        value: station.indoorOutdoor!,
+                      ),
+                    if (station.category != null &&
+                        station.category!.trim().isNotEmpty)
+                      _DetailRow(
+                        icon: Icons.category_outlined,
+                        label: 'Category',
+                        value: station.category!,
+                      ),
+                    if (station.source != null &&
+                        station.source!.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          station.dataDate == null
+                              ? 'Data source: ${station.source}'
+                              : 'Data source: ${station.source}, as of '
+                                  '${station.dataDate!.day}/${station.dataDate!.month}/${station.dataDate!.year}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: planningMutedTextColor,
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _DetailRow(
-              icon: Icons.location_on_outlined,
-              label: hasAddress ? 'Address' : 'Location context',
-              value: hasAddress
-                  ? address
-                  : locationContext.isEmpty
-                      ? 'Not available'
-                      : locationContext,
-            ),
-            _DetailRow(
-              icon: Icons.power_outlined,
-              label: 'Installed Chargers',
-              value: station.chargerCount?.toString() ?? 'Not available',
-            ),
-            if (station.acChargerCount != null ||
-                station.dcChargerCount != null)
-              _DetailRow(
-                icon: Icons.electrical_services_outlined,
-                label: 'Charger mix',
-                value:
-                    'AC: ${station.acChargerCount ?? 0} · DC: ${station.dcChargerCount ?? 0}',
-              ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: green,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(50),
-              ),
-              onPressed: _navigate,
-              icon: const Icon(Icons.directions),
-              label: const Text('Navigate with Google Maps'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50)),
-              onPressed: _loading || _updating ? null : _toggleSaved,
-              icon: Icon(_saved ? Icons.favorite : Icons.favorite_border),
-              label:
-                  Text(_saved ? 'Saved to Favourites' : 'Save to Favourites'),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: green.withValues(alpha: .06),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: green),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Opens Google Maps for turn-by-turn directions to this station.',
-                      style: TextStyle(
-                          fontSize: 11, color: planningMutedTextColor),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: green,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(50),
+                      ),
+                      onPressed: _navigate,
+                      icon: const Icon(Icons.directions),
+                      label: const Text('Navigate with Google Maps'),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(50)),
+                      onPressed: _loading || _updating ? null : _toggleSaved,
+                      icon:
+                          Icon(_saved ? Icons.favorite : Icons.favorite_border),
+                      label: Text(_saved
+                          ? 'Saved to Favourites'
+                          : 'Save to Favourites'),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: green.withValues(alpha: .06),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: green),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Opens Google Maps for turn-by-turn directions to this station.',
+                              style: TextStyle(
+                                  fontSize: 11, color: planningMutedTextColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -256,16 +315,19 @@ class _DetailRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(icon, size: 17, color: green),
                 const SizedBox(width: 10),
-                Text(label,
-                    style: const TextStyle(color: planningMutedTextColor)),
-                const Spacer(),
-                Flexible(
+                SizedBox(
+                  width: 130,
+                  child: Text(label,
+                      style: const TextStyle(color: planningMutedTextColor)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Text(
                     value,
-                    textAlign: TextAlign.right,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       color: planningTextColor,
