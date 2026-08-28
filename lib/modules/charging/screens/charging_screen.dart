@@ -114,6 +114,23 @@ class _ChargingScreenState extends State<ChargingScreen> {
     setState(() => _calcResult = power * hours * rate);
   }
 
+  Future<void> _recordCalculatedSession() async {
+    final power = int.tryParse(_calcPowerController.text.trim());
+    if (power == null || _calcResult == null) return;
+    final hours = _calcHours + _calcMinutes / 60;
+    final saved = await showCreateSessionSheet(
+      context,
+      prefill: {
+        'charger_type': _calcChargerType,
+        'power_kw': power,
+        'energy_kwh': power * hours,
+        'cost': _calcResult,
+        'duration_minutes': _calcHours * 60 + _calcMinutes,
+      },
+    );
+    if (saved == true) _reloadSessions();
+  }
+
   bool get _isWeekendNow {
     final now = DateTime.now();
     return now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
@@ -382,6 +399,14 @@ class _ChargingScreenState extends State<ChargingScreen> {
               ),
             ],
           ),
+          if (_calcResult != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _recordCalculatedSession,
+              icon: const Icon(Icons.receipt_long_outlined, color: green),
+              label: const Text('Record This as a Session'),
+            ),
+          ],
         ],
       ),
     );
@@ -678,88 +703,181 @@ class _SessionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final chargerType = session['charger_type'] as String? ?? '';
     final cost = (session['cost'] as num).toDouble();
-    final energy = (session['energy_kwh'] as num).toDouble();
-    final duration = session['duration_minutes'] as int;
     final sessionAt = DateTime.parse(session['session_at'] as String);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ChargerTypeIcon(chargerType: chargerType),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  session['station_name'] as String,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: planningTextColor,
+    return InkWell(
+      onTap: () => _showSessionDetails(context, session),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ChargerTypeIcon(chargerType: chargerType),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    session['station_name'] as String,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: planningTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    formatSessionDate(sessionAt),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: planningMutedTextColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              'RM${cost.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 18),
+              onSelected: (value) {
+                if (value == 'edit') onEdit();
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Update Session'),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '$chargerType · ${(session['power_kw'] as num).toStringAsFixed(0)} kW',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: planningMutedTextColor,
-                  ),
-                ),
-                Text(
-                  formatSessionDate(sessionAt),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: planningMutedTextColor,
+                PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+                    title: Text('Delete Session'),
                   ),
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'RM${cost.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              Text(
-                '${energy.toStringAsFixed(1)} kWh · ${formatDuration(duration)}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: planningMutedTextColor,
-                ),
-              ),
-            ],
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 18),
-            onSelected: (value) {
-              if (value == 'edit') onEdit();
-              if (value == 'delete') onDelete();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'edit',
-                child: ListTile(
-                  leading: Icon(Icons.edit_outlined),
-                  title: Text('Update Session'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: ListTile(
-                  leading: Icon(Icons.delete_outline, color: Colors.redAccent),
-                  title: Text('Delete Session'),
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+void _showSessionDetails(BuildContext context, Map<String, dynamic> session) {
+  final chargerType = session['charger_type'] as String? ?? '';
+  final power = (session['power_kw'] as num).toDouble();
+  final energy = (session['energy_kwh'] as num).toDouble();
+  final duration = session['duration_minutes'] as int;
+  final cost = (session['cost'] as num).toDouble();
+  final sessionAt = DateTime.parse(session['session_at'] as String);
+  final vehicleLabel = session['vehicle_label'] as String?;
+  final notes = session['notes'] as String?;
+
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ChargerTypeIcon(chargerType: chargerType),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        session['station_name'] as String,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: planningTextColor,
+                        ),
+                      ),
+                      Text(
+                        formatSessionDate(sessionAt),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: planningMutedTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _SessionDetailRow(label: 'Charger Type', value: chargerType),
+            _SessionDetailRow(
+              label: 'Charging Power',
+              value: '${power.toStringAsFixed(0)} kW',
+            ),
+            _SessionDetailRow(
+              label: 'Energy Added',
+              value: '${energy.toStringAsFixed(1)} kWh',
+            ),
+            _SessionDetailRow(label: 'Duration', value: formatDuration(duration)),
+            _SessionDetailRow(label: 'Cost', value: 'RM${cost.toStringAsFixed(2)}'),
+            if (vehicleLabel != null && vehicleLabel.isNotEmpty)
+              _SessionDetailRow(label: 'Vehicle', value: vehicleLabel),
+            if (notes != null && notes.isNotEmpty)
+              _SessionDetailRow(label: 'Additional Info', value: notes),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _SessionDetailRow extends StatelessWidget {
+  const _SessionDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: planningMutedTextColor,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: planningTextColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _ReminderTile extends StatelessWidget {

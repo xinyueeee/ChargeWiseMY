@@ -13,6 +13,7 @@ import '../widgets/charging_widgets.dart';
 Future<bool?> showCreateSessionSheet(
   BuildContext context, {
   Map<String, dynamic>? existing,
+  Map<String, dynamic>? prefill,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -20,14 +21,15 @@ Future<bool?> showCreateSessionSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => _CreateSessionSheet(existing: existing),
+    builder: (_) => _CreateSessionSheet(existing: existing, prefill: prefill),
   );
 }
 
 class _CreateSessionSheet extends StatefulWidget {
-  const _CreateSessionSheet({this.existing});
+  const _CreateSessionSheet({this.existing, this.prefill});
 
   final Map<String, dynamic>? existing;
+  final Map<String, dynamic>? prefill;
 
   @override
   State<_CreateSessionSheet> createState() => _CreateSessionSheetState();
@@ -59,28 +61,31 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
   void initState() {
     super.initState();
     final existing = widget.existing;
+    final source = existing ?? widget.prefill;
     _stationName = existing?['station_name'] as String? ?? '';
     _selectedStationId = existing?['station_id'] as String?;
     _autoFilledStationName =
         _selectedStationId != null ? _stationName : null;
     _powerController = TextEditingController(
-      text: existing == null ? '' : (existing['power_kw'] as num).toString(),
+      text: source?['power_kw'] == null
+          ? ''
+          : (source!['power_kw'] as num).toString(),
     );
     _energyController = TextEditingController(
-      text: existing == null
+      text: source?['energy_kwh'] == null
           ? ''
-          : (existing['energy_kwh'] as num).toString(),
+          : (source!['energy_kwh'] as num).toString(),
     );
     _costController = TextEditingController(
-      text: existing == null ? '' : (existing['cost'] as num).toString(),
+      text: source?['cost'] == null ? '' : (source!['cost'] as num).toString(),
     );
     _notesController =
         TextEditingController(text: existing?['notes'] as String? ?? '');
-    _chargerType = existing?['charger_type'] as String? ?? chargerTypes[1];
+    _chargerType = source?['charger_type'] as String? ?? chargerTypes[1];
     _sessionAt = existing == null
         ? DateTime.now()
         : DateTime.parse(existing['session_at'] as String);
-    final totalMinutes = existing?['duration_minutes'] as int? ?? 60;
+    final totalMinutes = source?['duration_minutes'] as int? ?? 60;
     _durationHours = totalMinutes ~/ 60;
     _durationMinutes = totalMinutes % 60;
     _selectedVehicleId = existing?['vehicle_id'] as String?;
