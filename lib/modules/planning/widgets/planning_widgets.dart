@@ -326,6 +326,8 @@ class MapPanel extends StatefulWidget {
     this.stateOverviews = const [],
     this.selectedState = malaysiaSelection,
     this.focusBounds,
+    this.focusTarget,
+    this.focusZoom = 14.5,
     this.analysisCacheHit,
     this.initialTarget = const LatLng(4.2105, 101.9758),
     this.initialZoom = 6.5,
@@ -344,6 +346,8 @@ class MapPanel extends StatefulWidget {
   final List<StateOverviewSummary> stateOverviews;
   final String selectedState;
   final GeoBounds? focusBounds;
+  final LatLng? focusTarget;
+  final double focusZoom;
   final bool? analysisCacheHit;
   final LatLng initialTarget;
   final double initialZoom;
@@ -492,7 +496,9 @@ class _MapPanelState extends State<MapPanel> {
       _statePolygons = _buildStatePolygons();
     }
     if (selectionChanged ||
-        oldWidget.focusBounds != widget.focusBounds) {
+        oldWidget.focusBounds != widget.focusBounds ||
+        oldWidget.focusTarget != widget.focusTarget ||
+        oldWidget.focusZoom != widget.focusZoom) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _focusSelectedRegion(reason: 'state-selection-change');
       });
@@ -1204,18 +1210,26 @@ class _MapPanelState extends State<MapPanel> {
 
   Future<void> _focusSelectedRegion({required String reason}) async {
     final controller = _mapController;
+    if (!mounted || controller == null) return;
+    final target = widget.focusTarget;
     final bounds = widget.focusBounds;
-    if (!mounted || controller == null || bounds == null) return;
+    if (target == null && bounds == null) return;
     try {
-      await controller.animateCamera(
-        CameraUpdate.newLatLngBounds(
-          LatLngBounds(
-            southwest: LatLng(bounds.south, bounds.west),
-            northeast: LatLng(bounds.north, bounds.east),
+      if (target != null) {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(target, widget.focusZoom),
+        );
+      } else {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            LatLngBounds(
+              southwest: LatLng(bounds!.south, bounds.west),
+              northeast: LatLng(bounds.north, bounds.east),
+            ),
+            34,
           ),
-          34,
-        ),
-      );
+        );
+      }
       debugPrint(
         'Map camera fitted: state=${widget.selectedState}, reason=$reason.',
       );

@@ -77,6 +77,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _chargerFilter = 'All';
   String _searchQuery = '';
   LatLng? _userLocation;
+  bool _autoLocated = false;
+  bool _autoLocateDone = false;
   Future<List<Map<String, dynamic>>>? _remindersFuture;
 
   @override
@@ -121,11 +123,38 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
       if (!mounted) return;
-      setState(() {
-        _userLocation = LatLng(position.latitude, position.longitude);
-      });
+      setState(() => _userLocation = LatLng(position.latitude, position.longitude));
     } catch (_) {
     }
+  }
+
+  void _maybeAutoLocate(PlanningViewModel vm) {
+    if (_autoLocateDone || _userLocation == null || vm.stations.isEmpty) {
+      return;
+    }
+    if (vm.selectedState != malaysiaSelection) return;
+    ChargingStation? nearest;
+    var nearestDistance = double.infinity;
+    for (final station in vm.stations) {
+      final distance = _distanceKm(
+        _userLocation!,
+        LatLng(station.latitude, station.longitude),
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = station;
+      }
+    }
+    final state = nearest == null ? null : vm.stateForStation(nearest.id);
+    if (state == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _autoLocated = true;
+        _autoLocateDone = true;
+      });
+      vm.selectState(state, source: 'home-auto-locate');
+    });
   }
 
   double _distanceKm(LatLng a, LatLng b) {
@@ -155,12 +184,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _applySuggestion(PlanningViewModel vm, _SearchSuggestion suggestion) {
     if (suggestion.type == _SuggestionType.state) {
+      setState(() {
+        _autoLocated = false;
+        _autoLocateDone = true;
+      });
       vm.selectState(suggestion.label, source: 'home-search');
       return;
     }
     final station = suggestion.station!;
     final stationState = vm.stateForStation(station.id);
-    setState(() => _searchQuery = station.name.toLowerCase());
+    setState(() {
+      _autoLocated = false;
+      _autoLocateDone = true;
+      _searchQuery = station.name.toLowerCase();
+    });
     if (stationState != null && stationState != vm.selectedState) {
       vm.selectState(stationState, source: 'home-search-station');
     }
@@ -216,6 +253,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onRetry: vm.load,
               );
             }
+
+            _maybeAutoLocate(vm);
 
             final nearby = vm.stations.where((station) {
               return _distanceKm(
@@ -366,10 +405,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: Text(vm.selectedState),
                         deleteIcon: const Icon(Icons.close, size: 17),
                         deleteButtonTooltipMessage: 'Return to Malaysia Overview',
-                        onDeleted: () => vm.selectState(
-                          malaysiaSelection,
-                          source: 'home-chip-clear',
-                        ),
+                        onDeleted: () {
+                          setState(() {
+                            _autoLocated = false;
+                            _autoLocateDone = true;
+                          });
+                          vm.selectState(
+                            malaysiaSelection,
+                            source: 'home-chip-clear',
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -379,9 +424,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   stateRegions: vm.stateRegions,
                   stateOverviews: vm.stateOverviewSummaries,
                   selectedState: vm.selectedState,
-                  focusBounds: vm.selectedMapBounds,
-                  onStateSelected: (state, source) =>
-                      vm.selectState(state, source: source),
+                  focusBounds: _autoLocated ? null : vm.selectedMapBounds,
+                  focusTarget: _autoLocated ? _userLocation : null,
+                  focusZoom: 14.5,
+                  onStateSelected: (state, source) {
+                    setState(() {
+                      _autoLocated = false;
+                      _autoLocateDone = true;
+                    });
+                    vm.selectState(state, source: source);
+                  },
                   stationIconResolver: _iconForStation,
                   onStationTap: (station) => showStationDetailsSheet(
                     context,
