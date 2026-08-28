@@ -58,7 +58,7 @@ class FeedbackDashboardScreen extends StatelessWidget {
               );
             final topThree = recent.take(3).toList();
             final inProgress =
-                vm.myReports.where((r) => r.status == 'Submitted').length;
+                vm.myReports.where((r) => r.status != 'Resolved').length;
             final resolved =
                 vm.myReports.where((r) => r.status == 'Resolved').length;
 
@@ -104,11 +104,10 @@ class FeedbackDashboardScreen extends StatelessWidget {
                             ReportOverviewStat(
                               value: '$inProgress',
                               label: 'In Progress',
-                              subtitle: 'Reports being verified',
+                              subtitle: 'Reports still being worked on',
                               icon: Icons.access_time_outlined,
                               color: orange,
-                              onTap: () =>
-                                  _openMyReports(context, 'In Progress'),
+                              onTap: () => _openMyReports(context, 'All'),
                             ),
                             ReportOverviewStat(
                               value: '$resolved',

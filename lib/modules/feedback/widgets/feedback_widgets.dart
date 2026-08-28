@@ -11,29 +11,60 @@ import '../models/fault_report.dart';
 
 const orange = Color(0xFFFF9F43);
 const purple = Color(0xFF8B5CF6);
+const red = Color(0xFFE74C3C);
 
-/// Driver-facing display label for a report's status. The DB/model value is
-/// `'Submitted'` (see `FaultReport._displayStatus`), matching the
-/// admin-side terminology in MODULE3_ADMIN_IMPLEMENTATION_PLAN.md, but the
-/// driver-facing mockups call that same state "In Progress" — mapped here
-/// at the presentation layer only, so the underlying status string used by
-/// both sides of the app stays a single source of truth.
-String feedbackStatusLabel(String status) =>
-    status == 'Submitted' ? 'In Progress' : status;
+/// Display label for a report's status. Identity function today (the four
+/// statuses — Submitted/Verified/In Progress/Resolved, see
+/// `FaultReport._displayStatus` — are shown as-is on both sides of the app),
+/// kept as a named call so call sites read the same whether or not a future
+/// relabeling is needed again.
+String feedbackStatusLabel(String status) => status;
 
+/// Matches the admin dashboard's 4-stage pipeline coloring
+/// (MODULE3_ADMIN_IMPLEMENTATION_PLAN.md): Submitted = red (new, unreviewed),
+/// Verified = orange (admin-confirmed), In Progress = blue (maintenance
+/// underway), Resolved = green (done). Shared by the driver's
+/// `ReportStatusChip` and every admin status pill/marker, so a status means
+/// the same color everywhere in the app.
 Color feedbackStatusColor(String status) {
   switch (status) {
     case 'Verified':
+      return orange;
+    case 'In Progress':
       return blue;
     case 'Resolved':
       return green;
-    default: // 'Submitted' / 'In Progress'
-      return orange;
+    default: // 'Submitted'
+      return red;
   }
 }
 
-IconData feedbackStatusIcon(String status) =>
-    status == 'Submitted' ? Icons.access_time_outlined : Icons.check_circle_outline;
+IconData feedbackStatusIcon(String status) {
+  switch (status) {
+    case 'Verified':
+      return Icons.fact_check_outlined;
+    case 'In Progress':
+      return Icons.build_outlined;
+    case 'Resolved':
+      return Icons.check_circle_outline;
+    default: // 'Submitted'
+      return Icons.mark_email_unread_outlined;
+  }
+}
+
+/// Admin-only triage priority coloring — High/Medium/Low, drivers never see
+/// this. Same red/orange/green family as status, but priority and status are
+/// independent axes (a report can be High priority and still Submitted).
+Color feedbackPriorityColor(String priority) {
+  switch (priority) {
+    case 'High':
+      return red;
+    case 'Low':
+      return green;
+    default: // 'Medium'
+      return orange;
+  }
+}
 
 /// Status pill for a [FaultReport] — same rounded-pill shape as
 /// `StatusChip` in planning_widgets.dart, plus a leading icon to match the
@@ -71,6 +102,40 @@ class ReportStatusChip extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Priority pill for a [FaultReport] — admin-only (High/Medium/Low triage),
+/// same rounded-pill shape as `ReportStatusChip` but without a leading icon,
+/// matching the plain colored pills in the "Verify Reports" mockup.
+class PriorityChip extends StatelessWidget {
+  const PriorityChip(this.priority, {super.key});
+  final String priority;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = feedbackPriorityColor(priority);
+    return Semantics(
+      label: 'Priority: $priority',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .10),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: .24)),
+        ),
+        child: Text(
+          priority,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

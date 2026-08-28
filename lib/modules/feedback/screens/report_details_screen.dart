@@ -214,12 +214,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          report.status == 'Verified'
-                              ? 'An administrator has verified this report '
-                                  'and is working on a resolution. You can '
-                                  'no longer edit or delete it.'
-                              : 'This report has been resolved. Thank you '
-                                  'for helping keep charging stations reliable.',
+                          _statusBannerMessage(report.status),
                           style: const TextStyle(color: planningMutedTextColor),
                         ),
                       ),
@@ -250,6 +245,20 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
 
   void _switchTo(Widget page, String routeName) {
     openDriverModule(context, routeName: routeName, builder: (_) => page);
+  }
+
+  String _statusBannerMessage(String status) {
+    switch (status) {
+      case 'Verified':
+        return 'An administrator has verified this report and will begin '
+            'work soon. You can no longer edit or delete it.';
+      case 'In Progress':
+        return 'Maintenance is underway for this report. You can no longer '
+            'edit or delete it.';
+      default: // 'Resolved'
+        return 'This report has been resolved. Thank you for helping keep '
+            'charging stations reliable.';
+    }
   }
 
   Future<void> _viewOnMap() async {

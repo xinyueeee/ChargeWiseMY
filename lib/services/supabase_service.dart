@@ -231,4 +231,94 @@ class SupabaseService {
         );
     return client.storage.from('fault_report_photos').getPublicUrl(path);
   }
+
+  // --- Module 3: fault reports + maintenance (admin-facing) --------------
+  //
+  // `getFaultReports()` above already returns every report regardless of
+  // caller — the `fault_reports_select_all_authenticated` RLS policy gives
+  // every signed-in user community-wide read access (needed for the
+  // driver's "Nearby Issues" map). Only *writing* another user's report
+  // needs the admin-only `fault_reports_admin_full_access` policy, so no
+  // separate admin read method is needed here.
+
+  /// Looks up display names for a set of user ids — used to attach
+  /// `FaultReport.reporterName` after the fact, since `fault_reports` itself
+  /// only stores `user_id`.
+  Future<Map<String, String>> getUserNames(Iterable<String> userIds) async {
+    final ids = userIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final rows = await client
+        .from('users')
+        .select('id, full_name')
+        .inFilter('id', ids);
+    return {
+      for (final row in List<Map<String, dynamic>>.from(rows))
+        row['id'] as String: (row['full_name'] as String?)?.trim().isNotEmpty ==
+                true
+            ? row['full_name'] as String
+            : 'Unknown driver',
+    };
+  }
+
+  /// Writes a fault report's lifecycle status and stamps the matching
+  /// timestamp/actor columns. [status] is the raw lowercase/snake_case DB
+  /// value ('submitted' / 'verified' / 'in_progress' / 'resolved') — callers
+  /// map the display value down before calling this (see
+  /// `AdminFeedbackRepository`).
+  Future<void> updateFaultReportStatus(
+    String reportId,
+    String status, {
+    String? adminId,
+  }) async {
+    await client.from('fault_reports').update({
+      'status': status,
+      if (status == 'verified') 'verified_at': DateTime.now().toIso8601String(),
+      if (status == 'verified') 'verified_by': adminId,
+      if (status == 'in_progress')
+        'in_progress_at': DateTime.now().toIso8601String(),
+      if (status == 'resolved')
+        'resolved_at': DateTime.now().toIso8601String(),
+    }).eq('report_id', reportId);
+  }
+
+  Future<void> updateFaultReportPriority(String reportId, String priority) async {
+    await client
+        .from('fault_reports')
+        .update({'priority': priority}).eq('report_id', reportId);
+  }
+
+  Future<List<Map<String, dynamic>>> getMaintenanceRecords() async {
+    final response = await client
+        .from('maintenance_records')
+        .select()
+        .order('maintenance_date', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Inserts a maintenance record and returns its generated `record_id`.
+  Future<String> insertMaintenanceRecord(Map<String, dynamic> values) async {
+    final row = await client
+        .from('maintenance_records')
+        .insert(values)
+        .select('record_id')
+        .single();
+    return row['record_id'] as String;
+  }
+
+  Future<void> updateMaintenanceRecord(
+    String recordId,
+    Map<String, dynamic> values,
+  ) async {
+    await client
+        .from('maintenance_records')
+        .update(values)
+        .eq('record_id', recordId);
+  }
+
+  Future<void> deleteMaintenanceRecord(String recordId) async {
+    await client
+        .from('maintenance_records')
+        .delete()
+        .eq('record_id', recordId);
+  }
 }
