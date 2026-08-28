@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../widgets/planning_destination_bottom_nav.dart';
 import '../widgets/planning_widgets.dart';
 import '../widgets/proposal_response_widgets.dart';
@@ -51,103 +52,109 @@ class _ProposalListScreenState extends State<ProposalListScreen> {
             ),
           ],
         ),
-        body: Consumer<PlanningViewModel>(
-          builder: (context, viewModel, _) {
-            if (viewModel.loading) {
-              return const PlanningLoadingState(message: 'Loading proposals…');
-            }
-            if (viewModel.errorMessage != null) {
-              return PlanningErrorState(
-                message: viewModel.errorMessage!,
-                onRetry: viewModel.load,
-              );
-            }
-            final source = _mode == _ProposalMode.mine
-                ? viewModel.myProposals
-                : viewModel.communityProposals;
-            final states = <String>{
-              for (final proposal in viewModel.communityProposals)
-                if (proposal.state?.trim().isNotEmpty == true) proposal.state!,
-            }.toList()
-              ..sort();
-            if (_state != 'All states' && !states.contains(_state)) {
-              _state = 'All states';
-            }
-            final visible = _filtered(source);
-            return SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final sidePadding =
-                      math.max(16.0, (constraints.maxWidth - 920) / 2);
-                  return CustomScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _ProposalListHeader(
-                          mode: _mode,
-                          bucket: _bucket,
-                          queryController: _searchController,
-                          query: _query,
-                          state: _state,
-                          states: states,
-                          resultCount: visible.length,
-                          onModeChanged: (value) => setState(() {
-                            _mode = value;
-                            _bucket = _ProposalBucket.active;
-                            _state = 'All states';
-                          }),
-                          onBucketChanged: (value) =>
-                              setState(() => _bucket = value),
-                          onQueryChanged: (value) =>
-                              setState(() => _query = value),
-                          onClearQuery: () {
-                            _searchController.clear();
-                            setState(() => _query = '');
-                          },
-                          onStateChanged: (value) =>
-                              setState(() => _state = value),
-                        ),
-                      ),
-                      if (visible.isEmpty)
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: _emptyState(source),
-                        )
-                      else
-                        SliverPadding(
-                          padding: EdgeInsets.fromLTRB(
-                            sidePadding,
-                            4,
-                            sidePadding,
-                            24,
-                          ),
-                          sliver: SliverList.separated(
-                            itemCount: visible.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, index) {
-                              final proposal = visible[index];
-                              return _ProposalListCard(
-                                proposal: proposal,
-                                owned: _mode == _ProposalMode.mine,
-                                onTap: () => _openDetails(proposal),
-                                onEdit: _mode == _ProposalMode.mine &&
-                                        viewModel.canOwnerEdit(proposal)
-                                    ? () => _edit(proposal)
-                                    : null,
-                              );
+        body: DriverNavigationShell(
+          config: planningDriverNavConfig(context),
+          child: Consumer<PlanningViewModel>(
+            builder: (context, viewModel, _) {
+              if (viewModel.loading) {
+                return const PlanningLoadingState(
+                    message: 'Loading proposals…');
+              }
+              if (viewModel.errorMessage != null) {
+                return PlanningErrorState(
+                  message: viewModel.errorMessage!,
+                  onRetry: viewModel.load,
+                );
+              }
+              final source = _mode == _ProposalMode.mine
+                  ? viewModel.myProposals
+                  : viewModel.communityProposals;
+              final states = <String>{
+                for (final proposal in viewModel.communityProposals)
+                  if (proposal.state?.trim().isNotEmpty == true)
+                    proposal.state!,
+              }.toList()
+                ..sort();
+              if (_state != 'All states' && !states.contains(_state)) {
+                _state = 'All states';
+              }
+              final visible = _filtered(source);
+              return SafeArea(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final sidePadding =
+                        math.max(16.0, (constraints.maxWidth - 920) / 2);
+                    return CustomScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: _ProposalListHeader(
+                            mode: _mode,
+                            bucket: _bucket,
+                            queryController: _searchController,
+                            query: _query,
+                            state: _state,
+                            states: states,
+                            resultCount: visible.length,
+                            onModeChanged: (value) => setState(() {
+                              _mode = value;
+                              _bucket = _ProposalBucket.active;
+                              _state = 'All states';
+                            }),
+                            onBucketChanged: (value) =>
+                                setState(() => _bucket = value),
+                            onQueryChanged: (value) =>
+                                setState(() => _query = value),
+                            onClearQuery: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
                             },
+                            onStateChanged: (value) =>
+                                setState(() => _state = value),
                           ),
                         ),
-                    ],
-                  );
-                },
-              ),
-            );
-          },
+                        if (visible.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _emptyState(source),
+                          )
+                        else
+                          SliverPadding(
+                            padding: EdgeInsets.fromLTRB(
+                              sidePadding,
+                              4,
+                              sidePadding,
+                              24,
+                            ),
+                            sliver: SliverList.separated(
+                              itemCount: visible.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final proposal = visible[index];
+                                return _ProposalListCard(
+                                  proposal: proposal,
+                                  owned: _mode == _ProposalMode.mine,
+                                  onTap: () => _openDetails(proposal),
+                                  onEdit: _mode == _ProposalMode.mine &&
+                                          viewModel.canOwnerEdit(proposal)
+                                      ? () => _edit(proposal)
+                                      : null,
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              );
+            },
+          ),
         ),
-        bottomNavigationBar: const PlanningDestinationBottomNav(),
+        bottomNavigationBar:
+            planningDriverNavConfig(context).bottomBarFor(context),
       );
 
   List<Proposal> _filtered(List<Proposal> source) {

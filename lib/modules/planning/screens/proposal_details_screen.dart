@@ -5,6 +5,7 @@ import '../models/proposal.dart';
 import '../services/proposal_location_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../widgets/planning_destination_bottom_nav.dart';
 import '../widgets/proposal_photo_widgets.dart';
 import '../widgets/proposal_response_widgets.dart';
@@ -45,54 +46,59 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
             elevation: 0,
             foregroundColor: Colors.black,
           ),
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final landscape =
-                    MediaQuery.orientationOf(context) == Orientation.landscape;
-                final wide = constraints.maxWidth >= 900 ||
-                    (landscape && constraints.maxWidth >= 650);
-                final primary = _primaryContent(proposal, owned);
-                final actions = _actionContent(proposal, owned);
-                if (!wide) {
-                  return ListView(
+          body: DriverNavigationShell(
+            config: planningDriverNavConfig(context),
+            child: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final landscape = MediaQuery.orientationOf(context) ==
+                      Orientation.landscape;
+                  final wide = constraints.maxWidth >= 900 ||
+                      (landscape && constraints.maxWidth >= 650);
+                  final primary = _primaryContent(proposal, owned);
+                  final actions = _actionContent(proposal, owned);
+                  if (!wide) {
+                    return ListView(
+                      padding: planningPagePadding,
+                      children: [
+                        _ProposalIdentity(proposal: proposal, owned: owned),
+                        const SizedBox(height: 12),
+                        ...actions,
+                        planningSectionGap,
+                        ...primary,
+                      ],
+                    );
+                  }
+                  return Padding(
                     padding: planningPagePadding,
-                    children: [
-                      _ProposalIdentity(proposal: proposal, owned: owned),
-                      const SizedBox(height: 12),
-                      ...actions,
-                      planningSectionGap,
-                      ...primary,
-                    ],
-                  );
-                }
-                return Padding(
-                  padding: planningPagePadding,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 6,
-                        child: ListView(
-                          children: [
-                            _ProposalIdentity(proposal: proposal, owned: owned),
-                            const SizedBox(height: 12),
-                            ...primary,
-                          ],
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 6,
+                          child: ListView(
+                            children: [
+                              _ProposalIdentity(
+                                  proposal: proposal, owned: owned),
+                              const SizedBox(height: 12),
+                              ...primary,
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        flex: 4,
-                        child: ListView(children: actions),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                        const SizedBox(width: 18),
+                        Expanded(
+                          flex: 4,
+                          child: ListView(children: actions),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-          bottomNavigationBar: const PlanningDestinationBottomNav(),
+          bottomNavigationBar:
+              planningDriverNavConfig(context).bottomBarFor(context),
         );
       },
     );

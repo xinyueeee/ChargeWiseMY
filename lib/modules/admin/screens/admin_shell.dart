@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../../auth/services/auth_service.dart';
 import '../../planning/admin/screens/admin_planning_dashboard_screen.dart';
 import '../../planning/admin/screens/admin_proposal_details_screen.dart';
@@ -55,28 +56,49 @@ class _AdminShellState extends State<AdminShell> {
               )
             : null,
         body: SafeArea(
-          child: IndexedStack(
-            index: _tabIndex,
-            children: [
-              const AdminPlanningDashboardScreen(),
-              const AdminProposalListScreen(),
-              const _AdminAssistantEntry(),
-              ChangeNotifierProvider(
-                create: (_) =>
-                    AdminFeedbackViewModel(FeedbackAdminRepository())..load(),
-                child: const AdminFeedbackDashboardScreen(),
+          // Same breakpoint and rail pattern as the Driver root screens
+          // (`DriverNavigationShell`, >=700 logical px): a bottom bar wastes
+          // vertical space once the device is wide enough for a rail, and
+          // Admin previously kept the bottom bar in landscape/tablet
+          // regardless of width.
+          child: useDriverNavigationRail(context)
+              ? Row(
+                  children: [
+                    _AdminNavigationRail(
+                      selectedIndex: _tabIndex,
+                      tabs: _tabs,
+                      onTap: (index) => setState(() => _tabIndex = index),
+                    ),
+                    const VerticalDivider(width: 1, color: Color(0xFFE9EDF3)),
+                    Expanded(child: _adminTabs()),
+                  ],
+                )
+              : _adminTabs(),
+        ),
+        bottomNavigationBar: useDriverNavigationRail(context)
+            ? null
+            : _AdminBottomNav(
+                selectedIndex: _tabIndex,
+                tabs: _tabs,
+                onTap: (index) => setState(() => _tabIndex = index),
               ),
-              const _ComingSoon(label: 'Admin'),
-            ],
-          ),
-        ),
-        bottomNavigationBar: _AdminBottomNav(
-          selectedIndex: _tabIndex,
-          tabs: _tabs,
-          onTap: (index) => setState(() => _tabIndex = index),
-        ),
     );
   }
+
+  Widget _adminTabs() => IndexedStack(
+        index: _tabIndex,
+        children: [
+          const AdminPlanningDashboardScreen(),
+          const AdminProposalListScreen(),
+          const _AdminAssistantEntry(),
+          ChangeNotifierProvider(
+            create: (_) =>
+                AdminFeedbackViewModel(FeedbackAdminRepository())..load(),
+            child: const AdminFeedbackDashboardScreen(),
+          ),
+          const _ComingSoon(label: 'Admin'),
+        ],
+      );
 
   Widget _adminBadge() => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -196,6 +218,64 @@ class _AdminTab {
   const _AdminTab({required this.icon, required this.label});
   final IconData icon;
   final String label;
+}
+
+/// Wide-layout equivalent of [_AdminBottomNav], following the same rail
+/// styling `DriverNavigationShell` uses for the Driver root screens.
+class _AdminNavigationRail extends StatelessWidget {
+  const _AdminNavigationRail({
+    required this.selectedIndex,
+    required this.tabs,
+    required this.onTap,
+  });
+
+  final int selectedIndex;
+  final List<_AdminTab> tabs;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        right: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            // Short landscape + enlarged text both make each destination
+            // taller; scrolling keeps every tab reachable instead of
+            // overflowing, matching DriverNavigationShell's rail.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: NavigationRail(
+                  selectedIndex: selectedIndex,
+                  labelType: NavigationRailLabelType.all,
+                  groupAlignment: 0,
+                  backgroundColor: Colors.white,
+                  indicatorColor: const Color(0x1A00B894),
+                  selectedIconTheme: const IconThemeData(color: _green),
+                  selectedLabelTextStyle: const TextStyle(
+                    color: _green,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                  unselectedIconTheme:
+                      const IconThemeData(color: _mutedTextColor),
+                  unselectedLabelTextStyle: const TextStyle(
+                    color: _mutedTextColor,
+                    fontSize: 12,
+                  ),
+                  destinations: [
+                    for (final tab in tabs)
+                      NavigationRailDestination(
+                        icon: Icon(tab.icon),
+                        label: Text(tab.label),
+                      ),
+                  ],
+                  onDestinationSelected: onTap,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class _AdminBottomNav extends StatelessWidget {

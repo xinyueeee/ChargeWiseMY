@@ -51,42 +51,63 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                 planningSectionGap,
                 LayoutBuilder(
                   builder: (context, constraints) {
+                    const spacing = 10.0;
                     final columns = constraints.maxWidth >= 420 ? 4 : 2;
-                    return GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: columns,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 1.05,
+                    // A fixed-aspect-ratio GridView cannot fit
+                    // AdminStatTile's icon, value and two-line label at once
+                    // enlarged text and narrower (more-column) cells both
+                    // grow the label's wrapped height, and no single ratio
+                    // covers every combination — proven to still overflow by
+                    // 18px at 1.5x/2 columns and by 4.8px even at 1.0x/4
+                    // columns. A Wrap of fixed-width, natural-height tiles
+                    // has no such ceiling: each tile is exactly as tall as
+                    // its own content needs.
+                    final tileWidth =
+                        (constraints.maxWidth - spacing * (columns - 1)) /
+                            columns;
+                    return Wrap(
+                      spacing: spacing,
+                      runSpacing: spacing,
                       children: [
-                        AdminStatTile(
-                          icon: Icons.assignment_late_outlined,
-                          value: '${vm.submittedCount}',
-                          label: 'New Reports',
-                          color: red,
-                          onTap: () => _openVerifyReports(context),
+                        SizedBox(
+                          width: tileWidth,
+                          child: AdminStatTile(
+                            icon: Icons.assignment_late_outlined,
+                            value: '${vm.submittedCount}',
+                            label: 'New Reports',
+                            color: red,
+                            onTap: () => _openVerifyReports(context),
+                          ),
                         ),
-                        AdminStatTile(
-                          icon: Icons.autorenew,
-                          value: '${vm.inProgressCount}',
-                          label: 'In Progress',
-                          color: blue,
-                          onTap: () => _openMaintenance(context),
+                        SizedBox(
+                          width: tileWidth,
+                          child: AdminStatTile(
+                            icon: Icons.autorenew,
+                            value: '${vm.inProgressCount}',
+                            label: 'In Progress',
+                            color: blue,
+                            onTap: () => _openMaintenance(context),
+                          ),
                         ),
-                        AdminStatTile(
-                          icon: Icons.check_circle_outline,
-                          value: '${vm.resolvedCount}',
-                          label: 'Resolved',
-                          color: green,
-                          onTap: () => _openHistory(context),
+                        SizedBox(
+                          width: tileWidth,
+                          child: AdminStatTile(
+                            icon: Icons.check_circle_outline,
+                            value: '${vm.resolvedCount}',
+                            label: 'Resolved',
+                            color: green,
+                            onTap: () => _openHistory(context),
+                          ),
                         ),
-                        AdminStatTile(
-                          icon: Icons.build_outlined,
-                          value: '${vm.openMaintenanceCount}',
-                          label: 'Maintenance Ongoing',
-                          color: purple,
-                          onTap: () => _openMaintenance(context),
+                        SizedBox(
+                          width: tileWidth,
+                          child: AdminStatTile(
+                            icon: Icons.build_outlined,
+                            value: '${vm.openMaintenanceCount}',
+                            label: 'Maintenance Ongoing',
+                            color: purple,
+                            onTap: () => _openMaintenance(context),
+                          ),
                         ),
                       ],
                     );

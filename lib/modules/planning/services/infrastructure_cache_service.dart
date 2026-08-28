@@ -175,7 +175,7 @@ class SqliteInfrastructureCacheService implements InfrastructureCacheStore {
       stopwatch.stop();
       if (kDebugMode) {
         debugPrint(
-          'Infrastructure SQLite read unavailable; using Supabase fallback: '
+          'Infrastructure SQLite read unavailable; using remote fallback: '
           'error=$error, duration=${stopwatch.elapsedMilliseconds}ms.',
         );
         debugPrintStack(stackTrace: stackTrace);
@@ -266,7 +266,9 @@ class InfrastructureLoadUpdate {
 }
 
 /// Coordinates stale-while-revalidate loading. The data direction is strictly
-/// Supabase -> memory -> SQLite; cached rows are never written to Supabase.
+/// remote source -> memory -> SQLite; cached rows are never written back to
+/// the remote source. The source itself is injected, so this coordinator is
+/// agnostic to whether it is the MEVnet API or the Supabase loader.
 class InfrastructureSyncCoordinator {
   InfrastructureSyncCoordinator({
     required InfrastructureCacheStore cache,
@@ -312,7 +314,7 @@ class InfrastructureSyncCoordinator {
       remoteStopwatch.stop();
       if (kDebugMode) {
         debugPrint(
-          'Supabase infrastructure refresh failed before Existing completed: '
+          'Infrastructure remote refresh failed before Existing completed: '
           'error=$error, duration=${remoteStopwatch.elapsedMilliseconds}ms.',
         );
         debugPrintStack(stackTrace: stackTrace);
@@ -354,7 +356,7 @@ class InfrastructureSyncCoordinator {
       remoteStopwatch.stop();
       if (kDebugMode) {
         debugPrint(
-          'Supabase infrastructure refresh failed before Proposed completed: '
+          'Infrastructure remote refresh failed before Proposed completed: '
           'error=$error, duration=${remoteStopwatch.elapsedMilliseconds}ms.',
         );
         debugPrintStack(stackTrace: stackTrace);
@@ -391,7 +393,7 @@ class InfrastructureSyncCoordinator {
       cacheWriteFailed = true;
       if (kDebugMode) {
         debugPrint(
-          'Infrastructure SQLite write failed; fresh Supabase data remains '
+          'Infrastructure SQLite write failed; fresh remote data remains '
           'active in memory: error=$error.',
         );
         debugPrintStack(stackTrace: stackTrace);

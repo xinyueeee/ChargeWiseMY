@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/navigation/driver_navigation.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../../../services/notification_service.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../feedback/screens/feedback_dashboard_screen.dart';
@@ -201,44 +202,12 @@ class _ChargingScreenState extends State<ChargingScreen> {
     _reloadReminders();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Consumer<PlanningViewModel>(
-          builder: (context, vm, __) {
-            return ListView(
-              padding: planningPagePadding,
-              children: [
-                const Text(
-                  'Charging',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: planningTextColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Charge Smarter, Save More',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: planningMutedTextColor),
-                ),
-                const SizedBox(height: 20),
-                _buildCalculatorCard(),
-                const SizedBox(height: 20),
-                _buildSessionsCard(),
-                const SizedBox(height: 20),
-                _buildRemindersCard(),
-                const SizedBox(height: 20),
-                _buildRecommendationCard(vm),
-              ],
-            );
-          },
-        ),
-      ),
-      bottomNavigationBar: FloatingBottomNav(
+  /// Destinations for this screen, shared by the bottom bar and the
+
+  /// side rail so both surfaces stay identical.
+
+  DriverNavigationConfig _navConfig(BuildContext context) =>
+      DriverNavigationConfig(
         currentTab: 'Charging',
         onHomeTap: () => returnToDriverHome(context),
         onPlanningTap: () => _switchTo(
@@ -253,7 +222,49 @@ class _ChargingScreenState extends State<ChargingScreen> {
           const FeedbackDashboardScreen(),
           DriverRouteNames.feedback,
         ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: DriverNavigationShell(
+        config: _navConfig(context),
+        child: SafeArea(
+          child: Consumer<PlanningViewModel>(
+            builder: (context, vm, __) {
+              return ListView(
+                padding: planningPagePadding,
+                children: [
+                  const Text(
+                    'Charging',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: planningTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Charge Smarter, Save More',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: planningMutedTextColor),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildCalculatorCard(),
+                  const SizedBox(height: 20),
+                  _buildSessionsCard(),
+                  const SizedBox(height: 20),
+                  _buildRemindersCard(),
+                  const SizedBox(height: 20),
+                  _buildRecommendationCard(vm),
+                ],
+              );
+            },
+          ),
+        ),
       ),
+      bottomNavigationBar: _navConfig(context).bottomBarFor(context),
     );
   }
 

@@ -5,6 +5,7 @@ import '../models/proposal.dart';
 import '../services/gap_ai_analysis_service.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../widgets/planning_destination_bottom_nav.dart';
 import 'new_proposal_screen.dart';
 import 'priority_area_map_screen.dart';
@@ -124,77 +125,84 @@ class _GapAnalysisScreenState extends State<GapAnalysisScreen> {
               elevation: 0,
               foregroundColor: Colors.black,
             ),
-            body: viewModel.loading
-                ? const PlanningLoadingState(
-                    message: 'Loading charging infrastructure…')
-                : viewModel.errorMessage != null
-                    ? PlanningErrorState(
-                        message: viewModel.errorMessage!,
-                        onRetry: viewModel.load)
-                    : SafeArea(child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final landscape = constraints.maxWidth >= 700 &&
-                              constraints.maxWidth > constraints.maxHeight;
-                          final controls = _controls(viewModel);
-                          final details =
-                              _details(viewModel, areas, selectedArea);
-                          if (landscape) {
-                            return Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          14, 10, 8, 14),
-                                      child: Column(children: [
-                                        controls,
-                                        const SizedBox(height: 8),
-                                        Expanded(
-                                            child: LayoutBuilder(
-                                          builder: (context, mapConstraints) =>
-                                              _analysisMap(
-                                            viewModel,
-                                            areas,
-                                            selectedArea,
-                                            height: mapConstraints.maxHeight,
-                                          ),
-                                        )),
-                                      ]),
+            body: DriverNavigationShell(
+              config: planningDriverNavConfig(context),
+              child: viewModel.loading
+                  ? const PlanningLoadingState(
+                      message: 'Loading charging infrastructure…')
+                  : viewModel.errorMessage != null
+                      ? PlanningErrorState(
+                          message: viewModel.errorMessage!,
+                          onRetry: viewModel.load)
+                      : SafeArea(child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final landscape = constraints.maxWidth >= 700 &&
+                                constraints.maxWidth > constraints.maxHeight;
+                            final controls = _controls(viewModel);
+                            final details =
+                                _details(viewModel, areas, selectedArea);
+                            if (landscape) {
+                              return Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            14, 10, 8, 14),
+                                        child: Column(children: [
+                                          controls,
+                                          const SizedBox(height: 8),
+                                          Expanded(
+                                              child: LayoutBuilder(
+                                            builder:
+                                                (context, mapConstraints) =>
+                                                    _analysisMap(
+                                              viewModel,
+                                              areas,
+                                              selectedArea,
+                                              height: mapConstraints.maxHeight,
+                                            ),
+                                          )),
+                                        ]),
+                                      ),
                                     ),
-                                  ),
-                                  const VerticalDivider(width: 1),
-                                  Expanded(
-                                    flex: 2,
-                                    child: ListView(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          12, 10, 14, 18),
-                                      children: [
-                                        _rankedAreaSelector(areas,
-                                            landscape: true),
-                                        const SizedBox(height: 10),
-                                        details,
-                                      ],
+                                    const VerticalDivider(width: 1),
+                                    Expanded(
+                                      flex: 2,
+                                      child: ListView(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            12, 10, 14, 18),
+                                        children: [
+                                          _rankedAreaSelector(areas,
+                                              landscape: true),
+                                          const SizedBox(height: 10),
+                                          details,
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ]);
-                          }
-                          return ListView(
-                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 22),
-                            children: [
-                              controls,
-                              const SizedBox(height: 10),
-                              _analysisMap(viewModel, areas, selectedArea,
-                                  height: 250),
-                              const SizedBox(height: 10),
-                              _rankedAreaSelector(areas),
-                              const SizedBox(height: 10),
-                              details,
-                            ],
-                          );
-                        },
-                      )),
-            bottomNavigationBar: const PlanningDestinationBottomNav(),
+                                  ]);
+                            }
+                            return ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 10, 16, 22),
+                              children: [
+                                controls,
+                                const SizedBox(height: 10),
+                                _analysisMap(viewModel, areas, selectedArea,
+                                    height: 250),
+                                const SizedBox(height: 10),
+                                _rankedAreaSelector(areas),
+                                const SizedBox(height: 10),
+                                details,
+                              ],
+                            );
+                          },
+                        )),
+            ),
+            bottomNavigationBar:
+                planningDriverNavConfig(context).bottomBarFor(context),
           );
         },
       );

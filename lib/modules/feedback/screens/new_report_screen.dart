@@ -404,7 +404,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 _buildFieldLabel('Issue Category', required: true),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: _category,
+                  initialValue: _category,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.error_outline, color: green),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/navigation/driver_navigation.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../charging/screens/charging_screen.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
@@ -88,10 +89,38 @@ class _MyReportsScreenState extends State<MyReportsScreen>
       ..sort((a, b) {
         final aDate = a.createdAt ?? DateTime(0);
         final bDate = b.createdAt ?? DateTime(0);
-        return _sort == 'Newest' ? bDate.compareTo(aDate) : aDate.compareTo(bDate);
+        return _sort == 'Newest'
+            ? bDate.compareTo(aDate)
+            : aDate.compareTo(bDate);
       });
     return filtered;
   }
+
+  /// Destinations for this screen, shared by the bottom bar and the
+
+  /// side rail so both surfaces stay identical.
+
+  DriverNavigationConfig _navConfig(BuildContext context) =>
+      DriverNavigationConfig(
+        currentTab: 'Feedback',
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
+        ),
+        onFeedbackTap: () => Navigator.of(context).pop(),
+        onPlanningTap: () => _switchTo(
+          context,
+          const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
+        ),
+        onProfileTap: () => _switchTo(
+          context,
+          const ProfileScreen(),
+          DriverRouteNames.profile,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -140,200 +169,183 @@ class _MyReportsScreenState extends State<MyReportsScreen>
             ),
           ),
         ),
-        body: Consumer<FeedbackViewModel>(
-          builder: (context, vm, __) {
-            if (vm.loading) {
-              return const PlanningLoadingState(
-                message: 'Loading your reports…',
-              );
-            }
-            if (vm.errorMessage != null) {
-              return PlanningErrorState(
-                message: vm.errorMessage!,
-                onRetry: vm.load,
-              );
-            }
+        body: DriverNavigationShell(
+          config: _navConfig(context),
+          child: Consumer<FeedbackViewModel>(
+            builder: (context, vm, __) {
+              if (vm.loading) {
+                return const PlanningLoadingState(
+                  message: 'Loading your reports…',
+                );
+              }
+              if (vm.errorMessage != null) {
+                return PlanningErrorState(
+                  message: vm.errorMessage!,
+                  onRetry: vm.load,
+                );
+              }
 
-            final filtered = _applyFilters(vm.myReports);
-            final totalPages = filtered.isEmpty
-                ? 1
-                : (filtered.length / _pageSize).ceil();
-            final page = _page.clamp(0, totalPages - 1);
-            final pageItems =
-                filtered.skip(page * _pageSize).take(_pageSize).toList();
+              final filtered = _applyFilters(vm.myReports);
+              final totalPages =
+                  filtered.isEmpty ? 1 : (filtered.length / _pageSize).ceil();
+              final page = _page.clamp(0, totalPages - 1);
+              final pageItems =
+                  filtered.skip(page * _pageSize).take(_pageSize).toList();
 
-            return SafeArea(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: planningPagePadding,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                textInputAction: TextInputAction.search,
-                                decoration: InputDecoration(
-                                  prefixIcon: const Icon(Icons.search),
-                                  hintText: 'Search by issue or location',
-                                  suffixIcon: _query.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear search',
-                                          onPressed: () {
-                                            FocusScope.of(context).unfocus();
-                                            _searchController.clear();
-                                            setState(() {
-                                              _query = '';
-                                              _page = 0;
-                                            });
-                                          },
-                                          icon: const Icon(Icons.clear),
-                                        ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                onChanged: (value) => setState(() {
-                                  _query = value;
-                                  _page = 0;
-                                }),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            OutlinedButton.icon(
-                              onPressed: () => _openFilterSheet(context),
-                              icon: const Icon(Icons.filter_list, size: 18),
-                              label: Text(
-                                _categoryFilter == null
-                                    ? 'Filter'
-                                    : 'Filter (1)',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'My Reports (${filtered.length})',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: planningTextColor,
-                              ),
-                            ),
-                            DropdownButton<String>(
-                              value: _sort,
-                              underline: const SizedBox.shrink(),
-                              icon: const Icon(
-                                Icons.keyboard_arrow_down,
-                                color: green,
-                                size: 18,
-                              ),
-                              style: const TextStyle(
-                                color: green,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'Newest',
-                                  child: Text('Sort by: Newest'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'Oldest',
-                                  child: Text('Sort by: Oldest'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value == null) return;
-                                setState(() {
-                                  _sort = value;
-                                  _page = 0;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                            child: PlanningEmptyState(
-                              icon: Icons.fact_check_outlined,
-                              title: vm.myReports.isEmpty
-                                  ? 'No reports yet'
-                                  : 'No matching reports',
-                              message: vm.myReports.isEmpty
-                                  ? 'Submit your first fault report to help '
-                                      'keep charging stations reliable.'
-                                  : 'Try changing the search text, tab, or '
-                                      'category filter.',
-                            ),
-                          )
-                        : ListView(
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              return SafeArea(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: planningPagePadding,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              for (final report in pageItems) ...[
-                                ReportCard(
-                                  report: report,
-                                  trailingTime:
-                                      formatRelativeTime(report.createdAt),
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute<void>(
-                                      builder: (_) =>
-                                          ReportDetailsScreen(report: report),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  textInputAction: TextInputAction.search,
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(Icons.search),
+                                    hintText: 'Search by issue or location',
+                                    suffixIcon: _query.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Clear search',
+                                            onPressed: () {
+                                              FocusScope.of(context).unfocus();
+                                              _searchController.clear();
+                                              setState(() {
+                                                _query = '';
+                                                _page = 0;
+                                              });
+                                            },
+                                            icon: const Icon(Icons.clear),
+                                          ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
+                                  onChanged: (value) => setState(() {
+                                    _query = value;
+                                    _page = 0;
+                                  }),
                                 ),
-                                const SizedBox(height: 10),
-                              ],
-                              const SizedBox(height: 6),
-                              _Pagination(
-                                page: page,
-                                totalPages: totalPages,
-                                onChanged: (next) =>
-                                    setState(() => _page = next),
+                              ),
+                              const SizedBox(width: 10),
+                              OutlinedButton.icon(
+                                onPressed: () => _openFilterSheet(context),
+                                icon: const Icon(Icons.filter_list, size: 18),
+                                label: Text(
+                                  _categoryFilter == null
+                                      ? 'Filter'
+                                      : 'Filter (1)',
+                                ),
                               ),
                             ],
                           ),
-                  ),
-                ],
-              ),
-            );
-          },
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'My Reports (${filtered.length})',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: planningTextColor,
+                                ),
+                              ),
+                              DropdownButton<String>(
+                                value: _sort,
+                                underline: const SizedBox.shrink(),
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  color: green,
+                                  size: 18,
+                                ),
+                                style: const TextStyle(
+                                  color: green,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'Newest',
+                                    child: Text('Sort by: Newest'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'Oldest',
+                                    child: Text('Sort by: Oldest'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _sort = value;
+                                    _page = 0;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                              child: PlanningEmptyState(
+                                icon: Icons.fact_check_outlined,
+                                title: vm.myReports.isEmpty
+                                    ? 'No reports yet'
+                                    : 'No matching reports',
+                                message: vm.myReports.isEmpty
+                                    ? 'Submit your first fault report to help '
+                                        'keep charging stations reliable.'
+                                    : 'Try changing the search text, tab, or '
+                                        'category filter.',
+                              ),
+                            )
+                          : ListView(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                              children: [
+                                for (final report in pageItems) ...[
+                                  ReportCard(
+                                    report: report,
+                                    trailingTime:
+                                        formatRelativeTime(report.createdAt),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            ReportDetailsScreen(report: report),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                ],
+                                const SizedBox(height: 6),
+                                _Pagination(
+                                  page: page,
+                                  totalPages: totalPages,
+                                  onChanged: (next) =>
+                                      setState(() => _page = next),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
-        bottomNavigationBar: FloatingBottomNav(
-          currentTab: 'Feedback',
-          onHomeTap: () => returnToDriverHome(context),
-          onChargingTap: () => _switchTo(
-            context,
-            const ChargingScreen(),
-            DriverRouteNames.charging,
-          ),
-          onFeedbackTap: () => Navigator.of(context).pop(),
-          onPlanningTap: () => _switchTo(
-            context,
-            const PlanningDashboardScreen(),
-            DriverRouteNames.planning,
-          ),
-          onProfileTap: () => _switchTo(
-            context,
-            const ProfileScreen(),
-            DriverRouteNames.profile,
-          ),
-        ),
+        bottomNavigationBar: _navConfig(context).bottomBarFor(context),
       );
 
   void _switchTo(BuildContext context, Widget page, String routeName) {
@@ -459,8 +471,7 @@ class _Pagination extends StatelessWidget {
             ),
           ),
         IconButton(
-          onPressed:
-              page < totalPages - 1 ? () => onChanged(page + 1) : null,
+          onPressed: page < totalPages - 1 ? () => onChanged(page + 1) : null,
           icon: const Icon(Icons.chevron_right),
         ),
       ],

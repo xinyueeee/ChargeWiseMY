@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/navigation/driver_navigation.dart';
+import '../../../core/navigation/driver_navigation_shell.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../charging/screens/charging_screen.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
@@ -29,6 +30,32 @@ class ReportMapScreen extends StatelessWidget {
 
   static const _malaysiaCenter = LatLng(4.2105, 101.9758);
 
+  /// Destinations for this screen, shared by the bottom bar and the
+
+  /// side rail so both surfaces stay identical.
+
+  DriverNavigationConfig _navConfig(BuildContext context) =>
+      DriverNavigationConfig(
+        currentTab: 'Feedback',
+        onHomeTap: () => returnToDriverHome(context),
+        onChargingTap: () => _switchTo(
+          context,
+          const ChargingScreen(),
+          DriverRouteNames.charging,
+        ),
+        onFeedbackTap: () => Navigator.of(context).pop(),
+        onPlanningTap: () => _switchTo(
+          context,
+          const PlanningDashboardScreen(),
+          DriverRouteNames.planning,
+        ),
+        onProfileTap: () => _switchTo(
+          context,
+          const ProfileScreen(),
+          DriverRouteNames.profile,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
@@ -38,86 +65,70 @@ class ReportMapScreen extends StatelessWidget {
           elevation: 0,
           foregroundColor: Colors.black,
         ),
-        body: SafeArea(
-          child: Consumer<FeedbackViewModel>(
-            builder: (context, vm, __) {
-              if (vm.loading) {
-                return const PlanningLoadingState(
-                  message: 'Loading nearby issues…',
-                );
-              }
-              if (vm.errorMessage != null) {
-                return Padding(
-                  padding: planningPagePadding,
-                  child: PlanningErrorState(
-                    message: vm.errorMessage!,
-                    onRetry: vm.load,
-                  ),
-                );
-              }
-
-              final geolocated = vm.nearbyReports
-                  .where((r) => r.latitude != null && r.longitude != null)
-                  .toList();
-              if (geolocated.isEmpty) {
-                return Padding(
-                  padding: planningPagePadding,
-                  child: PlanningEmptyState(
-                    icon: Icons.map_outlined,
-                    title: 'No reports to show',
-                    message: 'Reports with a saved location will appear '
-                        'here once drivers submit them.',
-                    action: OutlinedButton.icon(
-                      onPressed: vm.load,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Refresh'),
+        body: DriverNavigationShell(
+          config: _navConfig(context),
+          child: SafeArea(
+            child: Consumer<FeedbackViewModel>(
+              builder: (context, vm, __) {
+                if (vm.loading) {
+                  return const PlanningLoadingState(
+                    message: 'Loading nearby issues…',
+                  );
+                }
+                if (vm.errorMessage != null) {
+                  return Padding(
+                    padding: planningPagePadding,
+                    child: PlanningErrorState(
+                      message: vm.errorMessage!,
+                      onRetry: vm.load,
                     ),
-                  ),
-                );
-              }
+                  );
+                }
 
-              return Stack(
-                children: [
-                  GoogleMap(
-                    initialCameraPosition: const CameraPosition(
-                      target: _malaysiaCenter,
-                      zoom: 6,
+                final geolocated = vm.nearbyReports
+                    .where((r) => r.latitude != null && r.longitude != null)
+                    .toList();
+                if (geolocated.isEmpty) {
+                  return Padding(
+                    padding: planningPagePadding,
+                    child: PlanningEmptyState(
+                      icon: Icons.map_outlined,
+                      title: 'No reports to show',
+                      message: 'Reports with a saved location will appear '
+                          'here once drivers submit them.',
+                      action: OutlinedButton.icon(
+                        onPressed: vm.load,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh'),
+                      ),
                     ),
-                    markers: _buildMarkers(context, geolocated),
-                    myLocationButtonEnabled: false,
-                    mapToolbarEnabled: false,
-                    zoomControlsEnabled: true,
-                  ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: _StatusLegend(),
-                  ),
-                ],
-              );
-            },
+                  );
+                }
+
+                return Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: const CameraPosition(
+                        target: _malaysiaCenter,
+                        zoom: 6,
+                      ),
+                      markers: _buildMarkers(context, geolocated),
+                      myLocationButtonEnabled: false,
+                      mapToolbarEnabled: false,
+                      zoomControlsEnabled: true,
+                    ),
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: _StatusLegend(),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
-        bottomNavigationBar: FloatingBottomNav(
-          currentTab: 'Feedback',
-          onHomeTap: () => returnToDriverHome(context),
-          onChargingTap: () => _switchTo(
-            context,
-            const ChargingScreen(),
-            DriverRouteNames.charging,
-          ),
-          onFeedbackTap: () => Navigator.of(context).pop(),
-          onPlanningTap: () => _switchTo(
-            context,
-            const PlanningDashboardScreen(),
-            DriverRouteNames.planning,
-          ),
-          onProfileTap: () => _switchTo(
-            context,
-            const ProfileScreen(),
-            DriverRouteNames.profile,
-          ),
-        ),
+        bottomNavigationBar: _navConfig(context).bottomBarFor(context),
       );
 
   Set<Marker> _buildMarkers(BuildContext context, List<FaultReport> reports) {
@@ -130,7 +141,8 @@ class ReportMapScreen extends StatelessWidget {
         Marker(
           markerId: MarkerId(report.id),
           position: LatLng(latitude, longitude),
-          icon: BitmapDescriptor.defaultMarkerWithHue(_markerHue(report.status)),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(_markerHue(report.status)),
           infoWindow: InfoWindow(
             title: report.category,
             snippet: '${feedbackStatusLabel(report.status)} · '
