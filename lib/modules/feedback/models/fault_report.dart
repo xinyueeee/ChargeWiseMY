@@ -16,6 +16,11 @@ const List<String> kFaultReportCategories = [
   'Other',
 ];
 
+/// Admin-only triage priorities — drivers never set or see this (the
+/// "Report an Issue" form has no priority input). See
+/// MODULE3_ADMIN_IMPLEMENTATION_PLAN.md.
+const List<String> kFaultReportPriorities = ['High', 'Medium', 'Low'];
+
 /// Up to this many photos may be attached to a single report (matches the
 /// "Report an Issue" mockup's photo picker).
 const int kFaultReportMaxPhotos = 3;
@@ -32,6 +37,7 @@ class FaultReport {
     required this.category,
     required this.description,
     required this.status,
+    this.priority = 'Medium',
     this.stationId,
     this.photoUrls = const [],
     this.contactInfo,
@@ -42,16 +48,20 @@ class FaultReport {
     this.longitude,
     this.createdAt,
     this.userId,
+    this.reporterName,
   });
 
   final String id, category, description;
 
-  /// Human-display status ('Submitted' / 'Verified' / 'Resolved'), same
-  /// convention as `Proposal.status` — the raw DB value is lowercase
-  /// (`fault_reports.status`), capitalized here for display. When writing
-  /// back to Supabase, lowercase it again (mirrors
-  /// `SupabaseService.updateProposalStatus`).
+  /// Human-display status ('Submitted' / 'Verified' / 'In Progress' /
+  /// 'Resolved') — the raw DB value is lowercase/snake_case
+  /// (`fault_reports.status`), mapped here for display. When writing back to
+  /// Supabase, map it back down (see `AdminFeedbackRepository`'s reverse
+  /// mapping — drivers never write status directly).
   String status;
+
+  /// Human-display priority ('High' / 'Medium' / 'Low'), admin-set only.
+  String priority;
 
   final String? stationId;
 
@@ -70,11 +80,19 @@ class FaultReport {
   final DateTime? createdAt;
   final String? userId;
 
+  /// The reporter's display name — not part of `fault_reports` itself (only
+  /// `user_id` is stored there), so this stays null unless a caller joins
+  /// against `users` and attaches it via [copyWithReporter]. Only the admin
+  /// report list/details screens need this; drivers never see who filed a
+  /// report other than themselves.
+  final String? reporterName;
+
   factory FaultReport.fromSupabase(Map<String, dynamic> row) => FaultReport(
         id: row['report_id'] as String,
         category: row['category'] as String? ?? 'Other',
         description: row['description'] as String? ?? '',
         status: _displayStatus(row['status'] as String?),
+        priority: _displayPriority(row['priority'] as String?),
         stationId: row['station_id'] as String?,
         photoUrls: (row['photo_urls'] as List?)
                 ?.map((url) => url.toString())
@@ -96,25 +114,66 @@ class FaultReport {
     required String state,
     required String nearestTown,
   }) =>
+      _copyWith(
+        locationLabel: locationLabel,
+        state: state,
+        nearestTown: nearestTown,
+      );
+
+  /// Returns a copy with the reporter's display name attached — used by
+  /// `AdminFeedbackRepository` after joining against `users`, since
+  /// `fault_reports` itself only stores `user_id`.
+  FaultReport copyWithReporter(String reporterName) =>
+      _copyWith(reporterName: reporterName);
+
+  FaultReport _copyWith({
+    String? locationLabel,
+    String? state,
+    String? nearestTown,
+    String? reporterName,
+  }) =>
       FaultReport(
         id: id,
         category: category,
         description: description,
         status: status,
+        priority: priority,
         stationId: stationId,
         photoUrls: photoUrls,
         contactInfo: contactInfo,
-        locationLabel: locationLabel,
-        state: state,
-        nearestTown: nearestTown,
+        locationLabel: locationLabel ?? this.locationLabel,
+        state: state ?? this.state,
+        nearestTown: nearestTown ?? this.nearestTown,
         latitude: latitude,
         longitude: longitude,
         createdAt: createdAt,
         userId: userId,
+        reporterName: reporterName ?? this.reporterName,
       );
 
   static String _displayStatus(String? value) {
-    if (value == null || value.isEmpty) return 'Submitted';
-    return '${value[0].toUpperCase()}${value.substring(1).toLowerCase()}';
+    switch (value) {
+      case 'verified':
+        return 'Verified';
+      case 'in_progress':
+        return 'In Progress';
+      case 'resolved':
+        return 'Resolved';
+      case 'submitted':
+      default:
+        return 'Submitted';
+    }
+  }
+
+  static String _displayPriority(String? value) {
+    switch (value) {
+      case 'high':
+        return 'High';
+      case 'low':
+        return 'Low';
+      case 'medium':
+      default:
+        return 'Medium';
+    }
   }
 }

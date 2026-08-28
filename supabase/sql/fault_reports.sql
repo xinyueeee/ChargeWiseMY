@@ -32,22 +32,37 @@ create table if not exists fault_reports (
   longitude    double precision,
   address      text not null default '',
 
+  -- Four-stage lifecycle: a driver files `submitted`; an admin confirms it
+  -- with `verified`; logging a maintenance record against it (see
+  -- `maintenance_records` in fault_reports_admin.sql) moves it to
+  -- `in_progress`; completing that record — or an admin resolving it
+  -- directly — moves it to `resolved`. See
+  -- MODULE3_ADMIN_IMPLEMENTATION_PLAN.md for the admin-side write path.
   status       text not null default 'submitted'
-               check (status in ('submitted', 'verified', 'resolved')),
+               check (status in ('submitted', 'verified', 'in_progress', 'resolved')),
+
+  -- Admin-only triage field: drivers never set or see this (the "Report an
+  -- Issue" form has no priority input). Defaults to 'medium' so every
+  -- existing/new report is triageable without a backfill.
+  priority     text not null default 'medium'
+               check (priority in ('high', 'medium', 'low')),
 
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
 
   -- Written by the admin side only (see MODULE3_ADMIN_IMPLEMENTATION_PLAN.md).
-  verified_at  timestamptz,
-  verified_by  uuid references users(id),
-  resolved_at  timestamptz
+  verified_at    timestamptz,
+  verified_by    uuid references users(id),
+  in_progress_at timestamptz,
+  resolved_at    timestamptz
 
 );
 
 -- Upgrade path for anyone who already ran an earlier version of this file
--- (single `photo_url` column, no `contact_info`) — matches the "Report an
--- Issue" mockup's up-to-3-photos picker and optional contact field.
+-- (single `photo_url` column, no `contact_info`, 3-stage status, no
+-- priority/in_progress_at) — matches the "Report an Issue" mockup's up-to-3
+-- -photos picker/optional contact field, and the admin dashboard mockup's
+-- 4-stage status pipeline + High/Medium/Low priority triage.
 -- No-ops on a fresh install, since the table above is already created with
 -- the final shape.
 alter table fault_reports
@@ -56,6 +71,20 @@ alter table fault_reports
   add column if not exists contact_info text;
 alter table fault_reports
   drop column if exists photo_url;
+alter table fault_reports
+  add column if not exists priority text not null default 'medium';
+alter table fault_reports
+  add column if not exists in_progress_at timestamptz;
+alter table fault_reports
+  drop constraint if exists fault_reports_status_check;
+alter table fault_reports
+  add constraint fault_reports_status_check
+  check (status in ('submitted', 'verified', 'in_progress', 'resolved'));
+alter table fault_reports
+  drop constraint if exists fault_reports_priority_check;
+alter table fault_reports
+  add constraint fault_reports_priority_check
+  check (priority in ('high', 'medium', 'low'));
 
 create index if not exists fault_reports_user_id_idx
   on fault_reports (user_id);

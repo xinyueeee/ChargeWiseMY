@@ -7,6 +7,9 @@ import '../../planning/admin/screens/admin_proposal_details_screen.dart';
 import '../../planning/admin/screens/admin_proposal_list_screen.dart';
 import '../../planning/admin/models/proposal_assessment.dart';
 import '../../planning/admin/viewmodels/admin_planning_viewmodel.dart';
+import '../services/feedback_admin_repository.dart';
+import '../viewmodels/admin_feedback_viewmodel.dart';
+import 'admin_feedback_dashboard_screen.dart';
 
 const _green = Color(0xFF00B894);
 const _textColor = Color(0xFF101B40);
@@ -54,12 +57,16 @@ class _AdminShellState extends State<AdminShell> {
         body: SafeArea(
           child: IndexedStack(
             index: _tabIndex,
-            children: const [
-              AdminPlanningDashboardScreen(),
-              AdminProposalListScreen(),
-              _AdminAssistantEntry(),
-              _ComingSoon(label: 'Feedback Management'),
-              _ComingSoon(label: 'Admin'),
+            children: [
+              const AdminPlanningDashboardScreen(),
+              const AdminProposalListScreen(),
+              const _AdminAssistantEntry(),
+              ChangeNotifierProvider(
+                create: (_) =>
+                    AdminFeedbackViewModel(FeedbackAdminRepository())..load(),
+                child: const AdminFeedbackDashboardScreen(),
+              ),
+              const _ComingSoon(label: 'Admin'),
             ],
           ),
         ),

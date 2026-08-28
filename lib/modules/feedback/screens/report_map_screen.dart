@@ -13,8 +13,9 @@ import '../widgets/feedback_widgets.dart';
 import 'report_details_screen.dart';
 
 /// "View Nearby Reported Issues" — a plain `GoogleMap` with one marker per
-/// geolocated report, colored by status (submitted = orange, verified =
-/// blue, resolved = green, matching `ReportStatusChip`). Deliberately not
+/// geolocated report, colored by status (submitted = red, verified =
+/// orange, in progress = blue, resolved = green, matching
+/// `ReportStatusChip`/`feedbackStatusColor`). Deliberately not
 /// built on the heavyweight `MapPanel` in `planning_widgets.dart` — that
 /// widget is already a large, tuned piece of state for stations/proposals,
 /// so bolting fault-report markers onto it is higher risk than a small
@@ -145,11 +146,13 @@ class ReportMapScreen extends StatelessWidget {
   double _markerHue(String status) {
     switch (status) {
       case 'Verified':
+        return BitmapDescriptor.hueOrange;
+      case 'In Progress':
         return BitmapDescriptor.hueAzure;
       case 'Resolved':
         return BitmapDescriptor.hueGreen;
-      default: // 'Submitted' / 'In Progress'
-        return BitmapDescriptor.hueOrange;
+      default: // 'Submitted'
+        return BitmapDescriptor.hueRed;
     }
   }
 
@@ -177,9 +180,11 @@ class _StatusLegend extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            _LegendRow(color: orange, label: 'In Progress'),
+            _LegendRow(color: red, label: 'Submitted'),
             SizedBox(height: 4),
-            _LegendRow(color: blue, label: 'Verified'),
+            _LegendRow(color: orange, label: 'Verified'),
+            SizedBox(height: 4),
+            _LegendRow(color: blue, label: 'In Progress'),
             SizedBox(height: 4),
             _LegendRow(color: green, label: 'Resolved'),
           ],

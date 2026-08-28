@@ -11,7 +11,7 @@ import '../viewmodels/feedback_viewmodel.dart';
 import '../widgets/feedback_widgets.dart';
 import 'report_details_screen.dart';
 
-/// Full "My Reports" list — tab filter (All/In Progress/Verified/Resolved),
+/// Full "My Reports" list — tab filter across every real report status,
 /// search, a category filter sheet, sort, and pagination. Reached from the
 /// Feedback dashboard's "My Reports" stat card or its "View All" link.
 ///
@@ -22,8 +22,9 @@ import 'report_details_screen.dart';
 class MyReportsScreen extends StatefulWidget {
   const MyReportsScreen({super.key, this.initialTab = 'All'});
 
-  /// One of 'All' / 'In Progress' / 'Verified' / 'Resolved' — lets the
-  /// dashboard's overview stats deep-link straight into a filtered view.
+  /// One of 'All' / 'Submitted' / 'Verified' / 'In Progress' / 'Resolved' —
+  /// lets the dashboard's overview stats deep-link straight into a filtered
+  /// view.
   final String initialTab;
 
   @override
@@ -32,7 +33,13 @@ class MyReportsScreen extends StatefulWidget {
 
 class _MyReportsScreenState extends State<MyReportsScreen>
     with SingleTickerProviderStateMixin {
-  static const _tabs = ['All', 'In Progress', 'Verified', 'Resolved'];
+  static const _tabs = [
+    'All',
+    'Submitted',
+    'Verified',
+    'In Progress',
+    'Resolved',
+  ];
   static const _pageSize = 5;
 
   late final TabController _tabController;
