@@ -4,6 +4,7 @@ abstract final class DriverRouteNames {
   static const charging = '/driver/charging';
   static const planning = '/driver/planning';
   static const profile = '/driver/profile';
+  static const feedback = '/driver/feedback';
 }
 
 void openDriverModule(

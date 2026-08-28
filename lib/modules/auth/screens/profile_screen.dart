@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/navigation/driver_navigation.dart';
 import '../../charging/screens/charging_screen.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../services/auth_service.dart';
@@ -91,6 +92,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await _authService.logout();
+    // AuthGate swaps its content back to Login once signed out, but that
+    // happens on the root route underneath this pushed screen. Pop back to
+    // it so the user actually sees Login instead of staying on this page.
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
@@ -118,6 +122,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           context,
           const PlanningDashboardScreen(),
           DriverRouteNames.planning,
+        ),
+        onFeedbackTap: () => _switchTo(
+          context,
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
         ),
       ),
       body: SafeArea(

@@ -357,6 +357,77 @@ class StatisticCard extends StatelessWidget {
       );
 }
 
+/// A label/value row for a details-screen "information" card. Shared,
+/// public version of the pattern `proposal_details_screen.dart` already
+/// has privately — kept separate rather than reusing that private class
+/// (which isn't importable) or editing Module 2's file for a Module 3 need.
+class InformationRow extends StatelessWidget {
+  const InformationRow(this.label, this.value, {super.key});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(color: planningMutedTextColor),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+/// Two action buttons, side by side, that stack vertically on a narrow
+/// screen or when text scaling is large. Same responsive rule as the
+/// private version in `proposal_details_screen.dart`.
+class ResponsiveButtonPair extends StatelessWidget {
+  const ResponsiveButtonPair({
+    super.key,
+    required this.first,
+    required this.second,
+  });
+
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final useVerticalLayout = constraints.maxWidth < 360 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.25;
+          if (useVerticalLayout) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [first, const SizedBox(height: 10), second],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: first),
+              const SizedBox(width: 10),
+              Expanded(child: second),
+            ],
+          );
+        },
+      );
+}
+
 typedef StateSelectionCallback = void Function(String state, String source);
 
 class MapPanel extends StatefulWidget {
@@ -2041,17 +2112,18 @@ class FloatingBottomNav extends StatelessWidget {
     this.onChargingTap,
     this.onProfileTap,
     this.onPlanningTap,
+    this.onFeedbackTap,
   });
 
   final String currentTab;
 
-  /// Feedback doesn't have a screen yet, so it stays inert;
-  /// Home, Charging, Planning and Profile become tappable once a caller
-  /// opts in.
+  /// Home and Charging become tappable once a caller opts in, alongside
+  /// Planning, Feedback and Profile.
   final VoidCallback? onHomeTap;
   final VoidCallback? onChargingTap;
   final VoidCallback? onProfileTap;
   final VoidCallback? onPlanningTap;
+  final VoidCallback? onFeedbackTap;
 
   @override
   Widget build(BuildContext c) => SafeArea(
@@ -2099,10 +2171,13 @@ class FloatingBottomNav extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: _Nav(
-                  Icons.warning_amber_outlined,
-                  'Feedback',
-                  selected: currentTab == 'Feedback',
+                child: GestureDetector(
+                  onTap: onFeedbackTap,
+                  child: _Nav(
+                    Icons.warning_amber_outlined,
+                    'Feedback',
+                    selected: currentTab == 'Feedback',
+                  ),
                 ),
               ),
               Expanded(

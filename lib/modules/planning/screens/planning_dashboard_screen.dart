@@ -4,6 +4,7 @@ import '../../../core/navigation/app_route_observer.dart';
 import '../../../core/navigation/driver_navigation.dart';
 import '../../auth/screens/profile_screen.dart';
 import '../../charging/screens/charging_screen.dart';
+import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/planning_widgets.dart';
@@ -203,6 +204,11 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           context,
           const ProfileScreen(),
           DriverRouteNames.profile,
+        ),
+        onFeedbackTap: () => _switchTo(
+          context,
+          const FeedbackDashboardScreen(),
+          DriverRouteNames.feedback,
         ),
       ),
     );
