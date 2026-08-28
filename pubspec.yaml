@@ -16,6 +16,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   workmanager: ^0.10.7
   sqflite: ^2.4.3
+  http: ^1.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -23,6 +24,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/certs/
     - assets/data/
     - assets/icons/
     - assets/images/

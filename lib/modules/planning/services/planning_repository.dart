@@ -6,6 +6,7 @@ import '../models/proposal.dart';
 import 'analysis_profile.dart';
 import 'coverage_gap_analyzer.dart';
 import 'infrastructure_cache_service.dart';
+import 'mevnet_api_service.dart';
 import 'proposal_location_service.dart';
 import 'proposal_photo_service.dart';
 import 'state_boundary_service.dart';
@@ -15,18 +16,28 @@ class PlanningRepository {
     SupabaseService? supabaseService,
     ProposalPhotoService? photoService,
     InfrastructureCacheStore? infrastructureCache,
+    MEVnetApiService? mevnetApiService,
+    bool? useMevnetApiSource,
   })  : _supabase = supabaseService ?? SupabaseService(),
         _photoService = photoService ?? ProposalPhotoService(),
         _infrastructureCache =
-            infrastructureCache ?? SqliteInfrastructureCacheService() {
+            infrastructureCache ?? SqliteInfrastructureCacheService(),
+        _mevnetApi = mevnetApiService ?? MEVnetApiService(),
+        _useMevnetApi = useMevnetApiSource ?? useMevnetApi {
     _infrastructureSync = InfrastructureSyncCoordinator(
       cache: _infrastructureCache,
-      remoteLoader: (status) => _getStationsFromSupabase(status: status),
+      remoteLoader: _loadRemoteStations,
+    );
+    debugPrint(
+      'Infrastructure remote source selected: '
+      '${_useMevnetApi ? 'MEVnet ArcGIS REST API' : 'Supabase charging_stations'}.',
     );
   }
   final SupabaseService _supabase;
   final ProposalPhotoService _photoService;
   final InfrastructureCacheStore _infrastructureCache;
+  final MEVnetApiService _mevnetApi;
+  final bool _useMevnetApi;
   late final InfrastructureSyncCoordinator _infrastructureSync;
   final CoverageGapAnalyzer _gapAnalyzer = const CoverageGapAnalyzer();
   final ProposalLocationService _proposalLocations = ProposalLocationService();
@@ -203,6 +214,32 @@ class PlanningRepository {
       }
     }
     return '${stations.length}-${hash.toRadixString(16).padLeft(8, '0')}';
+  }
+
+  /// Single remote seam used by [InfrastructureSyncCoordinator].
+  ///
+  /// The source is chosen once at construction from [useMevnetApi]. There is
+  /// deliberately no silent runtime fallback from the API to Supabase: when a
+  /// refresh fails the coordinator keeps serving the SQLite snapshot, which is
+  /// the only offline path the application relies on.
+  Future<List<ChargingStation>> _loadRemoteStations(String status) =>
+      _useMevnetApi
+          ? _getStationsFromMevnetApi(status: status)
+          : _getStationsFromSupabase(status: status);
+
+  Future<List<ChargingStation>> _getStationsFromMevnetApi({
+    required String status,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    final stations = await _mevnetApi.getStations(status: status);
+    stopwatch.stop();
+    debugPrint(
+      'Station loading diagnostics: source=mevnetApi, status=$status, '
+      'validStations=${stations.length}, '
+      'duration=${stopwatch.elapsedMilliseconds}ms, '
+      'paginationComplete=true.',
+    );
+    return stations;
   }
 
   Future<List<ChargingStation>> _getStationsFromSupabase({
