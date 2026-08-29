@@ -25,6 +25,30 @@ const _offPeakRateSen = 24.43;
 const _peakRateSen = 28.52;
 const _malaysiaFallback = LatLng(3.1390, 101.6869);
 
+const _acPowerMinKw = 3;
+const _acPowerMaxKw = 22;
+const _dcPowerMinKw = 30;
+const _dcPowerMaxKw = 180;
+const _rateMinRm = 0.20;
+const _rateMaxRm = 2.00;
+
+const _weekdayShortNames = {
+  1: 'Mon',
+  2: 'Tue',
+  3: 'Wed',
+  4: 'Thu',
+  5: 'Fri',
+  6: 'Sat',
+  7: 'Sun',
+};
+
+String _weeklyRepeatLabel(List<int> repeatDays) {
+  if (repeatDays.length == 7) return 'Every day';
+  if (repeatDays.isEmpty) return 'Every week';
+  final sorted = repeatDays.toList()..sort();
+  return sorted.map((d) => _weekdayShortNames[d]).join(', ');
+}
+
 class ChargingScreen extends StatefulWidget {
   const ChargingScreen({super.key});
 
@@ -37,6 +61,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
   final _notifications = NotificationService();
 
   // Calculator state
+  final _calcFormKey = GlobalKey<FormState>();
   String _calcChargerType = chargerTypes[1];
   final _calcPowerController = TextEditingController(text: '180');
   final _calcRateController = TextEditingController(text: '1.20');
@@ -45,7 +70,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
   double? _calcResult;
 
   Future<List<Map<String, dynamic>>>? _sessionsFuture;
-  Future<List<Map<String, dynamic>>>? _remindersFuture;
+  List<Map<String, dynamic>>? _reminders;
 
   LatLng? _userLocation;
 
@@ -70,10 +95,16 @@ class _ChargingScreenState extends State<ChargingScreen> {
     });
   }
 
-  void _reloadReminders() {
-    setState(() {
-      _remindersFuture = _service.fetchReminders();
-    });
+  Future<void> _reloadReminders() async {
+    final reminders = await _service.fetchReminders();
+    if (!mounted) return;
+    // Swap the resolved list in directly instead of going through a Future
+    // + FutureBuilder: reassigning a Future there reset connectionState to
+    // waiting on every call, blanking the whole list to a spinner even for
+    // a single toggle flip. Holding the list as plain state means a reload
+    // just replaces its contents in one setState, with the old list still
+    // on screen until the new one is ready - no flash.
+    setState(() => _reminders = reminders);
   }
 
   Future<void> _loadLocation() async {
@@ -106,17 +137,53 @@ class _ChargingScreenState extends State<ChargingScreen> {
     return math.sqrt(dx * dx + dy * dy);
   }
 
+  bool get _calcIsDc => _calcChargerType.toLowerCase().contains('dc');
+
+  String? _validateCalcPower(String? value) {
+    final power = int.tryParse((value ?? '').trim());
+    if (power == null) return 'Enter power in kW';
+    final min = _calcIsDc ? _dcPowerMinKw : _acPowerMinKw;
+    final max = _calcIsDc ? _dcPowerMaxKw : _acPowerMaxKw;
+    if (power < min || power > max) {
+      return '${_calcIsDc ? 'DC' : 'AC'} charger power should be $min-$max kW';
+    }
+    return null;
+  }
+
+  String? _validateCalcRate(String? value) {
+    final rate = double.tryParse((value ?? '').trim());
+    if (rate == null) return 'Enter a rate';
+    if (rate < _rateMinRm || rate > _rateMaxRm) {
+      return 'Rate should be RM${_rateMinRm.toStringAsFixed(2)}-RM${_rateMaxRm.toStringAsFixed(2)} per kWh';
+    }
+    return null;
+  }
+
+  bool _validateCalcForm() {
+    if (_calcFormKey.currentState!.validate()) return true;
+    FocusScope.of(context).unfocus();
+    final error = _validateCalcPower(_calcPowerController.text) ??
+        _validateCalcRate(_calcRateController.text);
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(error)));
+    }
+    return false;
+  }
+
   void _calculate() {
-    final rate = double.tryParse(_calcRateController.text.trim());
-    final power = int.tryParse(_calcPowerController.text.trim());
-    if (rate == null || power == null) return;
+    if (!_validateCalcForm()) return;
+    final rate = double.parse(_calcRateController.text.trim());
+    final power = int.parse(_calcPowerController.text.trim());
     final hours = _calcHours + _calcMinutes / 60;
     setState(() => _calcResult = power * hours * rate);
   }
 
   Future<void> _recordCalculatedSession() async {
-    final power = int.tryParse(_calcPowerController.text.trim());
-    if (power == null || _calcResult == null) return;
+    if (!_validateCalcForm()) return;
+    final power = int.parse(_calcPowerController.text.trim());
+    if (_calcResult == null) return;
     final hours = _calcHours + _calcMinutes / 60;
     final saved = await showCreateSessionSheet(
       context,
@@ -202,17 +269,50 @@ class _ChargingScreenState extends State<ChargingScreen> {
   Future<void> _toggleReminder(
       Map<String, dynamic> reminder, bool enabled) async {
     final id = reminder['id'] as String;
+
+    // Flip the switch instantly in local state so the UI responds right
+    // away instead of waiting on the network calls below - no spinner, no
+    // list flash. _reloadReminders() at the end reconciles with the server
+    // (e.g. the rolled-forward date/time for a recurring reminder) but no
+    // longer blanks the list while it does, so it's safe to just let it run.
+    setState(() {
+      _reminders = [
+        for (final r in _reminders ?? const <Map<String, dynamic>>[])
+          if (r['id'] == id) {...r, 'enabled': enabled} else r,
+      ];
+    });
+
     await _service.setReminderEnabled(id, enabled);
     if (enabled) {
+      final repeatFrequency = reminder['repeat_frequency'] as String? ?? 'once';
+      final repeatDays = (reminder['repeat_days'] as List<Object?>?)
+              ?.map((e) => e as int)
+              .toList() ??
+          const <int>[];
+      final anchor = combineDateAndTime(
+        parseReminderDate(reminder['reminder_date'] as String),
+        parseReminderTime(reminder['reminder_time'] as String),
+      );
+      final scheduledAt = rollReminderToFuture(
+        anchor,
+        repeatFrequency,
+        repeatDays: repeatDays,
+      );
       await _notifications.scheduleReminder(
         reminderId: id,
         title: reminder['title'] as String,
         body: 'Time to charge your EV.',
-        dateTime: combineDateAndTime(
-          parseReminderDate(reminder['reminder_date'] as String),
-          parseReminderTime(reminder['reminder_time'] as String),
-        ),
+        dateTime: scheduledAt,
+        repeatFrequency: repeatFrequency,
+        repeatDays: repeatDays,
       );
+      if (scheduledAt != anchor) {
+        await _service.updateReminderOccurrence(
+          id,
+          date: scheduledAt,
+          time: TimeOfDay.fromDateTime(scheduledAt),
+        );
+      }
     } else {
       await _notifications.cancel(id);
     }
@@ -295,119 +395,128 @@ class _ChargingScreenState extends State<ChargingScreen> {
 
   Widget _buildCalculatorCard() {
     return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const ChargingSectionHeader(
-            icon: Icons.calculate_outlined,
-            title: 'Charging Cost Calculator',
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _calcChargerType,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Charger Type',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (final type in chargerTypes)
-                      DropdownMenuItem(
-                        value: type,
-                        child: Text(type, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _calcChargerType = value);
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _calcPowerController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Charging Power (kW)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _calcRateController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Electricity Rate (RM/kWh)',
-              border: OutlineInputBorder(),
+      child: Form(
+        key: _calcFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ChargingSectionHeader(
+              icon: Icons.calculate_outlined,
+              title: 'Charging Cost Calculator',
             ),
-          ),
-          const SizedBox(height: 12),
-          DurationPickerField(
-            label: 'Charging Time',
-            hours: _calcHours,
-            minutes: _calcMinutes,
-            onChanged: (h, m) => setState(() {
-              _calcHours = h;
-              _calcMinutes = m;
-            }),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Estimated Cost',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: planningMutedTextColor,
-                      ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _calcChargerType,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Charger Type',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _calcResult == null
-                          ? 'RM --'
-                          : 'RM${_calcResult!.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: green,
-                      ),
+                    items: [
+                      for (final type in chargerTypes)
+                        DropdownMenuItem(
+                          value: type,
+                          child: Text(type, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _calcChargerType = value);
+                        _calcFormKey.currentState?.validate();
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _calcPowerController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Charging Power (kW)',
+                      border: OutlineInputBorder(),
                     ),
-                  ],
+                    validator: _validateCalcPower,
+                  ),
                 ),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: green,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: _calculate,
-                icon: const Icon(Icons.calculate_outlined, size: 18),
-                label: const Text('Calculate'),
-              ),
-            ],
-          ),
-          if (_calcResult != null) ...[
+              ],
+            ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _recordCalculatedSession,
-              icon: const Icon(Icons.receipt_long_outlined, color: green),
-              label: const Text('Record This as a Session'),
+            TextFormField(
+              controller: _calcRateController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Electricity Rate (RM/kWh)',
+                border: OutlineInputBorder(),
+              ),
+              validator: _validateCalcRate,
             ),
+            const SizedBox(height: 12),
+            DurationPickerField(
+              label: 'Charging Time',
+              hours: _calcHours,
+              minutes: _calcMinutes,
+              onChanged: (h, m) => setState(() {
+                _calcHours = h;
+                _calcMinutes = m;
+              }),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Estimated Cost',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: planningMutedTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _calcResult == null
+                            ? 'RM --'
+                            : 'RM${_calcResult!.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: green,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _calculate,
+                  icon: const Icon(Icons.calculate_outlined, size: 18),
+                  label: const Text('Calculate'),
+                ),
+              ],
+            ),
+            if (_calcResult != null) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _recordCalculatedSession,
+                icon: const Icon(Icons.receipt_long_outlined, color: green),
+                label: const Text('Record This as a Session'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -474,6 +583,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
   }
 
   Widget _buildRemindersCard() {
+    final reminders = _reminders;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -483,44 +593,37 @@ class _ChargingScreenState extends State<ChargingScreen> {
             title: 'My Reminders',
           ),
           const SizedBox(height: 8),
-          FutureBuilder<List<Map<String, dynamic>>>(
-            future: _remindersFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final reminders = snapshot.data ?? const [];
-              if (reminders.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'No reminders set yet.',
-                    style: TextStyle(color: planningMutedTextColor),
+          if (reminders == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (reminders.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'No reminders set yet.',
+                style: TextStyle(color: planningMutedTextColor),
+              ),
+            )
+          else
+            Column(
+              children: [
+                for (final reminder in reminders)
+                  _ReminderTile(
+                    reminder: reminder,
+                    onToggle: (value) => _toggleReminder(reminder, value),
+                    onEdit: () async {
+                      final saved = await showCreateReminderSheet(
+                        context,
+                        existing: reminder,
+                      );
+                      if (saved == true) _reloadReminders();
+                    },
+                    onDelete: () => _deleteReminder(reminder['id'] as String),
                   ),
-                );
-              }
-              return Column(
-                children: [
-                  for (final reminder in reminders)
-                    _ReminderTile(
-                      reminder: reminder,
-                      onToggle: (value) => _toggleReminder(reminder, value),
-                      onEdit: () async {
-                        final saved = await showCreateReminderSheet(
-                          context,
-                          existing: reminder,
-                        );
-                        if (saved == true) _reloadReminders();
-                      },
-                      onDelete: () => _deleteReminder(reminder['id'] as String),
-                    ),
-                ],
-              );
-            },
-          ),
+              ],
+            ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () async {
@@ -931,6 +1034,11 @@ class _ReminderTile extends StatelessWidget {
     final enabled = reminder['enabled'] as bool? ?? true;
     final chargerType = reminder['charger_type'] as String?;
     final locationLabel = reminder['location_label'] as String?;
+    final repeatFrequency = reminder['repeat_frequency'] as String? ?? 'once';
+    final repeatDays = (reminder['repeat_days'] as List<Object?>?)
+            ?.map((e) => e as int)
+            .toList() ??
+        const <int>[];
     final time = parseReminderTime(reminder['reminder_time'] as String);
     final date = parseReminderDate(reminder['reminder_date'] as String);
     return Padding(
@@ -957,6 +1065,15 @@ class _ReminderTile extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 4,
                   children: [
+                    if (repeatFrequency != 'once')
+                      _ReminderTag(
+                        icon: Icons.repeat,
+                        label: switch (repeatFrequency) {
+                          'daily' => 'Every day',
+                          'weekly' => _weeklyRepeatLabel(repeatDays),
+                          _ => repeatFrequency,
+                        },
+                      ),
                     if (chargerType != null)
                       _ReminderTag(icon: Icons.bolt, label: chargerType),
                     if (locationLabel != null && locationLabel.isNotEmpty)

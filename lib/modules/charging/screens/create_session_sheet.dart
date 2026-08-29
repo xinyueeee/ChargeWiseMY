@@ -64,8 +64,7 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
     final source = existing ?? widget.prefill;
     _stationName = existing?['station_name'] as String? ?? '';
     _selectedStationId = existing?['station_id'] as String?;
-    _autoFilledStationName =
-        _selectedStationId != null ? _stationName : null;
+    _autoFilledStationName = _selectedStationId != null ? _stationName : null;
     _powerController = TextEditingController(
       text: source?['power_kw'] == null
           ? ''
@@ -209,234 +208,272 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
   Widget build(BuildContext context) {
     final isEditing = widget.existing != null;
     final stations = context.watch<PlanningViewModel>().stations;
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    isEditing ? 'Update Session' : 'Create Session',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: planningTextColor,
-                    ),
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDDE3EA),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(height: 16),
-                  Autocomplete<ChargingStation>(
-                    initialValue: TextEditingValue(text: _stationName),
-                    displayStringForOption: (station) => station.name,
-                    optionsBuilder: (textEditingValue) {
-                      final query = textEditingValue.text.trim().toLowerCase();
-                      if (query.isEmpty) return const [];
-                      return stations
-                          .where((s) => s.name.toLowerCase().contains(query))
-                          .take(20);
-                    },
-                    onSelected: (station) {
-                      setState(() {
-                        _stationName = station.name;
-                        _selectedStationId = station.id;
-                        _autoFilledStationName = station.name;
-                        _chargerType = station.chargerType;
-                      });
-                    },
-                    fieldViewBuilder:
-                        (context, controller, focusNode, onFieldSubmitted) {
-                      return TextFormField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: const InputDecoration(
-                          labelText: 'Station Name',
-                          hintText: 'Search or type a station name',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) => (value ?? '').trim().isEmpty
-                            ? 'Enter a station name'
-                            : null,
-                        onChanged: (value) {
-                          _stationName = value;
-                          if (value != _autoFilledStationName) {
-                            _selectedStationId = null;
-                          }
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _chargerType,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Charger Type',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final type in chargerTypes)
-                        DropdownMenuItem(
-                          value: type,
-                          child: Text(type, overflow: TextOverflow.ellipsis),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _chargerType = value);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _powerController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: 'Charging Power (kW)',
-                      helperText: 'The charger\'s speed, e.g. 50, 120, 180',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) =>
-                        int.tryParse((value ?? '').trim()) == null
-                            ? 'Enter power in kW'
-                            : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _energyController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                            labelText: 'Energy (kWh)',
-                            helperText: 'Electricity added to your vehicle',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) =>
-                              double.tryParse((value ?? '').trim()) == null
-                                  ? 'Enter kWh'
-                                  : null,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _costController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                            labelText: 'Cost (RM)',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) =>
-                              double.tryParse((value ?? '').trim()) == null
-                                  ? 'Enter cost'
-                                  : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  DurationPickerField(
-                    label: 'Duration',
-                    hours: _durationHours,
-                    minutes: _durationMinutes,
-                    onChanged: (h, m) => setState(() {
-                      _durationHours = h;
-                      _durationMinutes = m;
-                    }),
-                  ),
-                  const SizedBox(height: 12),
-                  InkWell(
-                    onTap: _pickDateTime,
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Date & Time',
-                        border: OutlineInputBorder(),
-                      ),
-                      child: Text(formatSessionDate(_sessionAt)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: _selectedVehicleId,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: _loadingVehicles
-                                ? 'Loading vehicles…'
-                                : 'Vehicle (optional)',
-                            border: const OutlineInputBorder(),
-                          ),
-                          items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Not specified'),
-                            ),
-                            for (final vehicle in _vehicles)
-                              DropdownMenuItem<String?>(
-                                value: vehicle['id'] as String,
-                                child: Text(
-                                  '${vehicle['make']} ${vehicle['model']}',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _selectedVehicleId = value),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Add Vehicle',
-                        onPressed: _addVehicle,
-                        icon: const Icon(Icons.add_circle_outline, color: green),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _notesController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Additional Info (optional)',
-                      hintText: 'Any notes about this session',
-                      border: OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: green,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(50),
-                    ),
-                    onPressed: _saving ? null : _save,
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(isEditing ? 'Update Session' : 'Create Session'),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+            Flexible(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          isEditing ? 'Update Session' : 'Create Session',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: planningTextColor,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Autocomplete<ChargingStation>(
+                          initialValue: TextEditingValue(text: _stationName),
+                          displayStringForOption: (station) => station.name,
+                          optionsBuilder: (textEditingValue) {
+                            final query =
+                                textEditingValue.text.trim().toLowerCase();
+                            if (query.isEmpty) return const [];
+                            return stations
+                                .where(
+                                    (s) => s.name.toLowerCase().contains(query))
+                                .take(20);
+                          },
+                          onSelected: (station) {
+                            setState(() {
+                              _stationName = station.name;
+                              _selectedStationId = station.id;
+                              _autoFilledStationName = station.name;
+                              _chargerType = station.chargerType;
+                            });
+                          },
+                          fieldViewBuilder: (context, controller, focusNode,
+                              onFieldSubmitted) {
+                            return TextFormField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              decoration: const InputDecoration(
+                                labelText: 'Station Name',
+                                hintText: 'Search or type a station name',
+                                border: OutlineInputBorder(),
+                              ),
+                              validator: (value) => (value ?? '').trim().isEmpty
+                                  ? 'Enter a station name'
+                                  : null,
+                              onChanged: (value) {
+                                _stationName = value;
+                                if (value != _autoFilledStationName) {
+                                  _selectedStationId = null;
+                                }
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: _chargerType,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Charger Type',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final type in chargerTypes)
+                              DropdownMenuItem(
+                                value: type,
+                                child:
+                                    Text(type, overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null)
+                              setState(() => _chargerType = value);
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _powerController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Charging Power (kW)',
+                            helperText:
+                                'The charger\'s speed, e.g. 50, 120, 180',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) =>
+                              int.tryParse((value ?? '').trim()) == null
+                                  ? 'Enter power in kW'
+                                  : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _energyController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration: const InputDecoration(
+                                  labelText: 'Energy (kWh)',
+                                  helperText:
+                                      'Electricity added to your vehicle',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) =>
+                                    double.tryParse((value ?? '').trim()) ==
+                                            null
+                                        ? 'Enter kWh'
+                                        : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _costController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration: const InputDecoration(
+                                  labelText: 'Cost (RM)',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) =>
+                                    double.tryParse((value ?? '').trim()) ==
+                                            null
+                                        ? 'Enter cost'
+                                        : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        DurationPickerField(
+                          label: 'Duration',
+                          hours: _durationHours,
+                          minutes: _durationMinutes,
+                          onChanged: (h, m) => setState(() {
+                            _durationHours = h;
+                            _durationMinutes = m;
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: _pickDateTime,
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Date & Time',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text(formatSessionDate(_sessionAt)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String?>(
+                                initialValue: _selectedVehicleId,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  labelText: _loadingVehicles
+                                      ? 'Loading vehicles…'
+                                      : 'Vehicle (optional)',
+                                  border: const OutlineInputBorder(),
+                                ),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('Not specified'),
+                                  ),
+                                  for (final vehicle in _vehicles)
+                                    DropdownMenuItem<String?>(
+                                      value: vehicle['id'] as String,
+                                      child: Text(
+                                        '${vehicle['make']} ${vehicle['model']}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (value) =>
+                                    setState(() => _selectedVehicleId = value),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Add Vehicle',
+                              onPressed: _addVehicle,
+                              icon: const Icon(Icons.add_circle_outline,
+                                  color: green),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _notesController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Additional Info (optional)',
+                            hintText: 'Any notes about this session',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: green,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(50),
+                          ),
+                          onPressed: _saving ? null : _save,
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(isEditing
+                                  ? 'Update Session'
+                                  : 'Create Session'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

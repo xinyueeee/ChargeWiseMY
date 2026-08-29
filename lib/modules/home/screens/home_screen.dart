@@ -83,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   LatLng? _userLocation;
   bool _autoLocated = false;
   bool _autoLocateDone = false;
-  Future<List<Map<String, dynamic>>>? _remindersFuture;
+  List<Map<String, dynamic>>? _reminders;
   PageRoute<dynamic>? _subscribedRoute;
   bool _mapMounted = true;
 
@@ -92,7 +92,13 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     super.initState();
     _loadProfile();
     _loadLocation();
-    _remindersFuture = _chargingService.fetchReminders();
+    _reloadReminders();
+  }
+
+  Future<void> _reloadReminders() async {
+    final reminders = await _chargingService.fetchReminders();
+    if (!mounted) return;
+    setState(() => _reminders = reminders);
   }
 
   @override
@@ -111,7 +117,13 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   void didPushNext() => _setMapMounted(false);
 
   @override
-  void didPopNext() => _setMapMounted(true);
+  void didPopNext() {
+    _setMapMounted(true);
+    // Returning here from Charging (create/edit/delete/toggle a reminder)
+    // shouldn't leave this card showing stale data until the next cold
+    // start, so refresh it every time Home comes back into view.
+    _reloadReminders();
+  }
 
   void _setMapMounted(bool value) {
     if (!mounted || value == _mapMounted) return;
@@ -498,6 +510,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                       focusBounds: _autoLocated ? null : vm.selectedMapBounds,
                       focusTarget: _autoLocated ? _userLocation : null,
                       focusZoom: 14.5,
+                      myLocationEnabled: _userLocation != null,
                       onStateSelected: (state, source) {
                         setState(() {
                           _autoLocated = false;
@@ -628,82 +641,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  FutureBuilder<List<Map<String, dynamic>>>(
-                    future: _remindersFuture,
-                    builder: (context, snapshot) {
-                      final reminders = snapshot.data ?? const [];
-                      final now = DateTime.now();
-                      final upcoming = reminders.where((r) {
-                        if (r['enabled'] != true) return false;
-                        final dateTime = combineDateAndTime(
-                          parseReminderDate(r['reminder_date'] as String),
-                          parseReminderTime(r['reminder_time'] as String),
-                        );
-                        return !dateTime.isBefore(now);
-                      }).toList()
-                        ..sort((a, b) {
-                          final aTime = combineDateAndTime(
-                            parseReminderDate(a['reminder_date'] as String),
-                            parseReminderTime(a['reminder_time'] as String),
-                          );
-                          final bTime = combineDateAndTime(
-                            parseReminderDate(b['reminder_date'] as String),
-                            parseReminderTime(b['reminder_time'] as String),
-                          );
-                          return aTime.compareTo(bTime);
-                        });
-                      final next = upcoming.isEmpty ? null : upcoming.first;
-
-                      return InkWell(
-                        onTap: () => _switchTo(
-                          const ChargingScreen(),
-                          DriverRouteNames.charging,
-                        ),
-                        child: AppCard(
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.event_available_outlined,
-                                color: green,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      next == null
-                                          ? 'No upcoming reminders'
-                                          : next['title'] as String,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: planningTextColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      next == null
-                                          ? 'Tap to set a charging reminder.'
-                                          : '${relativeDateLabel(parseReminderDate(next['reminder_date'] as String))}, '
-                                              '${parseReminderTime(next['reminder_time'] as String).format(context)}',
-                                      style: const TextStyle(
-                                        color: planningMutedTextColor,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: planningMutedTextColor,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  _buildReminderSummaryCard(context),
                 ],
               );
             },
@@ -711,6 +649,80 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         ),
       ),
       bottomNavigationBar: _navConfig(context).bottomBarFor(context),
+    );
+  }
+
+  Widget _buildReminderSummaryCard(BuildContext context) {
+    final reminders = _reminders ?? const <Map<String, dynamic>>[];
+    final now = DateTime.now();
+    final upcoming = reminders.where((r) {
+      if (r['enabled'] != true) return false;
+      final dateTime = combineDateAndTime(
+        parseReminderDate(r['reminder_date'] as String),
+        parseReminderTime(r['reminder_time'] as String),
+      );
+      return !dateTime.isBefore(now);
+    }).toList()
+      ..sort((a, b) {
+        final aTime = combineDateAndTime(
+          parseReminderDate(a['reminder_date'] as String),
+          parseReminderTime(a['reminder_time'] as String),
+        );
+        final bTime = combineDateAndTime(
+          parseReminderDate(b['reminder_date'] as String),
+          parseReminderTime(b['reminder_time'] as String),
+        );
+        return aTime.compareTo(bTime);
+      });
+    final next = upcoming.isEmpty ? null : upcoming.first;
+
+    return InkWell(
+      onTap: () => _switchTo(
+        const ChargingScreen(),
+        DriverRouteNames.charging,
+      ),
+      child: AppCard(
+        child: Row(
+          children: [
+            const Icon(
+              Icons.event_available_outlined,
+              color: green,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    next == null
+                        ? 'No upcoming reminders'
+                        : next['title'] as String,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: planningTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    next == null
+                        ? 'Tap to set a charging reminder.'
+                        : '${relativeDateLabel(parseReminderDate(next['reminder_date'] as String))}, '
+                            '${parseReminderTime(next['reminder_time'] as String).format(context)}',
+                    style: const TextStyle(
+                      color: planningMutedTextColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: planningMutedTextColor,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -455,6 +455,7 @@ class MapPanel extends StatefulWidget {
     this.onStationTap,
     this.showNationalStateBadges = true,
     this.showStationsInNationalView = false,
+    this.myLocationEnabled = false,
   });
   final double height;
   final bool gaps;
@@ -492,6 +493,12 @@ class MapPanel extends StatefulWidget {
   /// Home renders its Existing-only station source at Malaysia zoom. Planning
   /// keeps the lighter national polygon-and-summary presentation.
   final bool showStationsInNationalView;
+
+  /// Shows the device's live position as a blue dot on the map. Leave false
+  /// (the default) unless the caller has already confirmed location
+  /// permission is granted - Android throws if this is set true before
+  /// permission is available.
+  final bool myLocationEnabled;
 
   @override
   State<MapPanel> createState() => _MapPanelState();
@@ -1556,6 +1563,7 @@ class _MapPanelState extends State<MapPanel> {
                 ),
               },
               zoomControlsEnabled: true,
+              myLocationEnabled: widget.myLocationEnabled,
               myLocationButtonEnabled: false,
               mapToolbarEnabled: false,
               rotateGesturesEnabled: false,

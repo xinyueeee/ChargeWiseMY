@@ -98,6 +98,8 @@ class ChargingService {
     String? locationLabel,
     required DateTime date,
     required TimeOfDay time,
+    String repeatFrequency = 'once',
+    List<int> repeatDays = const [],
     bool enabled = true,
   }) async {
     final userId = _userId!;
@@ -110,6 +112,8 @@ class ChargingService {
           'location_label': locationLabel,
           'reminder_date': _formatDate(date),
           'reminder_time': _formatTime(time),
+          'repeat_frequency': repeatFrequency,
+          'repeat_days': repeatDays,
           'enabled': enabled,
         })
         .select()
@@ -124,11 +128,26 @@ class ChargingService {
     String? locationLabel,
     required DateTime date,
     required TimeOfDay time,
+    String repeatFrequency = 'once',
+    List<int> repeatDays = const [],
   }) async {
     await _client.from('charging_reminders').update({
       'title': title.trim(),
       'charger_type': chargerType,
       'location_label': locationLabel,
+      'reminder_date': _formatDate(date),
+      'reminder_time': _formatTime(time),
+      'repeat_frequency': repeatFrequency,
+      'repeat_days': repeatDays,
+    }).eq('id', id);
+  }
+
+  Future<void> updateReminderOccurrence(
+    String id, {
+    required DateTime date,
+    required TimeOfDay time,
+  }) async {
+    await _client.from('charging_reminders').update({
       'reminder_date': _formatDate(date),
       'reminder_time': _formatTime(time),
     }).eq('id', id);

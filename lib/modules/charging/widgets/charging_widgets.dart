@@ -84,8 +84,18 @@ class ChargingSectionHeader extends StatelessWidget {
 
 String formatSessionDate(DateTime dateTime) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final local = dateTime.toLocal();
   final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
@@ -104,8 +114,18 @@ String relativeDateLabel(DateTime date) {
   if (diff == 1) return 'Tomorrow';
   if (diff == -1) return 'Yesterday';
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${date.day} ${months[date.month - 1]}';
 }
@@ -135,6 +155,7 @@ class DurationPickerField extends StatelessWidget {
   Future<void> _open(BuildContext context) async {
     final result = await showModalBottomSheet<(int, int)>(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -178,63 +199,68 @@ class _DurationPickerSheetState extends State<_DurationPickerSheet> {
 
   @override
   Widget build(BuildContext context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Charging Duration',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 160,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: CupertinoPicker(
-                        itemExtent: 36,
-                        scrollController: FixedExtentScrollController(
-                          initialItem: _hours,
-                        ),
-                        onSelectedItemChanged: (index) =>
-                            setState(() => _hours = index),
-                        children: [
-                          for (var h = 0; h <= 23; h++)
-                            Center(child: Text('$h h')),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: CupertinoPicker(
-                        itemExtent: 36,
-                        scrollController: FixedExtentScrollController(
-                          initialItem: _minutes,
-                        ),
-                        onSelectedItemChanged: (index) =>
-                            setState(() => _minutes = index),
-                        children: [
-                          for (var m = 0; m <= 59; m++)
-                            Center(child: Text('$m min')),
-                        ],
-                      ),
-                    ),
-                  ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Charging Duration',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                 ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: green,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(48),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 160,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: CupertinoPicker(
+                          itemExtent: 36,
+                          scrollController: FixedExtentScrollController(
+                            initialItem: _hours,
+                          ),
+                          onSelectedItemChanged: (index) =>
+                              setState(() => _hours = index),
+                          children: [
+                            for (var h = 0; h <= 23; h++)
+                              Center(child: Text('$h h')),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: CupertinoPicker(
+                          itemExtent: 36,
+                          scrollController: FixedExtentScrollController(
+                            initialItem: _minutes,
+                          ),
+                          onSelectedItemChanged: (index) =>
+                              setState(() => _minutes = index),
+                          children: [
+                            for (var m = 0; m <= 59; m++)
+                              Center(child: Text('$m min')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                onPressed: () =>
-                    Navigator.of(context).pop((_hours, _minutes)),
-                child: const Text('Done'),
-              ),
-            ],
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: green,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: () =>
+                      Navigator.of(context).pop((_hours, _minutes)),
+                  child: const Text('Done'),
+                ),
+              ],
+            ),
           ),
         ),
       );
