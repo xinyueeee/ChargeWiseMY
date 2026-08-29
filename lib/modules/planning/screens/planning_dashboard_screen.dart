@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/navigation/app_route_observer.dart';
-import '../../../core/navigation/driver_navigation.dart';
-import '../../../core/navigation/driver_navigation_shell.dart';
-import '../../auth/screens/profile_screen.dart';
-import '../../charging/screens/charging_screen.dart';
-import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../models/proposal.dart';
 import '../viewmodels/planning_viewmodel.dart';
 import '../widgets/compact_map_legend.dart';
@@ -38,7 +33,9 @@ class PlanningDashboardScreen extends StatefulWidget {
 bool useSplitPlanningDashboardLayout(BoxConstraints constraints) {
   final landscape = constraints.maxWidth > constraints.maxHeight;
   return constraints.maxWidth >= 700 ||
-      (landscape && constraints.maxWidth >= 540 && constraints.maxHeight <= 620);
+      (landscape &&
+          constraints.maxWidth >= 540 &&
+          constraints.maxHeight <= 620);
 }
 
 class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
@@ -108,144 +105,116 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
     super.dispose();
   }
 
-  /// Destinations for this screen, shared by the bottom bar and the
-
-  /// side rail so both surfaces stay identical.
-
-  DriverNavigationConfig _navConfig(BuildContext context) =>
-      DriverNavigationConfig(
-        currentTab: 'Planning',
-        onHomeTap: () => returnToDriverHome(context),
-        onChargingTap: () => _switchTo(
-          context,
-          const ChargingScreen(),
-          DriverRouteNames.charging,
-        ),
-        onProfileTap: () => _switchTo(
-          context,
-          const ProfileScreen(),
-          DriverRouteNames.profile,
-        ),
-        onFeedbackTap: () => _switchTo(
-          context,
-          const FeedbackDashboardScreen(),
-          DriverRouteNames.feedback,
-        ),
-      );
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: DriverNavigationShell(
-        config: _navConfig(context),
-        child: Consumer<PlanningViewModel>(
-          builder: (_, vm, __) {
-            debugPrint(
-              'PlanningDashboardScreen reads priority areas: '
-              'viewModel=${identityHashCode(vm)}, '
-              'count=${vm.highPriorityAreaCount}.',
-            );
-            return vm.loading
-                ? const PlanningLoadingState(
-                    message: 'Loading infrastructure planning data…',
-                  )
-                : SafeArea(
-                    // LayoutBuilder, not MediaQuery, because this subtree sits
-                    // inside DriverNavigationShell's Expanded pane once the
-                    // NavigationRail is showing (>=700 logical px). MediaQuery
-                    // still reports the full device width there; constraints
-                    // reports what is actually left after the rail, which is
-                    // the only width this screen may lay out against.
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (useSplitPlanningDashboardLayout(constraints)) {
-                          return _buildLandscapeDashboard(
-                            context,
-                            vm,
-                            constraints,
-                          );
-                        }
-                        return ListView(
-                          padding: planningPagePadding,
-                          children: [
-                            PlanningSectionTitle(
-                              'Infrastructure Planning',
-                              subtitle:
-                                  'Plan smarter. Build better. Power the future.',
-                              trailing: _buildRefreshControl(vm),
-                            ),
-                            planningSectionGap,
-                            if (vm.errorMessage != null) ...[
-                              PlanningErrorState(
-                                message: vm.errorMessage!,
-                                onRetry: vm.load,
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-                            if (vm.infrastructureWarningMessage != null) ...[
-                              InfrastructureDataNotice(
-                                message: vm.infrastructureWarningMessage!,
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-                            _buildPlanningRegionCard(vm),
-                            const SizedBox(height: 18),
-                            _buildMapExplorer(vm, height: 285),
-                            planningSectionGap,
-                            PlanningSectionTitle(
-                              'Infrastructure Summary',
-                              subtitle: vm.selectedState == malaysiaSelection
-                                  ? 'Physical charging locations across Malaysia'
-                                  : 'Physical charging locations in ${vm.selectedState}',
-                            ),
-                            const SizedBox(height: 12),
-                            _InfrastructureSummaryCard(
-                              locations: vm.selectedStationCount,
-                              chargers: vm.selectedInstalledChargerCount,
-                              acChargers: vm.selectedAcChargerCount,
-                              dcChargers: vm.selectedDcChargerCount,
-                              plannedLocations: vm.selectedPlannedLocationCount,
-                              plannedChargers: vm.selectedPlannedChargerCount,
-                            ),
-                            planningSectionGap,
-                            PlanningSectionTitle(
-                              'Planning Activity',
-                              subtitle: vm.selectedState == malaysiaSelection
-                                  ? 'Proposal and coverage-gap work across Malaysia'
-                                  : 'Proposal and coverage-gap work in ${vm.selectedState}',
-                            ),
-                            const SizedBox(height: 12),
-                            _PlanningActivityCard(
-                              pendingProposals: _proposalStatusCount(
-                                vm.selectedProposals,
-                                Proposal.statusPending,
-                              ),
-                              approvedProposals: _proposalStatusCount(
-                                vm.selectedProposals,
-                                Proposal.statusApproved,
-                              ),
-                              highPriorityAreas: vm.highPriorityAreaCount,
-                            ),
-                            planningSectionGap,
-                            _buildQuickActions(context),
-                            planningSectionGap,
-                            _PlanningInsightsCard(
-                              highPriorityAreas: vm.highPriorityAreaCount,
-                              pendingProposals: _proposalStatusCount(
-                                vm.selectedProposals,
-                                Proposal.statusPending,
-                              ),
-                              averageGapDistance: vm.averageGapDistance,
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  );
-          },
-        ),
-      ),
-      bottomNavigationBar: _navConfig(context).bottomBarFor(context),
+    // No Scaffold/DriverNavigationShell here anymore - DriverShell now owns
+    // the one Scaffold, bottom nav, and rail shared by all five tabs; this
+    // just needs to return its own content.
+    return Consumer<PlanningViewModel>(
+      builder: (_, vm, __) {
+        debugPrint(
+          'PlanningDashboardScreen reads priority areas: '
+          'viewModel=${identityHashCode(vm)}, '
+          'count=${vm.highPriorityAreaCount}.',
+        );
+        return vm.loading
+            ? const PlanningLoadingState(
+                message: 'Loading infrastructure planning data…',
+              )
+            : SafeArea(
+                // LayoutBuilder, not MediaQuery, because this subtree sits
+                // inside DriverNavigationShell's Expanded pane once the
+                // NavigationRail is showing (>=700 logical px). MediaQuery
+                // still reports the full device width there; constraints
+                // reports what is actually left after the rail, which is
+                // the only width this screen may lay out against.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (useSplitPlanningDashboardLayout(constraints)) {
+                      return _buildLandscapeDashboard(
+                        context,
+                        vm,
+                        constraints,
+                      );
+                    }
+                    return ListView(
+                      padding: planningPagePadding,
+                      children: [
+                        PlanningSectionTitle(
+                          'Infrastructure Planning',
+                          subtitle:
+                              'Plan smarter. Build better. Power the future.',
+                          trailing: _buildRefreshControl(vm),
+                        ),
+                        planningSectionGap,
+                        if (vm.errorMessage != null) ...[
+                          PlanningErrorState(
+                            message: vm.errorMessage!,
+                            onRetry: vm.load,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (vm.infrastructureWarningMessage != null) ...[
+                          InfrastructureDataNotice(
+                            message: vm.infrastructureWarningMessage!,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        _buildPlanningRegionCard(vm),
+                        const SizedBox(height: 18),
+                        _buildMapExplorer(vm, height: 285),
+                        planningSectionGap,
+                        PlanningSectionTitle(
+                          'Infrastructure Summary',
+                          subtitle: vm.selectedState == malaysiaSelection
+                              ? 'Physical charging locations across Malaysia'
+                              : 'Physical charging locations in ${vm.selectedState}',
+                        ),
+                        const SizedBox(height: 12),
+                        _InfrastructureSummaryCard(
+                          locations: vm.selectedStationCount,
+                          chargers: vm.selectedInstalledChargerCount,
+                          acChargers: vm.selectedAcChargerCount,
+                          dcChargers: vm.selectedDcChargerCount,
+                          plannedLocations: vm.selectedPlannedLocationCount,
+                          plannedChargers: vm.selectedPlannedChargerCount,
+                        ),
+                        planningSectionGap,
+                        PlanningSectionTitle(
+                          'Planning Activity',
+                          subtitle: vm.selectedState == malaysiaSelection
+                              ? 'Proposal and coverage-gap work across Malaysia'
+                              : 'Proposal and coverage-gap work in ${vm.selectedState}',
+                        ),
+                        const SizedBox(height: 12),
+                        _PlanningActivityCard(
+                          pendingProposals: _proposalStatusCount(
+                            vm.selectedProposals,
+                            Proposal.statusPending,
+                          ),
+                          approvedProposals: _proposalStatusCount(
+                            vm.selectedProposals,
+                            Proposal.statusApproved,
+                          ),
+                          highPriorityAreas: vm.highPriorityAreaCount,
+                        ),
+                        planningSectionGap,
+                        _buildQuickActions(context),
+                        planningSectionGap,
+                        _PlanningInsightsCard(
+                          highPriorityAreas: vm.highPriorityAreaCount,
+                          pendingProposals: _proposalStatusCount(
+                            vm.selectedProposals,
+                            Proposal.statusPending,
+                          ),
+                          averageGapDistance: vm.averageGapDistance,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              );
+      },
     );
   }
 
@@ -656,14 +625,6 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
     );
   }
 
-  void _switchTo(BuildContext context, Widget page, String routeName) {
-    openDriverModule(
-      context,
-      routeName: routeName,
-      builder: (_) => page,
-    );
-  }
-
   static int _proposalStatusCount(
     Iterable<Proposal> proposals,
     String status,
@@ -935,7 +896,6 @@ class _ActivityPill extends StatelessWidget {
       );
 }
 
-
 class _PlanningInsightsCard extends StatelessWidget {
   const _PlanningInsightsCard({
     required this.highPriorityAreas,
@@ -1008,4 +968,3 @@ class _InsightLine extends StatelessWidget {
         ],
       );
 }
-

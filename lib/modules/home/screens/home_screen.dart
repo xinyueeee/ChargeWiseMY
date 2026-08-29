@@ -7,15 +7,10 @@ import 'package:provider/provider.dart';
 
 import '../../../core/navigation/app_route_observer.dart';
 import '../../../core/navigation/driver_navigation.dart';
-import '../../../core/navigation/driver_navigation_shell.dart';
-import '../../auth/screens/profile_screen.dart';
 import '../../auth/services/auth_service.dart';
-import '../../charging/screens/charging_screen.dart';
 import '../../charging/services/charging_service.dart';
 import '../../charging/widgets/charging_widgets.dart';
-import '../../feedback/screens/feedback_dashboard_screen.dart';
 import '../../planning/models/proposal.dart';
-import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/services/state_boundary_service.dart';
 import '../../planning/viewmodels/planning_viewmodel.dart';
 import '../../planning/widgets/planning_widgets.dart';
@@ -301,371 +296,339 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     }).toList(growable: false);
   }
 
-  /// Destinations for this screen, shared by the bottom bar and the
-
-  /// side rail so both surfaces stay identical.
-
-  DriverNavigationConfig _navConfig(BuildContext context) =>
-      DriverNavigationConfig(
-        currentTab: 'Home',
-        onChargingTap: () => _switchTo(
-          const ChargingScreen(),
-          DriverRouteNames.charging,
-        ),
-        onPlanningTap: () => _switchTo(
-          const PlanningDashboardScreen(),
-          DriverRouteNames.planning,
-        ),
-        onProfileTap: () => _switchTo(
-          const ProfileScreen(),
-          DriverRouteNames.profile,
-        ),
-        onFeedbackTap: () => _switchTo(
-          const FeedbackDashboardScreen(),
-          DriverRouteNames.feedback,
-        ),
-      );
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: DriverNavigationShell(
-        config: _navConfig(context),
-        child: SafeArea(
-          child: Consumer<PlanningViewModel>(
-            builder: (context, vm, __) {
-              if (vm.errorMessage != null && vm.stations.isEmpty) {
-                return PlanningErrorState(
-                  message: vm.errorMessage!,
-                  onRetry: vm.load,
-                );
-              }
-              if (!vm.homeInfrastructureReady && vm.stations.isEmpty) {
-                return const PlanningLoadingState(
-                    message: 'Loading dashboard…');
-              }
+    // No Scaffold/DriverNavigationShell here anymore - DriverShell now owns
+    // the one Scaffold, bottom nav, and rail shared by all five tabs; this
+    // just needs to return its own content.
+    return SafeArea(
+      child: Consumer<PlanningViewModel>(
+        builder: (context, vm, __) {
+          if (vm.errorMessage != null && vm.stations.isEmpty) {
+            return PlanningErrorState(
+              message: vm.errorMessage!,
+              onRetry: vm.load,
+            );
+          }
+          if (!vm.homeInfrastructureReady && vm.stations.isEmpty) {
+            return const PlanningLoadingState(message: 'Loading dashboard…');
+          }
 
-              _maybeAutoLocate(vm);
+          _maybeAutoLocate(vm);
 
-              // One logical Existing-only dataset feeds both the overview and
-              // the map. Rendering optimisations (clustering, viewport limits)
-              // are applied downstream by the map widget, never here, so the
-              // statistics always describe the full selection rather than the
-              // markers that happen to be drawn.
-              final homeStations = _applyFilter(vm.mapStations);
-              final dcCount = homeStations
-                  .where((s) => _chargerGroup(s) == _ChargerGroup.dc)
-                  .length;
-              final acCount = homeStations
-                  .where((s) => _chargerGroup(s) == _ChargerGroup.ac)
-                  .length;
+          // One logical Existing-only dataset feeds both the overview and
+          // the map. Rendering optimisations (clustering, viewport limits)
+          // are applied downstream by the map widget, never here, so the
+          // statistics always describe the full selection rather than the
+          // markers that happen to be drawn.
+          final homeStations = _applyFilter(vm.mapStations);
+          final dcCount = homeStations
+              .where((s) => _chargerGroup(s) == _ChargerGroup.dc)
+              .length;
+          final acCount = homeStations
+              .where((s) => _chargerGroup(s) == _ChargerGroup.ac)
+              .length;
 
-              return ListView(
-                padding: planningPagePadding,
-                children: [
-                  const Text(
-                    'Dashboard',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: planningTextColor,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Hello, $_driverName! 👋',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: planningTextColor,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Find, charge and manage your EV charging easily.',
-                    style: TextStyle(color: planningMutedTextColor),
-                  ),
-                  if (vm.infrastructureWarningMessage != null) ...[
-                    const SizedBox(height: 12),
-                    InfrastructureDataNotice(
-                      message: vm.infrastructureWarningMessage!,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Autocomplete<_SearchSuggestion>(
-                        optionsBuilder: (textEditingValue) =>
-                            _buildSuggestions(vm, textEditingValue.text.trim()),
-                        displayStringForOption: (option) => option.label,
-                        onSelected: (option) => _applySuggestion(vm, option),
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onFieldSubmitted) {
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            textInputAction: TextInputAction.search,
-                            onChanged: (value) => setState(
-                              () => _searchQuery = value.trim().toLowerCase(),
-                            ),
-                            onSubmitted: (value) {
-                              onFieldSubmitted();
-                              _handleSearchSubmit(context, vm, value);
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Search state or charging station',
-                              prefixIcon: const Icon(Icons.search),
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.search),
-                                onPressed: () => _handleSearchSubmit(
-                                  context,
-                                  vm,
-                                  controller.text,
-                                ),
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFFF8F9FC),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(30),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          );
+          return ListView(
+            padding: planningPagePadding,
+            children: [
+              const Text(
+                'Dashboard',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: planningTextColor,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Hello, $_driverName! 👋',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: planningTextColor,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Find, charge and manage your EV charging easily.',
+                style: TextStyle(color: planningMutedTextColor),
+              ),
+              if (vm.infrastructureWarningMessage != null) ...[
+                const SizedBox(height: 12),
+                InfrastructureDataNotice(
+                  message: vm.infrastructureWarningMessage!,
+                ),
+              ],
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return Autocomplete<_SearchSuggestion>(
+                    optionsBuilder: (textEditingValue) =>
+                        _buildSuggestions(vm, textEditingValue.text.trim()),
+                    displayStringForOption: (option) => option.label,
+                    onSelected: (option) => _applySuggestion(vm, option),
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        textInputAction: TextInputAction.search,
+                        onChanged: (value) => setState(
+                          () => _searchQuery = value.trim().toLowerCase(),
+                        ),
+                        onSubmitted: (value) {
+                          onFieldSubmitted();
+                          _handleSearchSubmit(context, vm, value);
                         },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          final list = options.toList();
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              borderRadius: BorderRadius.circular(12),
-                              child: SizedBox(
-                                width: constraints.maxWidth,
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxHeight: 260),
-                                  child: ListView.separated(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 4),
-                                    shrinkWrap: true,
-                                    itemCount: list.length,
-                                    separatorBuilder: (_, __) =>
-                                        const Divider(height: 1),
-                                    itemBuilder: (context, index) {
-                                      final option = list[index];
-                                      final isState =
-                                          option.type == _SuggestionType.state;
-                                      return Material(
-                                        color: Colors.white,
-                                        child: ListTile(
-                                          dense: true,
-                                          leading: Icon(
-                                            isState
-                                                ? Icons.map_outlined
-                                                : Icons.ev_station_outlined,
-                                            color: isState ? green : blue,
-                                            size: 20,
-                                          ),
-                                          title: Text(option.label),
-                                          subtitle: isState
-                                              ? null
-                                              : Text(
-                                                  option.station!.chargerType,
-                                                  style: const TextStyle(
-                                                      fontSize: 12),
-                                                ),
-                                          onTap: () => onSelected(option),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
+                        decoration: InputDecoration(
+                          hintText: 'Search state or charging station',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.search),
+                            onPressed: () => _handleSearchSubmit(
+                              context,
+                              vm,
+                              controller.text,
                             ),
-                          );
-                        },
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF8F9FC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(30),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
                       );
                     },
-                  ),
-                  const SizedBox(height: 16),
-                  if (vm.selectedState != malaysiaSelection)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: InputChip(
-                          avatar: const Icon(
-                            Icons.location_on_outlined,
-                            size: 17,
-                            color: green,
+                    optionsViewBuilder: (context, onSelected, options) {
+                      final list = options.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(
+                            width: constraints.maxWidth,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 260),
+                              child: ListView.separated(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                shrinkWrap: true,
+                                itemCount: list.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final option = list[index];
+                                  final isState =
+                                      option.type == _SuggestionType.state;
+                                  return Material(
+                                    color: Colors.white,
+                                    child: ListTile(
+                                      dense: true,
+                                      leading: Icon(
+                                        isState
+                                            ? Icons.map_outlined
+                                            : Icons.ev_station_outlined,
+                                        color: isState ? green : blue,
+                                        size: 20,
+                                      ),
+                                      title: Text(option.label),
+                                      subtitle: isState
+                                          ? null
+                                          : Text(
+                                              option.station!.chargerType,
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                            ),
+                                      onTap: () => onSelected(option),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
-                          label: Text(vm.selectedState),
-                          deleteIcon: const Icon(Icons.close, size: 17),
-                          deleteButtonTooltipMessage:
-                              'Return to Malaysia Overview',
-                          onDeleted: () {
-                            setState(() {
-                              _autoLocated = false;
-                              _autoLocateDone = true;
-                            });
-                            vm.selectState(
-                              malaysiaSelection,
-                              source: 'home-chip-clear',
-                            );
-                          },
                         ),
+                      );
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              if (vm.selectedState != malaysiaSelection)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: InputChip(
+                      avatar: const Icon(
+                        Icons.location_on_outlined,
+                        size: 17,
+                        color: green,
                       ),
-                    ),
-                  if (_mapMounted)
-                    MapPanel(
-                      height: 220,
-                      stations: homeStations,
-                      stateRegions: vm.stateRegions,
-                      stateOverviews: vm.stateOverviewSummaries,
-                      selectedState: vm.selectedState,
-                      focusBounds: _autoLocated ? null : vm.selectedMapBounds,
-                      focusTarget: _autoLocated ? _userLocation : null,
-                      focusZoom: 14.5,
-                      myLocationEnabled: _userLocation != null,
-                      onStateSelected: (state, source) {
+                      label: Text(vm.selectedState),
+                      deleteIcon: const Icon(Icons.close, size: 17),
+                      deleteButtonTooltipMessage: 'Return to Malaysia Overview',
+                      onDeleted: () {
                         setState(() {
                           _autoLocated = false;
                           _autoLocateDone = true;
                         });
-                        vm.selectState(state, source: source);
+                        vm.selectState(
+                          malaysiaSelection,
+                          source: 'home-chip-clear',
+                        );
                       },
-                      showNationalStateBadges: false,
-                      showStationsInNationalView: true,
-                      stationIconResolver: _iconForStation,
-                      onStationTap: (station) => showStationDetailsSheet(
-                        context,
-                        station: station,
-                        distanceKm: _distanceKm(
-                          _referencePoint,
-                          LatLng(station.latitude, station.longitude),
+                    ),
+                  ),
+                ),
+              if (_mapMounted)
+                MapPanel(
+                  height: 220,
+                  stations: homeStations,
+                  stateRegions: vm.stateRegions,
+                  stateOverviews: vm.stateOverviewSummaries,
+                  selectedState: vm.selectedState,
+                  focusBounds: _autoLocated ? null : vm.selectedMapBounds,
+                  focusTarget: _autoLocated ? _userLocation : null,
+                  focusZoom: 14.5,
+                  myLocationEnabled: _userLocation != null,
+                  onStateSelected: (state, source) {
+                    setState(() {
+                      _autoLocated = false;
+                      _autoLocateDone = true;
+                    });
+                    vm.selectState(state, source: source);
+                  },
+                  showNationalStateBadges: false,
+                  showStationsInNationalView: true,
+                  stationIconResolver: _iconForStation,
+                  onStationTap: (station) => showStationDetailsSheet(
+                    context,
+                    station: station,
+                    distanceKm: _distanceKm(
+                      _referencePoint,
+                      LatLng(station.latitude, station.longitude),
+                    ),
+                  ),
+                )
+              else
+                const SizedBox(height: 300),
+              if (vm.selectedState == malaysiaSelection) ...[
+                const SizedBox(height: 8),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.touch_app_outlined,
+                      size: 17,
+                      color: planningMutedTextColor,
+                    ),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Tap a state to see its charging stations',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: planningMutedTextColor,
+                          fontSize: 12,
                         ),
                       ),
-                    )
-                  else
-                    const SizedBox(height: 300),
-                  if (vm.selectedState == malaysiaSelection) ...[
-                    const SizedBox(height: 8),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.touch_app_outlined,
-                          size: 17,
-                          color: planningMutedTextColor,
-                        ),
-                        SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            'Tap a state to see its charging stations',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: planningMutedTextColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Filter by',
-                    style: TextStyle(
-                      color: planningTextColor,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: _chargerFilter,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.ev_station_outlined),
-                      labelText: 'Charger type',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'All', child: Text('All')),
-                      DropdownMenuItem(value: 'AC', child: Text('AC Charger')),
-                      DropdownMenuItem(
-                          value: 'DC', child: Text('DC Fast Charger')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _chargerFilter = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Charging Overview',
-                    style: TextStyle(
-                      color: planningTextColor,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // States the size of the dataset behind these figures, so a
-                  // clustered map is not mistaken for missing locations.
-                  Text(
-                    '${_formatCount(homeStations.length)} existing '
-                    '${homeStations.length == 1 ? 'location' : 'locations'} in '
-                    '${vm.selectedState}. The map groups nearby markers when '
-                    'zoomed out.',
-                    style: const TextStyle(
-                      color: planningMutedTextColor,
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: StatisticCard(
-                          value: '$dcCount',
-                          label: 'DC Fast',
-                          icon: Icons.bolt,
-                          color: _dcColor,
-                          width: double.infinity,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: StatisticCard(
-                          value: '$acCount',
-                          label: 'AC',
-                          icon: Icons.bolt,
-                          color: _acColor,
-                          width: double.infinity,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Reminders',
-                    style: TextStyle(
-                      color: planningTextColor,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildReminderSummaryCard(context),
+                ),
+              ],
+              const SizedBox(height: 18),
+              const Text(
+                'Filter by',
+                style: TextStyle(
+                  color: planningTextColor,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _chargerFilter,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.ev_station_outlined),
+                  labelText: 'Charger type',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'All', child: Text('All')),
+                  DropdownMenuItem(value: 'AC', child: Text('AC Charger')),
+                  DropdownMenuItem(value: 'DC', child: Text('DC Fast Charger')),
                 ],
-              );
-            },
-          ),
-        ),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _chargerFilter = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Charging Overview',
+                style: TextStyle(
+                  color: planningTextColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // States the size of the dataset behind these figures, so a
+              // clustered map is not mistaken for missing locations.
+              Text(
+                '${_formatCount(homeStations.length)} existing '
+                '${homeStations.length == 1 ? 'location' : 'locations'} in '
+                '${vm.selectedState}. The map groups nearby markers when '
+                'zoomed out.',
+                style: const TextStyle(
+                  color: planningMutedTextColor,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: StatisticCard(
+                      value: '$dcCount',
+                      label: 'DC Fast',
+                      icon: Icons.bolt,
+                      color: _dcColor,
+                      width: double.infinity,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: StatisticCard(
+                      value: '$acCount',
+                      label: 'AC',
+                      icon: Icons.bolt,
+                      color: _acColor,
+                      width: double.infinity,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Reminders',
+                style: TextStyle(
+                  color: planningTextColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildReminderSummaryCard(context),
+            ],
+          );
+        },
       ),
-      bottomNavigationBar: _navConfig(context).bottomBarFor(context),
     );
   }
 
@@ -694,10 +657,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     final next = upcoming.isEmpty ? null : upcoming.first;
 
     return InkWell(
-      onTap: () => _switchTo(
-        const ChargingScreen(),
-        DriverRouteNames.charging,
-      ),
+      onTap: () => switchDriverTab(context, DriverTab.charging),
       child: AppCard(
         child: Row(
           children: [
@@ -740,14 +700,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           ],
         ),
       ),
-    );
-  }
-
-  void _switchTo(Widget page, String routeName) {
-    openDriverModule(
-      context,
-      routeName: routeName,
-      builder: (_) => page,
     );
   }
 }

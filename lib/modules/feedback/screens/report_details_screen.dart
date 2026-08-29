@@ -3,9 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/navigation/driver_navigation.dart';
 import '../../../core/navigation/driver_navigation_shell.dart';
-import '../../auth/screens/profile_screen.dart';
-import '../../charging/screens/charging_screen.dart';
-import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/screens/proposal_location_map_screen.dart';
 import '../../planning/services/proposal_location_service.dart';
 import '../../planning/widgets/planning_widgets.dart';
@@ -43,20 +40,11 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   DriverNavigationConfig _navConfig(BuildContext context) =>
       DriverNavigationConfig(
         currentTab: 'Feedback',
-        onHomeTap: () => returnToDriverHome(context),
-        onChargingTap: () => _switchTo(
-          const ChargingScreen(),
-          DriverRouteNames.charging,
-        ),
+        onHomeTap: () => switchDriverTab(context, DriverTab.home),
+        onChargingTap: () => switchDriverTab(context, DriverTab.charging),
         onFeedbackTap: () => Navigator.of(context).pop(),
-        onPlanningTap: () => _switchTo(
-          const PlanningDashboardScreen(),
-          DriverRouteNames.planning,
-        ),
-        onProfileTap: () => _switchTo(
-          const ProfileScreen(),
-          DriverRouteNames.profile,
-        ),
+        onPlanningTap: () => switchDriverTab(context, DriverTab.planning),
+        onProfileTap: () => switchDriverTab(context, DriverTab.profile),
       );
 
   @override
@@ -258,10 +246,6 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         ),
         bottomNavigationBar: _navConfig(context).bottomBarFor(context),
       );
-
-  void _switchTo(Widget page, String routeName) {
-    openDriverModule(context, routeName: routeName, builder: (_) => page);
-  }
 
   String _statusBannerMessage(String status) {
     switch (status) {

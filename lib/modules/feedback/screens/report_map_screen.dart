@@ -4,9 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/navigation/driver_navigation.dart';
 import '../../../core/navigation/driver_navigation_shell.dart';
-import '../../auth/screens/profile_screen.dart';
-import '../../charging/screens/charging_screen.dart';
-import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../models/fault_report.dart';
 import '../viewmodels/feedback_viewmodel.dart';
@@ -37,23 +34,11 @@ class ReportMapScreen extends StatelessWidget {
   DriverNavigationConfig _navConfig(BuildContext context) =>
       DriverNavigationConfig(
         currentTab: 'Feedback',
-        onHomeTap: () => returnToDriverHome(context),
-        onChargingTap: () => _switchTo(
-          context,
-          const ChargingScreen(),
-          DriverRouteNames.charging,
-        ),
+        onHomeTap: () => switchDriverTab(context, DriverTab.home),
+        onChargingTap: () => switchDriverTab(context, DriverTab.charging),
         onFeedbackTap: () => Navigator.of(context).pop(),
-        onPlanningTap: () => _switchTo(
-          context,
-          const PlanningDashboardScreen(),
-          DriverRouteNames.planning,
-        ),
-        onProfileTap: () => _switchTo(
-          context,
-          const ProfileScreen(),
-          DriverRouteNames.profile,
-        ),
+        onPlanningTap: () => switchDriverTab(context, DriverTab.planning),
+        onProfileTap: () => switchDriverTab(context, DriverTab.profile),
       );
 
   @override
@@ -175,10 +160,6 @@ class ReportMapScreen extends StatelessWidget {
         builder: (_) => ReportDetailsScreen(report: report),
       ),
     );
-  }
-
-  void _switchTo(BuildContext context, Widget page, String routeName) {
-    openDriverModule(context, routeName: routeName, builder: (_) => page);
   }
 }
 

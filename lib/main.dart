@@ -5,11 +5,11 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/navigation/app_route_observer.dart';
+import 'core/navigation/driver_shell.dart';
 import 'modules/admin/screens/admin_shell.dart';
 import 'modules/auth/screens/auth_gate.dart';
 import 'modules/feedback/services/feedback_repository.dart';
 import 'modules/feedback/viewmodels/feedback_viewmodel.dart';
-import 'modules/home/screens/home_screen.dart';
 import 'modules/planning/admin/viewmodels/admin_planning_viewmodel.dart';
 import 'modules/planning/services/planning_repository.dart';
 import 'modules/planning/viewmodels/planning_viewmodel.dart';
@@ -106,9 +106,9 @@ class ChargeWiseApp extends StatelessWidget {
                 ),
               ),
               navigatorObservers: [appRouteObserver],
-              home: const AuthGate(
-                authenticatedChild: HomeScreen(),
-                adminChild: AdminShell(),
+              home: AuthGate(
+                authenticatedChild: DriverShell(),
+                adminChild: const AdminShell(),
               ),
             ),
           ),
