@@ -27,6 +27,7 @@ const _weekdayChips = [
 Future<bool?> showCreateReminderSheet(
   BuildContext context, {
   Map<String, dynamic>? existing,
+  Map<String, dynamic>? prefill,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -34,14 +35,20 @@ Future<bool?> showCreateReminderSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => _CreateReminderSheet(existing: existing),
+    builder: (_) => _CreateReminderSheet(existing: existing, prefill: prefill),
   );
 }
 
 class _CreateReminderSheet extends StatefulWidget {
-  const _CreateReminderSheet({this.existing});
+  const _CreateReminderSheet({this.existing, this.prefill});
 
   final Map<String, dynamic>? existing;
+
+  /// Seeds initial field values (e.g. from the recommendation card's "remind
+  /// me at off-peak" action) without switching the sheet into edit mode -
+  /// only [existing] does that, so a prefilled reminder still inserts as
+  /// new on save.
+  final Map<String, dynamic>? prefill;
 
   @override
   State<_CreateReminderSheet> createState() => _CreateReminderSheetState();
@@ -64,19 +71,19 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
   @override
   void initState() {
     super.initState();
-    final existing = widget.existing;
+    final source = widget.existing ?? widget.prefill;
     _titleController =
-        TextEditingController(text: existing?['title'] as String? ?? '');
-    _locationLabel = existing?['location_label'] as String? ?? '';
-    _chargerType = existing?['charger_type'] as String?;
-    _date = existing == null
+        TextEditingController(text: source?['title'] as String? ?? '');
+    _locationLabel = source?['location_label'] as String? ?? '';
+    _chargerType = source?['charger_type'] as String?;
+    _date = source?['reminder_date'] == null
         ? DateTime.now()
-        : parseReminderDate(existing['reminder_date'] as String);
-    _time = existing == null
+        : parseReminderDate(source!['reminder_date'] as String);
+    _time = source?['reminder_time'] == null
         ? TimeOfDay.now()
-        : parseReminderTime(existing['reminder_time'] as String);
-    _repeatFrequency = existing?['repeat_frequency'] as String? ?? 'once';
-    final existingDays = existing?['repeat_days'] as List<Object?>?;
+        : parseReminderTime(source!['reminder_time'] as String);
+    _repeatFrequency = source?['repeat_frequency'] as String? ?? 'once';
+    final existingDays = source?['repeat_days'] as List<Object?>?;
     _repeatDays = existingDays == null || existingDays.isEmpty
         ? {_date.weekday}
         : existingDays.map((e) => e as int).toSet();

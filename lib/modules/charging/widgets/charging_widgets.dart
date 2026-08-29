@@ -203,64 +203,90 @@ class _DurationPickerSheetState extends State<_DurationPickerSheet> {
           constraints: BoxConstraints(
             maxHeight: MediaQuery.sizeOf(context).height * 0.85,
           ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Charging Duration',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Kept outside the scrollable content below so swipe-to-dismiss
+              // still has a non-scrolling area to grab once landscape's
+              // shorter height forces this sheet to scroll.
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDDE3EA),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 160,
-                  child: Row(
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: CupertinoPicker(
-                          itemExtent: 36,
-                          scrollController: FixedExtentScrollController(
-                            initialItem: _hours,
-                          ),
-                          onSelectedItemChanged: (index) =>
-                              setState(() => _hours = index),
+                      const Text(
+                        'Charging Duration',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 160,
+                        child: Row(
                           children: [
-                            for (var h = 0; h <= 23; h++)
-                              Center(child: Text('$h h')),
+                            Expanded(
+                              child: CupertinoPicker(
+                                itemExtent: 36,
+                                scrollController: FixedExtentScrollController(
+                                  initialItem: _hours,
+                                ),
+                                onSelectedItemChanged: (index) =>
+                                    setState(() => _hours = index),
+                                children: [
+                                  for (var h = 0; h <= 23; h++)
+                                    Center(child: Text('$h h')),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: CupertinoPicker(
+                                itemExtent: 36,
+                                scrollController: FixedExtentScrollController(
+                                  initialItem: _minutes,
+                                ),
+                                onSelectedItemChanged: (index) =>
+                                    setState(() => _minutes = index),
+                                children: [
+                                  for (var m = 0; m <= 59; m++)
+                                    Center(child: Text('$m min')),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                      Expanded(
-                        child: CupertinoPicker(
-                          itemExtent: 36,
-                          scrollController: FixedExtentScrollController(
-                            initialItem: _minutes,
-                          ),
-                          onSelectedItemChanged: (index) =>
-                              setState(() => _minutes = index),
-                          children: [
-                            for (var m = 0; m <= 59; m++)
-                              Center(child: Text('$m min')),
-                          ],
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: green,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(48),
                         ),
+                        onPressed: () =>
+                            Navigator.of(context).pop((_hours, _minutes)),
+                        child: const Text('Done'),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: green,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  onPressed: () =>
-                      Navigator.of(context).pop((_hours, _minutes)),
-                  child: const Text('Done'),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );

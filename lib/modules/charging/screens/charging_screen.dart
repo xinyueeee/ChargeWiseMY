@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -16,13 +17,12 @@ import '../../planning/models/proposal.dart';
 import '../../planning/screens/planning_dashboard_screen.dart';
 import '../../planning/viewmodels/planning_viewmodel.dart';
 import '../../planning/widgets/planning_widgets.dart';
+import '../services/charging_route_eta_service.dart';
 import '../services/charging_service.dart';
 import '../widgets/charging_widgets.dart';
 import 'create_reminder_sheet.dart';
 import 'create_session_sheet.dart';
 
-const _offPeakRateSen = 24.43;
-const _peakRateSen = 28.52;
 const _malaysiaFallback = LatLng(3.1390, 101.6869);
 
 const _acPowerMinKw = 3;
@@ -42,11 +42,114 @@ const _weekdayShortNames = {
   7: 'Sun',
 };
 
+const _weekdayFullNames = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+  6: 'Saturday',
+  7: 'Sunday',
+};
+
 String _weeklyRepeatLabel(List<int> repeatDays) {
   if (repeatDays.length == 7) return 'Every day';
   if (repeatDays.isEmpty) return 'Every week';
   final sorted = repeatDays.toList()..sort();
   return sorted.map((d) => _weekdayShortNames[d]).join(', ');
+}
+
+String _formatHour12(int hour) {
+  final period = hour >= 12 ? 'PM' : 'AM';
+  final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+  return '$hour12 $period';
+}
+
+/// Charging-pattern stats derived purely from the driver's own session
+/// history - no API, no AI, just date-math over rows already fetched for
+/// the sessions list. Feeds both the on-card summary and the AI insight's
+/// context (as facts it must not contradict).
+class _SessionInsights {
+  const _SessionInsights({
+    required this.typicalWeekday,
+    required this.typicalHour,
+    required this.avgCadenceDays,
+    required this.daysSinceLastSession,
+    required this.lastSessionStationName,
+    required this.lastSessionEnergyKwh,
+  });
+
+  final String? typicalWeekday;
+  final int? typicalHour;
+  final double? avgCadenceDays;
+  final int? daysSinceLastSession;
+  final String? lastSessionStationName;
+  final double? lastSessionEnergyKwh;
+
+  static _SessionInsights? fromSessions(List<Map<String, dynamic>> sessions) {
+    if (sessions.isEmpty) return null;
+    // fetchSessions() orders by session_at descending, so index 0 is the
+    // most recent session.
+    final at =
+        sessions.map((s) => DateTime.parse(s['session_at'] as String)).toList();
+    final last = sessions.first;
+    final daysSinceLast = DateTime.now().difference(at.first).inDays;
+
+    String? typicalWeekday;
+    int? typicalHour;
+    double? avgCadenceDays;
+    if (sessions.length >= 3) {
+      final weekdayCounts = <int, int>{};
+      final hourCounts = <int, int>{};
+      for (final t in at) {
+        weekdayCounts[t.weekday] = (weekdayCounts[t.weekday] ?? 0) + 1;
+        hourCounts[t.hour] = (hourCounts[t.hour] ?? 0) + 1;
+      }
+      final modeWeekday = weekdayCounts.entries
+          .reduce((a, b) => a.value >= b.value ? a : b)
+          .key;
+      final modeHour =
+          hourCounts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+      typicalWeekday = _weekdayFullNames[modeWeekday];
+      typicalHour = modeHour;
+
+      final sortedAsc = at.toList()..sort();
+      final gapsHours = <int>[
+        for (var i = 1; i < sortedAsc.length; i++)
+          sortedAsc[i].difference(sortedAsc[i - 1]).inHours,
+      ];
+      avgCadenceDays =
+          gapsHours.reduce((a, b) => a + b) / gapsHours.length / 24;
+    }
+
+    return _SessionInsights(
+      typicalWeekday: typicalWeekday,
+      typicalHour: typicalHour,
+      avgCadenceDays: avgCadenceDays,
+      daysSinceLastSession: daysSinceLast,
+      lastSessionStationName: last['station_name'] as String?,
+      lastSessionEnergyKwh: (last['energy_kwh'] as num?)?.toDouble(),
+    );
+  }
+
+  /// A short, friendly one-liner for the card. Returns null until there's
+  /// enough history (3+ sessions) to say anything meaningful about a
+  /// pattern.
+  String? summaryLine() {
+    final weekday = typicalWeekday;
+    final hour = typicalHour;
+    final cadence = avgCadenceDays;
+    if (weekday == null || hour == null || cadence == null) return null;
+    final cadenceLabel = cadence < 1.5
+        ? 'about once a day'
+        : 'about every ${cadence.round()} days';
+    final due = daysSinceLastSession != null && daysSinceLastSession! >= cadence
+        ? ' It\'s been $daysSinceLastSession days since your last session - '
+            'you might be due soon.'
+        : '';
+    return 'You usually charge on ${weekday}s around ${_formatHour12(hour)}, '
+        '$cadenceLabel.$due';
+  }
 }
 
 class ChargingScreen extends StatefulWidget {
@@ -59,6 +162,15 @@ class ChargingScreen extends StatefulWidget {
 class _ChargingScreenState extends State<ChargingScreen> {
   final _service = ChargingService();
   final _notifications = NotificationService();
+  final _routeEtaService = const SupabaseChargingRouteEtaService();
+
+  // Route ETA is fetched automatically (it's fast, free-tier, and directly
+  // replaces the card's core "nearest station" distance) but only once per
+  // distinct candidate set, and it fails silently - straight-line distance
+  // is still shown while ETA is loading or unavailable.
+  Map<String, RouteEtaResult>? _routeEtaResults;
+  List<String>? _routeEtaCandidateIds;
+  bool _routeEtaLoading = false;
 
   // Calculator state
   final _calcFormKey = GlobalKey<FormState>();
@@ -73,6 +185,11 @@ class _ChargingScreenState extends State<ChargingScreen> {
   List<Map<String, dynamic>>? _reminders;
 
   LatLng? _userLocation;
+  // Distinguishes "still trying to get a fix" from "never going to get
+  // one" (permission denied, location services off) - without this the
+  // recommendation card's "Getting your location…" state would spin
+  // forever instead of falling back to a general recommendation.
+  bool _locationUnavailable = false;
 
   @override
   void initState() {
@@ -110,31 +227,76 @@ class _ChargingScreenState extends State<ChargingScreen> {
   Future<void> _loadLocation() async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
+      if (!serviceEnabled) {
+        if (mounted) setState(() => _locationUnavailable = true);
+        return;
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _locationUnavailable = true);
         return;
       }
+
+      // A fresh GPS fix can take anywhere from ~1s to 30+s (cold start,
+      // weak signal, indoors) - during which the recommendation card was
+      // silently falling back to a generic Malaysia-wide point that looks
+      // like a real (wrong) result rather than "still loading". Grab
+      // whatever position the OS already has cached first, near-instantly,
+      // so the UI has something real to show right away.
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null && mounted) {
+          setState(() {
+            _userLocation = LatLng(lastKnown.latitude, lastKnown.longitude);
+          });
+        }
+      } catch (_) {}
+
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
         ),
       );
       if (!mounted) return;
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);
       });
-    } catch (_) {}
+    } catch (_) {
+      // getCurrentPosition() timed out or failed outright. If a cached
+      // last-known position already landed above, keep it - it's still a
+      // real result. Otherwise stop the recommendation card's "Getting
+      // your location…" spinner from waiting on something that isn't
+      // coming.
+      if (mounted && _userLocation == null) {
+        setState(() => _locationUnavailable = true);
+      }
+    }
   }
 
   double _distanceKm(LatLng a, LatLng b) {
     final dx = (a.latitude - b.latitude) * 111;
     final dy = (a.longitude - b.longitude) * 111;
     return math.sqrt(dx * dx + dy * dy);
+  }
+
+  /// A zoom level that keeps two points visually separated on a small map
+  /// preview. A fixed zoom looks fine for a station a few km away, but for
+  /// a very close one (common now that recommendations are ETA-ranked) it
+  /// zooms the camera out so far the two markers land on almost the same
+  /// pixel and the map looks empty.
+  double _previewZoomForDistanceKm(double km) {
+    if (km < 0.5) return 16;
+    if (km < 1) return 15;
+    if (km < 2) return 14;
+    if (km < 5) return 13;
+    if (km < 10) return 12;
+    if (km < 20) return 11;
+    return 10;
   }
 
   bool get _calcIsDc => _calcChargerType.toLowerCase().contains('dc');
@@ -198,24 +360,44 @@ class _ChargingScreenState extends State<ChargingScreen> {
     if (saved == true) _reloadSessions();
   }
 
-  bool get _isWeekendNow {
-    final now = DateTime.now();
-    return now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
+  Future<void> _fetchRouteEta(
+    LatLng origin,
+    List<ChargingStation> candidates,
+  ) async {
+    final candidateIds = [for (final c in candidates) c.id];
+    setState(() {
+      _routeEtaLoading = true;
+      _routeEtaCandidateIds = candidateIds;
+    });
+    try {
+      final results = await _routeEtaService.generate(
+        RouteEtaContext(
+          originLat: origin.latitude,
+          originLng: origin.longitude,
+          candidates: [
+            for (final station in candidates)
+              RouteEtaCandidate(
+                id: station.id,
+                lat: station.latitude,
+                lng: station.longitude,
+              ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _routeEtaResults = {for (final r in results) r.id: r};
+        _routeEtaLoading = false;
+      });
+    } catch (_) {
+      // Silent fallback: real ETA is an enhancement, not a requirement, and
+      // the card already displays straight-line distance while this is
+      // unavailable - no need to interrupt the user with an error for a
+      // background upgrade they didn't explicitly ask for.
+      if (!mounted) return;
+      setState(() => _routeEtaLoading = false);
+    }
   }
-
-  bool get _isPeakNow {
-    if (_isWeekendNow) return false;
-    final hour = DateTime.now().hour;
-    return hour >= 14 && hour < 22;
-  }
-
-  String get _bestTimeToCharge {
-    if (!_isPeakNow) return 'Now (off-peak rate)';
-    return '10:00 PM - 2:00 PM';
-  }
-
-  int get _savingsPercent =>
-      (((_peakRateSen - _offPeakRateSen) / _peakRateSen) * 100).round();
 
   Future<void> _deleteSession(String id) async {
     final confirmed = await showDialog<bool>(
@@ -640,18 +822,70 @@ class _ChargingScreenState extends State<ChargingScreen> {
 
   Widget _buildRecommendationCard(PlanningViewModel vm) {
     final referencePoint = _userLocation ?? _malaysiaFallback;
+    // Rank every station by straight-line distance first (cheap, local, no
+    // API call), then only ask OpenRouteService for real driving distance
+    // and time among the handful of closest candidates - one Matrix API
+    // call instead of one Directions call per station.
+    final ranked = [
+      for (final station in vm.stations)
+        (
+          station: station,
+          straightLineKm: _distanceKm(
+            referencePoint,
+            LatLng(station.latitude, station.longitude),
+          ),
+        ),
+    ]..sort((a, b) => a.straightLineKm.compareTo(b.straightLineKm));
+    final candidates = ranked.take(5).toList();
+
     ChargingStation? nearest;
     var nearestDistance = double.infinity;
-    for (final station in vm.stations) {
-      final distance = _distanceKm(
-        referencePoint,
-        LatLng(station.latitude, station.longitude),
-      );
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = station;
+    double? nearestDurationMinutes;
+    if (candidates.isNotEmpty) {
+      nearest = candidates.first.station;
+      nearestDistance = candidates.first.straightLineKm;
+
+      final etaResults = _routeEtaResults;
+      if (etaResults != null) {
+        // Pick whichever candidate has the shortest real drive time,
+        // skipping any ORS couldn't route to - falls back to the
+        // straight-line pick above if none could be routed.
+        ChargingStation? bestStation;
+        double? bestDistanceKm;
+        double? bestDurationMinutes;
+        for (final candidate in candidates) {
+          final result = etaResults[candidate.station.id];
+          final distanceKm = result?.distanceKm;
+          final durationMinutes = result?.durationMinutes;
+          if (distanceKm == null || durationMinutes == null) continue;
+          if (bestDurationMinutes == null ||
+              durationMinutes < bestDurationMinutes) {
+            bestStation = candidate.station;
+            bestDistanceKm = distanceKm;
+            bestDurationMinutes = durationMinutes;
+          }
+        }
+        if (bestStation != null) {
+          nearest = bestStation;
+          nearestDistance = bestDistanceKm!;
+          nearestDurationMinutes = bestDurationMinutes;
+        }
+      }
+
+      final candidateIds = [for (final c in candidates) c.station.id];
+      if (_userLocation != null &&
+          !_routeEtaLoading &&
+          !listEquals(candidateIds, _routeEtaCandidateIds)) {
+        final stations = [for (final c in candidates) c.station];
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _fetchRouteEta(referencePoint, stations);
+        });
       }
     }
+    final distanceLabel = nearestDurationMinutes != null
+        ? '${nearestDistance.toStringAsFixed(1)} km · '
+            '${nearestDurationMinutes.round()} min drive'
+        : '${nearestDistance.toStringAsFixed(1)} km';
 
     return AppCard(
       child: Column(
@@ -667,8 +901,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
               ),
               const Tooltip(
                 message: 'Rule-based recommendation using your location, '
-                    'the nearest real charging station, and Malaysia\'s '
-                    'TNB off-peak electricity hours.',
+                    'the nearest real charging station, and real driving '
+                    'time from OpenRouteService.',
                 child: Icon(Icons.info_outline,
                     size: 18, color: planningMutedTextColor),
               ),
@@ -679,6 +913,30 @@ class _ChargingScreenState extends State<ChargingScreen> {
             const Text(
               'Loading station data…',
               style: TextStyle(color: planningMutedTextColor),
+            )
+          else if (_userLocation == null && !_locationUnavailable)
+            // A fresh GPS fix can take a while, and until it resolves this
+            // card would otherwise silently rank stations against a generic
+            // Malaysia-wide point - showing that as if it were a real,
+            // resolved result is misleading, so say plainly that it's still
+            // finding the real location instead. Once _locationUnavailable
+            // is set (denied/off/timed out), fall through to the normal
+            // card below instead of spinning forever.
+            const Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Getting your location…',
+                    style: TextStyle(color: planningMutedTextColor),
+                  ),
+                ),
+              ],
             )
           else ...[
             Builder(builder: (context) {
@@ -693,7 +951,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
                         (referencePoint.latitude + station.latitude) / 2,
                         (referencePoint.longitude + station.longitude) / 2,
                       ),
-                      zoom: 11,
+                      zoom: _previewZoomForDistanceKm(nearestDistance),
                     ),
                     markers: {
                       if (_userLocation != null)
@@ -747,8 +1005,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${nearestDistance.toStringAsFixed(1)} km away · '
-                      '${station.chargerType} · Tap for details',
+                      '$distanceLabel · ${station.chargerType} · '
+                      'Tap for details',
                       style: const TextStyle(
                         fontSize: 12,
                         color: planningMutedTextColor,
@@ -763,26 +1021,65 @@ class _ChargingScreenState extends State<ChargingScreen> {
               children: [
                 Expanded(
                   child: _RecommendationStat(
-                    icon: Icons.schedule,
-                    label: 'Best Time',
-                    value: _bestTimeToCharge,
-                  ),
-                ),
-                Expanded(
-                  child: _RecommendationStat(
-                    icon: Icons.savings_outlined,
-                    label: 'Off-Peak Savings',
-                    value: 'Up to $_savingsPercent%',
-                  ),
-                ),
-                Expanded(
-                  child: _RecommendationStat(
                     icon: Icons.ev_station_outlined,
                     label: 'Nearest Charger',
-                    value: '${nearestDistance.toStringAsFixed(1)} km',
+                    value: distanceLabel,
+                  ),
+                ),
+                Expanded(
+                  child: _RecommendationStat(
+                    icon: Icons.power_outlined,
+                    label: 'Charging Points',
+                    value: nearest.chargerCount?.toString() ?? 'Not listed',
                   ),
                 ),
               ],
+            ),
+            if (_locationUnavailable) ...[
+              const SizedBox(height: 12),
+              const Text(
+                "Couldn't get your location, so this is ranked from a "
+                'general Malaysia reference point instead of where you '
+                "actually are - it likely isn't your true nearest station.",
+                style: TextStyle(
+                  fontSize: 11,
+                  color: planningMutedTextColor,
+                  height: 1.3,
+                ),
+              ),
+            ],
+            if (nearest.source != null && nearest.source!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  nearest.dataDate == null
+                      ? 'Location data: ${nearest.source}'
+                      : 'Location data: ${nearest.source}, as of '
+                          '${nearest.dataDate!.day}/${nearest.dataDate!.month}/${nearest.dataDate!.year}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: planningMutedTextColor,
+                  ),
+                ),
+              ),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: _sessionsFuture,
+              builder: (context, snapshot) {
+                final sessions = snapshot.data ?? const [];
+                final patternLine =
+                    _SessionInsights.fromSessions(sessions)?.summaryLine();
+                if (patternLine == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    patternLine,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: planningTextColor,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ],
