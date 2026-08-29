@@ -87,7 +87,6 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
     final totalMinutes = source?['duration_minutes'] as int? ?? 60;
     _durationHours = totalMinutes ~/ 60;
     _durationMinutes = totalMinutes % 60;
-    _selectedVehicleId = existing?['vehicle_id'] as String?;
     _loadVehicles();
   }
 
@@ -97,6 +96,13 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
     setState(() {
       _vehicles = vehicles;
       _loadingVehicles = false;
+      // Only set once the matching vehicle is actually in the list this
+      // dropdown's items are built from - setting it in initState() (before
+      // this fetch resolves) pointed the dropdown's initialValue at an id
+      // with zero matching items for one frame, which is exactly the
+      // "There should be exactly one item with [DropdownButton]'s value"
+      // assertion flashing briefly on the Update Session sheet.
+      _selectedVehicleId = widget.existing?['vehicle_id'] as String?;
     });
   }
 
@@ -401,6 +407,15 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String?>(
+                                // initialValue only seeds the field once;
+                                // it won't pick up _selectedVehicleId being
+                                // set later when vehicles finish loading.
+                                // Keying on _loadingVehicles forces exactly
+                                // one clean remount right when that happens,
+                                // so the dropdown actually shows the
+                                // session's saved vehicle instead of
+                                // silently staying on "Not specified".
+                                key: ValueKey(_loadingVehicles),
                                 initialValue: _selectedVehicleId,
                                 isExpanded: true,
                                 decoration: InputDecoration(

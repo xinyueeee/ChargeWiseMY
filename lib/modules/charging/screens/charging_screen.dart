@@ -67,8 +67,7 @@ String _formatHour12(int hour) {
 
 /// Charging-pattern stats derived purely from the driver's own session
 /// history - no API, no AI, just date-math over rows already fetched for
-/// the sessions list. Feeds both the on-card summary and the AI insight's
-/// context (as facts it must not contradict).
+/// the sessions list.
 class _SessionInsights {
   const _SessionInsights({
     required this.typicalWeekday,
@@ -150,6 +149,50 @@ class _SessionInsights {
     return 'You usually charge on ${weekday}s around ${_formatHour12(hour)}, '
         '$cadenceLabel.$due';
   }
+}
+
+const _monthShortNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+class _MonthlyTotal {
+  const _MonthlyTotal({required this.monthLabel, required this.rm});
+
+  final String monthLabel;
+  final double rm;
+}
+
+/// Total RM spent per month for the last 6 months (oldest first), from
+/// sessions the driver already logged - no new input, no API.
+List<_MonthlyTotal> _monthlyTotals(List<Map<String, dynamic>> sessions) {
+  final now = DateTime.now();
+  final months = [
+    for (var i = 5; i >= 0; i--) DateTime(now.year, now.month - i, 1),
+  ];
+  final totals = {for (final m in months) m: 0.0};
+  for (final session in sessions) {
+    final at = DateTime.parse(session['session_at'] as String);
+    final bucket = DateTime(at.year, at.month, 1);
+    final existing = totals[bucket];
+    if (existing != null) {
+      totals[bucket] = existing + (session['cost'] as num).toDouble();
+    }
+  }
+  return [
+    for (final m in months)
+      _MonthlyTotal(monthLabel: _monthShortNames[m.month - 1], rm: totals[m]!),
+  ];
 }
 
 class ChargingScreen extends StatefulWidget {
@@ -554,6 +597,8 @@ class _ChargingScreenState extends State<ChargingScreen> {
                   const SizedBox(height: 20),
                   _buildSessionsCard(),
                   const SizedBox(height: 20),
+                  _buildSpendingTrendCard(),
+                  const SizedBox(height: 20),
                   _buildRemindersCard(),
                   const SizedBox(height: 20),
                   _buildRecommendationCard(vm),
@@ -755,6 +800,104 @@ class _ChargingScreenState extends State<ChargingScreen> {
                       },
                       onDelete: () => _deleteSession(session['id'] as String),
                     ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpendingTrendCard() {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const ChargingSectionHeader(
+            icon: Icons.bar_chart_outlined,
+            title: 'Spending Trend',
+            subtitle: 'Your charging cost over the last 6 months.',
+          ),
+          const SizedBox(height: 12),
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: _sessionsFuture,
+            builder: (context, snapshot) {
+              final sessions = snapshot.data ?? const [];
+              if (sessions.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'Log a few sessions to see your spending trend here.',
+                    style: TextStyle(color: planningMutedTextColor),
+                  ),
+                );
+              }
+              final totals = _monthlyTotals(sessions);
+              final maxRm =
+                  totals.map((t) => t.rm).fold(0.0, (a, b) => a > b ? a : b);
+              final totalRm = totals.fold(0.0, (a, t) => a + t.rm);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 140,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        for (final t in totals)
+                          Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  if (t.rm > 0)
+                                    Text(
+                                      t.rm.toStringAsFixed(0),
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        color: planningMutedTextColor,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 2),
+                                  Container(
+                                    height: maxRm <= 0
+                                        ? 4
+                                        : 8 + (t.rm / maxRm) * 70,
+                                    decoration: BoxDecoration(
+                                      color: t.rm > 0
+                                          ? green
+                                          : const Color(0xFFE9EDF3),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    t.monthLabel,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: planningMutedTextColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Total: RM${totalRm.toStringAsFixed(2)} over the last '
+                    '6 months',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: planningTextColor,
+                    ),
+                  ),
                 ],
               );
             },

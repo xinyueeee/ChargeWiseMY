@@ -161,9 +161,26 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
           permission == LocationPermission.deniedForever) {
         return;
       }
+
+      // A fresh GPS fix can take anywhere from ~1s to 30+s (cold start,
+      // weak signal, indoors, right after login) - during which the map
+      // sat on its default wide Malaysia view instead of the auto-locate
+      // zoom, since _userLocation stayed null the whole time. Grab
+      // whatever position the OS already has cached first, near-instantly,
+      // so auto-locate has something to zoom to right away.
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null && mounted) {
+          setState(() {
+            _userLocation = LatLng(lastKnown.latitude, lastKnown.longitude);
+          });
+        }
+      } catch (_) {}
+
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
         ),
       );
       if (!mounted) return;

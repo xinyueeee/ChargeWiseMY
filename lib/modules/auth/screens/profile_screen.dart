@@ -92,7 +92,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    await _authService.logout();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You\'ll need to sign in again to continue.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Log Out',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _authService.logout();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not log out. Please try again.'),
+        ),
+      );
+      return;
+    }
     // AuthGate swaps its content back to Login once signed out, but that
     // happens on the root route underneath this pushed screen. Pop back to
     // it so the user actually sees Login instead of staying on this page.
@@ -135,6 +167,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
+        // Profile is a bottom-nav tab like Home/Charging, not a drill-down
+        // detail screen - those don't show a back arrow either (they skip
+        // AppBar entirely), so this one shouldn't imply there's a "back"
+        // to go to.
+        automaticallyImplyLeading: false,
       ),
       bottomNavigationBar: _navConfig(context).bottomBarFor(context),
       body: DriverNavigationShell(

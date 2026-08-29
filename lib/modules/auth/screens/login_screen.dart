@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/recent_login_emails_service.dart';
 import '../widgets/auth_widgets.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
+
+const _labelColor = Color(0xFF1F2937);
+const _hintColor = Color(0xFF9AA5B1);
+const _primaryGreen = Color(0xFF00B894);
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,15 +20,31 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
+  final _recentEmailsService = RecentLoginEmailsService();
   final _emailController = TextEditingController();
+  final _emailFocusNode = FocusNode();
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _submitting = false;
+  List<String> _recentEmails = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentEmails();
+  }
+
+  Future<void> _loadRecentEmails() async {
+    final emails = await _recentEmailsService.load();
+    if (!mounted) return;
+    setState(() => _recentEmails = emails);
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
+    _emailFocusNode.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -37,6 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailController.text,
         password: _passwordController.text,
       );
+      // Only remember the email once login actually succeeds, so the
+      // suggestion list stays real accounts, not typos.
+      _recentEmailsService.remember(_emailController.text);
       // Navigation on success is handled by the auth-state listener in
       // AuthGate, so nothing further to do here.
     } catch (error, stackTrace) {
@@ -59,6 +83,121 @@ class _LoginScreenState extends State<LoginScreen> {
     return 'Login failed. Please try again.';
   }
 
+  Future<void> _forgetRecentEmail(String email) async {
+    await _recentEmailsService.forget(email);
+    if (!mounted) return;
+    setState(() {
+      _recentEmails = _recentEmails.where((e) => e != email).toList();
+    });
+  }
+
+  String? _validateEmail(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return 'Email is required';
+    if (!emailRegex.hasMatch(text)) return 'Enter a valid email';
+    return null;
+  }
+
+  /// Email field with autocomplete over the last few addresses that were
+  /// actually used to log in successfully on this device - tapping the
+  /// field shows them immediately, typing narrows the list. Built on
+  /// Autocomplete rather than AuthLabeledField since suggestions need
+  /// their own controller wiring and a custom options dropdown.
+  Widget _buildEmailField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text.rich(
+          TextSpan(
+            text: 'Email',
+            style: TextStyle(
+              color: _labelColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            children: [
+              TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Autocomplete<String>(
+          textEditingController: _emailController,
+          focusNode: _emailFocusNode,
+          optionsBuilder: (value) {
+            if (value.text.isEmpty) return _recentEmails;
+            final query = value.text.toLowerCase();
+            return _recentEmails.where(
+              (email) => email.toLowerCase().contains(query),
+            );
+          },
+          onSelected: (selection) => _emailController.text = selection,
+          fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+            return TextFormField(
+              controller: controller,
+              focusNode: focusNode,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              validator: _validateEmail,
+              onFieldSubmitted: (_) => onSubmitted(),
+              decoration: const InputDecoration(
+                hintText: 'Enter your email',
+                prefixIcon: Icon(
+                  Icons.mail_outline,
+                  color: _primaryGreen,
+                  size: 20,
+                ),
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            final list = options.toList();
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: 220,
+                    maxWidth: MediaQuery.sizeOf(context).width - 48,
+                  ),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    shrinkWrap: true,
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final email = list[index];
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(
+                          Icons.history,
+                          size: 18,
+                          color: _hintColor,
+                        ),
+                        title: Text(
+                          email,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          tooltip: 'Remove from suggestions',
+                          onPressed: () => _forgetRecentEmail(email),
+                        ),
+                        onTap: () => onSelected(email),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,20 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   subtitle: 'Login to continue your journey.',
                 ),
                 const SizedBox(height: 32),
-                AuthLabeledField(
-                  label: 'Email',
-                  controller: _emailController,
-                  hintText: 'Enter your email',
-                  prefixIcon: Icons.mail_outline,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    final text = value?.trim() ?? '';
-                    if (text.isEmpty) return 'Email is required';
-                    if (!emailRegex.hasMatch(text)) return 'Enter a valid email';
-                    return null;
-                  },
-                ),
+                _buildEmailField(),
                 const SizedBox(height: 16),
                 AuthLabeledField(
                   label: 'Password',
