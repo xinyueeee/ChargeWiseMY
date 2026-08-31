@@ -60,9 +60,6 @@ String _formatHour12(int hour) {
   return '$hour12 $period';
 }
 
-/// Charging-pattern stats derived purely from the driver's own session
-/// history - no API, no AI, just date-math over rows already fetched for
-/// the sessions list.
 class _SessionInsights {
   const _SessionInsights({
     required this.typicalWeekday,
@@ -82,8 +79,6 @@ class _SessionInsights {
 
   static _SessionInsights? fromSessions(List<Map<String, dynamic>> sessions) {
     if (sessions.isEmpty) return null;
-    // fetchSessions() orders by session_at descending, so index 0 is the
-    // most recent session.
     final at =
         sessions.map((s) => DateTime.parse(s['session_at'] as String)).toList();
     final last = sessions.first;
@@ -126,9 +121,6 @@ class _SessionInsights {
     );
   }
 
-  /// A short, friendly one-liner for the card. Returns null until there's
-  /// enough history (3+ sessions) to say anything meaningful about a
-  /// pattern.
   String? summaryLine() {
     final weekday = typicalWeekday;
     final hour = typicalHour;
@@ -168,8 +160,6 @@ class _MonthlyTotal {
   final double rm;
 }
 
-/// Total RM spent per month for the last 6 months (oldest first), from
-/// sessions the driver already logged - no new input, no API.
 List<_MonthlyTotal> _monthlyTotals(List<Map<String, dynamic>> sessions) {
   final now = DateTime.now();
   final months = [
@@ -202,15 +192,10 @@ class _ChargingScreenState extends State<ChargingScreen> {
   final _notifications = NotificationService();
   final _routeEtaService = const SupabaseChargingRouteEtaService();
 
-  // Route ETA is fetched automatically (it's fast, free-tier, and directly
-  // replaces the card's core "nearest station" distance) but only once per
-  // distinct candidate set, and it fails silently - straight-line distance
-  // is still shown while ETA is loading or unavailable.
   Map<String, RouteEtaResult>? _routeEtaResults;
   List<String>? _routeEtaCandidateIds;
   bool _routeEtaLoading = false;
 
-  // Calculator state
   final _calcFormKey = GlobalKey<FormState>();
   String _calcChargerType = chargerTypes[1];
   final _calcPowerController = TextEditingController(text: '180');
@@ -223,10 +208,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
   List<Map<String, dynamic>>? _reminders;
 
   LatLng? _userLocation;
-  // Distinguishes "still trying to get a fix" from "never going to get
-  // one" (permission denied, location services off) - without this the
-  // recommendation card's "Getting your location…" state would spin
-  // forever instead of falling back to a general recommendation.
   bool _locationUnavailable = false;
 
   @override
@@ -253,12 +234,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
   Future<void> _reloadReminders() async {
     final reminders = await _service.fetchReminders();
     if (!mounted) return;
-    // Swap the resolved list in directly instead of going through a Future
-    // + FutureBuilder: reassigning a Future there reset connectionState to
-    // waiting on every call, blanking the whole list to a spinner even for
-    // a single toggle flip. Holding the list as plain state means a reload
-    // just replaces its contents in one setState, with the old list still
-    // on screen until the new one is ready - no flash.
     setState(() => _reminders = reminders);
   }
 
@@ -279,12 +254,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
         return;
       }
 
-      // A fresh GPS fix can take anywhere from ~1s to 30+s (cold start,
-      // weak signal, indoors) - during which the recommendation card was
-      // silently falling back to a generic Malaysia-wide point that looks
-      // like a real (wrong) result rather than "still loading". Grab
-      // whatever position the OS already has cached first, near-instantly,
-      // so the UI has something real to show right away.
       try {
         final lastKnown = await Geolocator.getLastKnownPosition();
         if (lastKnown != null && mounted) {
@@ -305,11 +274,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
         _userLocation = LatLng(position.latitude, position.longitude);
       });
     } catch (_) {
-      // getCurrentPosition() timed out or failed outright. If a cached
-      // last-known position already landed above, keep it - it's still a
-      // real result. Otherwise stop the recommendation card's "Getting
-      // your location…" spinner from waiting on something that isn't
-      // coming.
       if (mounted && _userLocation == null) {
         setState(() => _locationUnavailable = true);
       }
@@ -322,11 +286,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
     return math.sqrt(dx * dx + dy * dy);
   }
 
-  /// A zoom level that keeps two points visually separated on a small map
-  /// preview. A fixed zoom looks fine for a station a few km away, but for
-  /// a very close one (common now that recommendations are ETA-ranked) it
-  /// zooms the camera out so far the two markers land on almost the same
-  /// pixel and the map looks empty.
   double _previewZoomForDistanceKm(double km) {
     if (km < 0.5) return 16;
     if (km < 1) return 15;
@@ -428,10 +387,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
         _routeEtaLoading = false;
       });
     } catch (_) {
-      // Silent fallback: real ETA is an enhancement, not a requirement, and
-      // the card already displays straight-line distance while this is
-      // unavailable - no need to interrupt the user with an error for a
-      // background upgrade they didn't explicitly ask for.
       if (!mounted) return;
       setState(() => _routeEtaLoading = false);
     }
@@ -490,11 +445,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
       Map<String, dynamic> reminder, bool enabled) async {
     final id = reminder['id'] as String;
 
-    // Flip the switch instantly in local state so the UI responds right
-    // away instead of waiting on the network calls below - no spinner, no
-    // list flash. _reloadReminders() at the end reconciles with the server
-    // (e.g. the rolled-forward date/time for a recurring reminder) but no
-    // longer blanks the list while it does, so it's safe to just let it run.
     setState(() {
       _reminders = [
         for (final r in _reminders ?? const <Map<String, dynamic>>[])
@@ -541,9 +491,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // No Scaffold/DriverNavigationShell here anymore - DriverShell now owns
-    // the one Scaffold, bottom nav, and rail shared by all five tabs; this
-    // just needs to return its own content.
     return SafeArea(
       child: Consumer<PlanningViewModel>(
         builder: (context, vm, __) {
@@ -927,10 +874,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
 
   Widget _buildRecommendationCard(PlanningViewModel vm) {
     final referencePoint = _userLocation ?? _malaysiaFallback;
-    // Rank every station by straight-line distance first (cheap, local, no
-    // API call), then only ask OpenRouteService for real driving distance
-    // and time among the handful of closest candidates - one Matrix API
-    // call instead of one Directions call per station.
     final ranked = [
       for (final station in vm.stations)
         (
@@ -952,9 +895,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
 
       final etaResults = _routeEtaResults;
       if (etaResults != null) {
-        // Pick whichever candidate has the shortest real drive time,
-        // skipping any ORS couldn't route to - falls back to the
-        // straight-line pick above if none could be routed.
         ChargingStation? bestStation;
         double? bestDistanceKm;
         double? bestDurationMinutes;
@@ -1020,13 +960,6 @@ class _ChargingScreenState extends State<ChargingScreen> {
               style: TextStyle(color: planningMutedTextColor),
             )
           else if (_userLocation == null && !_locationUnavailable)
-            // A fresh GPS fix can take a while, and until it resolves this
-            // card would otherwise silently rank stations against a generic
-            // Malaysia-wide point - showing that as if it were a real,
-            // resolved result is misleading, so say plainly that it's still
-            // finding the real location instead. Once _locationUnavailable
-            // is set (denied/off/timed out), fall through to the normal
-            // card below instead of spinning forever.
             const Row(
               children: [
                 SizedBox(

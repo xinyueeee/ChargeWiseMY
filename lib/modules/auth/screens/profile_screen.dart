@@ -120,17 +120,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       return;
     }
-    // AuthGate swaps its content back to Login once signed out, but that
-    // happens on the root route underneath this pushed screen. Pop back to
-    // it so the user actually sees Login instead of staying on this page.
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
-    // DriverShell now owns the one Scaffold, bottom nav, and rail shared by
-    // all five tabs - this screen's own Scaffold stays only for its AppBar.
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FC),
       appBar: AppBar(
@@ -139,10 +134,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
-        // Profile is a bottom-nav tab like Home/Charging, not a drill-down
-        // detail screen - those don't show a back arrow either (they skip
-        // AppBar entirely), so this one shouldn't imply there's a "back"
-        // to go to.
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(

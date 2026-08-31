@@ -12,8 +12,6 @@ const _frequencyModes = [
   ('once', 'Specific Date'),
 ];
 
-// DateTime.weekday values (1=Monday..7=Sunday), ordered Sunday-first to
-// match how phone alarm apps usually lay out a day-of-week picker.
 const _weekdayChips = [
   (7, 'S'),
   (1, 'M'),
@@ -44,10 +42,6 @@ class _CreateReminderSheet extends StatefulWidget {
 
   final Map<String, dynamic>? existing;
 
-  /// Seeds initial field values (e.g. from the recommendation card's "remind
-  /// me at off-peak" action) without switching the sheet into edit mode -
-  /// only [existing] does that, so a prefilled reminder still inserts as
-  /// new on save.
   final Map<String, dynamic>? prefill;
 
   @override
@@ -200,8 +194,6 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
       return;
     }
 
-    // The reminder itself is saved at this point. A notification-scheduling
-    // failure shouldn't hide that or block the user from seeing it saved.
     final enabled = widget.existing == null
         ? true
         : widget.existing!['enabled'] as bool? ?? true;

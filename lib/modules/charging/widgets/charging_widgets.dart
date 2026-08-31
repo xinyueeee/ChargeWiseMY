@@ -206,9 +206,6 @@ class _DurationPickerSheetState extends State<_DurationPickerSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Kept outside the scrollable content below so swipe-to-dismiss
-              // still has a non-scrolling area to grab once landscape's
-              // shorter height forces this sheet to scroll.
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Center(

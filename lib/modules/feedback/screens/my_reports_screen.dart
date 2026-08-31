@@ -9,20 +9,9 @@ import '../viewmodels/feedback_viewmodel.dart';
 import '../widgets/feedback_widgets.dart';
 import 'report_details_screen.dart';
 
-/// Full "My Reports" list — tab filter across every real report status,
-/// search, a category filter sheet, sort, and pagination. Reached from the
-/// Feedback dashboard's "My Reports" stat card or its "View All" link.
-///
-/// Uses the driver `FloatingBottomNav` (Home/Charging/Planning/Feedback/
-/// Profile) — the admin-style nav in the original mockup for this screen
-/// was a mismatched export; this is a driver screen reached from the
-/// driver's Feedback tab.
 class MyReportsScreen extends StatefulWidget {
   const MyReportsScreen({super.key, this.initialTab = 'All'});
 
-  /// One of 'All' / 'Submitted' / 'Verified' / 'In Progress' / 'Resolved' —
-  /// lets the dashboard's overview stats deep-link straight into a filtered
-  /// view.
   final String initialTab;
 
   @override
@@ -92,10 +81,6 @@ class _MyReportsScreenState extends State<MyReportsScreen>
       });
     return filtered;
   }
-
-  /// Destinations for this screen, shared by the bottom bar and the
-
-  /// side rail so both surfaces stay identical.
 
   DriverNavigationConfig _navConfig(BuildContext context) =>
       DriverNavigationConfig(
@@ -408,7 +393,6 @@ class _Pagination extends StatelessWidget {
     required this.onChanged,
   });
 
-  /// 0-based current page.
   final int page;
   final int totalPages;
   final ValueChanged<int> onChanged;

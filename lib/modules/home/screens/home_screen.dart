@@ -16,13 +16,12 @@ import '../../planning/viewmodels/planning_viewmodel.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../widgets/station_details_sheet.dart';
 
-const _malaysiaFallback = LatLng(3.1390, 101.6869); // Kuala Lumpur
+const _malaysiaFallback = LatLng(3.1390, 101.6869);
 const _dcColor = Colors.orange;
 const _acColor = Colors.deepPurple;
 
 enum _ChargerGroup { ac, dc }
 
-/// Groups thousands so large location counts stay readable.
 String _formatCount(int value) => value.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+$)'),
       (match) => '${match[1]},',
@@ -114,9 +113,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   @override
   void didPopNext() {
     _setMapMounted(true);
-    // Returning here from Charging (create/edit/delete/toggle a reminder)
-    // shouldn't leave this card showing stale data until the next cold
-    // start, so refresh it every time Home comes back into view.
     _reloadReminders();
   }
 
@@ -157,12 +153,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
         return;
       }
 
-      // A fresh GPS fix can take anywhere from ~1s to 30+s (cold start,
-      // weak signal, indoors, right after login) - during which the map
-      // sat on its default wide Malaysia view instead of the auto-locate
-      // zoom, since _userLocation stayed null the whole time. Grab
-      // whatever position the OS already has cached first, near-instantly,
-      // so auto-locate has something to zoom to right away.
       try {
         final lastKnown = await Geolocator.getLastKnownPosition();
         if (lastKnown != null && mounted) {
@@ -298,9 +288,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    // No Scaffold/DriverNavigationShell here anymore - DriverShell now owns
-    // the one Scaffold, bottom nav, and rail shared by all five tabs; this
-    // just needs to return its own content.
     return SafeArea(
       child: Consumer<PlanningViewModel>(
         builder: (context, vm, __) {
@@ -316,11 +303,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
 
           _maybeAutoLocate(vm);
 
-          // One logical Existing-only dataset feeds both the overview and
-          // the map. Rendering optimisations (clustering, viewport limits)
-          // are applied downstream by the map widget, never here, so the
-          // statistics always describe the full selection rather than the
-          // markers that happen to be drawn.
           final homeStations = _applyFilter(vm.mapStations);
           final dcCount = homeStations
               .where((s) => _chargerGroup(s) == _ChargerGroup.dc)
@@ -577,8 +559,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                 ),
               ),
               const SizedBox(height: 4),
-              // States the size of the dataset behind these figures, so a
-              // clustered map is not mistaken for missing locations.
               Text(
                 '${_formatCount(homeStations.length)} existing '
                 '${homeStations.length == 1 ? 'location' : 'locations'} in '

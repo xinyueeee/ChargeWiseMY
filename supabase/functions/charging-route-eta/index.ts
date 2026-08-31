@@ -5,10 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
 };
 
-// api.openrouteservice.org was sunset 2026-08-24 in favour of api.heigit.org's
-// unified <domain>/<service>/<version> structure. Existing ORS API keys and
-// quotas carry over unchanged - see
-// https://ask.openrouteservice.org/t/deprecating-api-openrouteservice-org-in-favour-of-api-heigit-org/7912
 const ORS_MATRIX_URL = 'https://api.heigit.org/openrouteservice/v2/matrix/driving-car';
 const MAX_CANDIDATES = 5;
 
@@ -151,9 +147,6 @@ Deno.serve(async (request: Request) => {
       return json({ error: 'ETA service is not configured.' }, 503);
     }
 
-    // ORS coordinates are [lng, lat]. Index 0 is always the origin; the
-    // candidates follow in the order the client sent them, so indexes map
-    // straight back to context.candidates.
     const locations = [
       [context.originLng, context.originLat],
       ...context.candidates.map((c) => [c.lng, c.lat]),
@@ -222,8 +215,6 @@ Deno.serve(async (request: Request) => {
     const results = context.candidates.map((candidate, index) => {
       const distanceM = distances[index];
       const durationS = durations[index];
-      // ORS returns null for a pair it couldn't route (e.g. no road access);
-      // pass that through as null rather than fabricating a number.
       return {
         id: candidate.id,
         distanceKm: typeof distanceM === 'number' ? distanceM / 1000 : null,

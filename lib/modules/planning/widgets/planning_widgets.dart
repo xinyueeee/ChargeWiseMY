@@ -302,9 +302,6 @@ class AppCard extends StatelessWidget {
             ),
           ],
         ),
-        // AppCard is frequently used with InkWell, ListTile and ExpansionTile.
-        // A transparent Material preserves this card's decoration while giving
-        // those descendants a valid ink-rendering ancestor.
         child: Material(type: MaterialType.transparency, child: child),
       );
 }
@@ -357,10 +354,6 @@ class StatisticCard extends StatelessWidget {
       );
 }
 
-/// A label/value row for a details-screen "information" card. Shared,
-/// public version of the pattern `proposal_details_screen.dart` already
-/// has privately — kept separate rather than reusing that private class
-/// (which isn't importable) or editing Module 2's file for a Module 3 need.
 class InformationRow extends StatelessWidget {
   const InformationRow(this.label, this.value, {super.key});
 
@@ -393,9 +386,6 @@ class InformationRow extends StatelessWidget {
       );
 }
 
-/// Two action buttons, side by side, that stack vertically on a narrow
-/// screen or when text scaling is large. Same responsive rule as the
-/// private version in `proposal_details_screen.dart`.
 class ResponsiveButtonPair extends StatelessWidget {
   const ResponsiveButtonPair({
     super.key,
@@ -476,28 +466,14 @@ class MapPanel extends StatefulWidget {
   final ValueChanged<LatLng>? onTap;
   final StateSelectionCallback? onStateSelected;
 
-  /// Overrides the individual-station marker icon per station (e.g. to
-  /// color-code by charger type). Leave null to keep the default station
-  /// icon used by the national planning dashboard.
   final BitmapDescriptor Function(ChargingStation station)? stationIconResolver;
 
-  /// Called when an individual station marker is tapped (e.g. to show a
-  /// details sheet). Leave null to keep the default info-window-only
-  /// behavior used by the national planning dashboard.
   final ValueChanged<ChargingStation>? onStationTap;
 
-  /// Planning uses national MEVnet summary badges. Simpler consumer maps such
-  /// as Home can disable them while retaining tappable state polygons.
   final bool showNationalStateBadges;
 
-  /// Home renders its Existing-only station source at Malaysia zoom. Planning
-  /// keeps the lighter national polygon-and-summary presentation.
   final bool showStationsInNationalView;
 
-  /// Shows the device's live position as a blue dot on the map. Leave false
-  /// (the default) unless the caller has already confirmed location
-  /// permission is granted - Android throws if this is set true before
-  /// permission is available.
   final bool myLocationEnabled;
 
   @override
@@ -2140,8 +2116,6 @@ class FloatingBottomNav extends StatelessWidget {
 
   final String currentTab;
 
-  /// Home and Charging become tappable once a caller opts in, alongside
-  /// Planning, Feedback and Profile.
   final VoidCallback? onHomeTap;
   final VoidCallback? onChargingTap;
   final VoidCallback? onProfileTap;

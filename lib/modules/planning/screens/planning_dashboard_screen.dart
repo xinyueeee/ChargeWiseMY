@@ -19,16 +19,6 @@ class PlanningDashboardScreen extends StatefulWidget {
       _PlanningDashboardScreenState();
 }
 
-/// Decides between the single-column and the split (rail-style) Planning
-/// Dashboard layout.
-///
-/// Pure and dependency-free on purpose: the screen must call it with
-/// `constraints` from the `LayoutBuilder` that sits inside
-/// [DriverNavigationShell]'s content pane, never with a `MediaQuery` size —
-/// `MediaQuery` still reports the full device width once the
-/// `NavigationRail` is showing, which overstates the width actually left for
-/// this screen and is what previously caused the split pane to demand more
-/// width than it had.
 @visibleForTesting
 bool useSplitPlanningDashboardLayout(BoxConstraints constraints) {
   final landscape = constraints.maxWidth > constraints.maxHeight;
@@ -107,9 +97,6 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    // No Scaffold/DriverNavigationShell here anymore - DriverShell now owns
-    // the one Scaffold, bottom nav, and rail shared by all five tabs; this
-    // just needs to return its own content.
     return Consumer<PlanningViewModel>(
       builder: (_, vm, __) {
         debugPrint(
@@ -122,12 +109,6 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                 message: 'Loading infrastructure planning data…',
               )
             : SafeArea(
-                // LayoutBuilder, not MediaQuery, because this subtree sits
-                // inside DriverNavigationShell's Expanded pane once the
-                // NavigationRail is showing (>=700 logical px). MediaQuery
-                // still reports the full device width there; constraints
-                // reports what is actually left after the rail, which is
-                // the only width this screen may lay out against.
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     if (useSplitPlanningDashboardLayout(constraints)) {
@@ -254,10 +235,6 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // flex 2:3 mirrors the previous .39/.61 split, but as a share of
-              // the space this Row actually receives rather than a width
-              // computed from the full device — so it can never demand more
-              // width than is available and cannot overflow the Row.
               Expanded(
                 flex: 2,
                 child: SingleChildScrollView(
@@ -319,21 +296,6 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                   padding: const EdgeInsets.fromLTRB(14, 8, 20, 16),
                   child: LayoutBuilder(
                     builder: (context, mapConstraints) {
-                      // The section heading, context strip and optional
-                      // national-map hint are natural-height content whose
-                      // real size cannot be predicted from a constant: the
-                      // context strip alone is a Wrap that measures anywhere
-                      // from ~81px (a wide tablet pane, one line) to ~166px
-                      // (a narrow phone-landscape pane, three lines) —
-                      // subtracting a fixed guess (previously 106/132) from
-                      // the available height and handing the map the
-                      // remainder is exactly what produced the reported
-                      // RenderFlex overflow whenever the guess undershot the
-                      // real content. Sizing the map from the pane's own
-                      // height instead, and letting the natural-height chrome
-                      // scroll alongside it, makes the actual chrome height
-                      // irrelevant to whether this layout fits: it always
-                      // does, by construction.
                       final mapHeight =
                           (mapConstraints.maxHeight * 0.55).clamp(180.0, 420.0);
                       return SingleChildScrollView(
@@ -550,12 +512,6 @@ class _PlanningDashboardScreenState extends State<PlanningDashboardScreen>
                           setState(() => _showMevnetProposed = value),
                       onCommunityProposalsChanged: (value) =>
                           setState(() => _showCommunityProposals = value),
-                      // The Stack this legend floats in is exactly `height`
-                      // tall (MapPanel's SizedBox is its only unpositioned
-                      // child). 8px top offset + an 8px bottom margin keeps
-                      // the card off both map edges; it can never grow past
-                      // whatever is left, regardless of text scale or which
-                      // toggles are visible.
                       maxHeight: (height - 16).clamp(0.0, height),
                     ),
                   ),

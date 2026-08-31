@@ -10,17 +10,11 @@ import 'new_report_screen.dart';
 import 'report_details_screen.dart';
 import 'report_map_screen.dart';
 
-/// Entry point for the driver-facing Feedback tab — hero banner, report
-/// counts, quick actions, and a preview of recent reports. Reached via
-/// `FloatingBottomNav`'s "Feedback" tab.
 class FeedbackDashboardScreen extends StatelessWidget {
   const FeedbackDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        // DriverShell now owns the one Scaffold, bottom nav, and rail
-        // shared by all five tabs - this screen's own Scaffold stays only
-        // for its AppBar.
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,

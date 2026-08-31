@@ -25,19 +25,6 @@ Future<void> main() async {
 
   runApp(const ChargeWiseApp());
 
-  // Not awaited, and deliberately started after runApp(): on a physical
-  // device this chain (native plugin init, a notification-permission
-  // round-trip, and WorkManager's own first-run database setup) measured
-  // ~6.6 seconds of continuous main-thread blocking before the first frame
-  // could render — long enough that Android's ActivityManager logged
-  // "Activity pause timeout" / "top resumed state loss timeout" during that
-  // window, which is consistent with the app being killed or frozen by the
-  // OS on some early launches ("jumps out") and only settling once the
-  // one-time setup cost had already been paid on a previous run. Deferring
-  // this until after the first frame lets the Activity report itself
-  // interactive immediately; every caller of NotificationService already
-  // awaits its own `init()` before doing real work (see cancel() and
-  // scheduleReminder()), so nothing here depends on this completing first.
   unawaited(NotificationService().init());
 }
 

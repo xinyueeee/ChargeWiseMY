@@ -12,9 +12,6 @@ const _supabaseUrl = 'https://ffqtkpoeuqjuihqdzmsc.supabase.co';
 const _supabasePublishableKey =
     'sb_publishable_RZVErCEwcPADZuWBWqGtKg_BxkWHRj1';
 
-/// The next time this reminder should fire, strictly after [anchor].
-/// [repeatDays] holds `DateTime.weekday` values (1=Monday..7=Sunday) and only
-/// applies to 'weekly' - when empty, weekly falls back to a flat 7-day step.
 DateTime nextReminderOccurrence(
   DateTime anchor,
   String repeatFrequency, {
@@ -35,16 +32,6 @@ DateTime nextReminderOccurrence(
   }
 }
 
-/// Rolls a possibly-past anchor forward to the next occurrence that is still
-/// in the future, so a recurring reminder anchored at a time earlier today
-/// still schedules correctly instead of firing almost immediately.
-///
-/// For 'weekly', the search always starts from today (not from whatever
-/// date [anchor] happens to carry, which the UI hides once weekly is
-/// picked), at [anchor]'s time-of-day, and only accepts a day that is both
-/// one of [repeatDays] and still in the future - so it can never return a
-/// day that wasn't actually selected just because that moment happens to be
-/// in the future.
 DateTime rollReminderToFuture(
   DateTime anchor,
   String repeatFrequency, {
@@ -118,9 +105,6 @@ void callbackDispatcher() {
           const <int>[];
 
       if (repeatFrequency == 'once' && reminderId != null) {
-        // A one-time reminder has nothing left to reschedule; turn its
-        // toggle off so it doesn't sit there looking "on" after it already
-        // fired.
         try {
           await Supabase.initialize(
             url: _supabaseUrl,
@@ -218,11 +202,6 @@ class NotificationService {
 
   int notificationIdFor(String reminderId) => reminderId.hashCode & 0x7FFFFFFF;
 
-  /// Schedules a reminder notification for [dateTime]. When
-  /// [repeatFrequency] isn't 'once', the reminder reschedules itself for the
-  /// next occurrence (daily/weekly on [repeatDays]/monthly) each time it
-  /// fires, and keeps the reminder's stored date/time in sync with that next
-  /// occurrence.
   Future<void> scheduleReminder({
     required String reminderId,
     required String title,
@@ -260,10 +239,6 @@ class NotificationService {
   }
 
   Future<void> cancel(String reminderId) async {
-    // init() is idempotent and now started in the background from main(),
-    // not awaited before the first frame; every public method here must
-    // still guarantee it has completed before touching the plugin, exactly
-    // as scheduleReminder() already does.
     await init();
     await Workmanager().cancelByUniqueName(reminderId);
     await _plugin.cancel(notificationIdFor(reminderId));

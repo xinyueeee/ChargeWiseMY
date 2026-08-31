@@ -58,11 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailController.text,
         password: _passwordController.text,
       );
-      // Only remember the email once login actually succeeds, so the
-      // suggestion list stays real accounts, not typos.
       _recentEmailsService.remember(_emailController.text);
-      // Navigation on success is handled by the auth-state listener in
-      // AuthGate, so nothing further to do here.
     } catch (error, stackTrace) {
       debugPrint('Login error: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -98,11 +94,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  /// Email field with autocomplete over the last few addresses that were
-  /// actually used to log in successfully on this device - tapping the
-  /// field shows them immediately, typing narrows the list. Built on
-  /// Autocomplete rather than AuthLabeledField since suggestions need
-  /// their own controller wiring and a custom options dropdown.
   Widget _buildEmailField() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

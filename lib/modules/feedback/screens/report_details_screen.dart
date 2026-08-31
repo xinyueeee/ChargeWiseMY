@@ -11,13 +11,6 @@ import '../viewmodels/feedback_viewmodel.dart';
 import '../widgets/feedback_widgets.dart';
 import 'new_report_screen.dart';
 
-/// View / edit / delete a single [FaultReport] — mirrors
-/// `proposal_details_screen.dart`'s shape and reuses `ProposalLocationMapScreen`
-/// (readOnly) for the map preview. Edit/Delete are only offered while the
-/// report is still `Submitted`; once an admin has verified or resolved it,
-/// RLS itself would reject a driver-side update/delete anyway (see
-/// `supabase/sql/fault_reports.sql`), so the UI matches that boundary
-/// instead of offering actions that would just fail.
 class ReportDetailsScreen extends StatefulWidget {
   const ReportDetailsScreen({super.key, required this.report});
 
@@ -32,10 +25,6 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
 
   FaultReport get report => widget.report;
   bool get _editable => report.status == 'Submitted';
-
-  /// Destinations for this screen, shared by the bottom bar and the
-
-  /// side rail so both surfaces stay identical.
 
   DriverNavigationConfig _navConfig(BuildContext context) =>
       DriverNavigationConfig(
@@ -255,7 +244,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
       case 'In Progress':
         return 'Maintenance is underway for this report. You can no longer '
             'edit or delete it.';
-      default: // 'Resolved'
+      default:
         return 'This report has been resolved. Thank you for helping keep '
             'charging stations reliable.';
     }

@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// One candidate station to rank by real drive time - sent alongside the
-/// driver's own location.
 class RouteEtaCandidate {
   const RouteEtaCandidate({
     required this.id,
@@ -35,10 +33,6 @@ class RouteEtaContext {
       };
 }
 
-/// Real driving distance/duration for one candidate. Either field can be
-/// null when OpenRouteService couldn't route to that point (e.g. no road
-/// access) - that's reported honestly rather than falling back to a made-up
-/// number.
 class RouteEtaResult {
   const RouteEtaResult({
     required this.id,

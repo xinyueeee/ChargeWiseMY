@@ -10,26 +10,10 @@ import '../viewmodels/feedback_viewmodel.dart';
 import '../widgets/feedback_widgets.dart';
 import 'report_details_screen.dart';
 
-/// "View Nearby Reported Issues" — a plain `GoogleMap` with one marker per
-/// geolocated report, colored by status (submitted = red, verified =
-/// orange, in progress = blue, resolved = green, matching
-/// `ReportStatusChip`/`feedbackStatusColor`). Deliberately not
-/// built on the heavyweight `MapPanel` in `planning_widgets.dart` — that
-/// widget is already a large, tuned piece of state for stations/proposals,
-/// so bolting fault-report markers onto it is higher risk than a small
-/// standalone map (see MODULE3_USER_IMPLEMENTATION_PLAN.md §6.5).
-///
-/// Visibility is community-wide (every signed-in driver's reports, not just
-/// the current user's), same model as `FeedbackViewModel.nearbyReports` and
-/// the `fault_reports_select_all_authenticated` RLS policy.
 class ReportMapScreen extends StatelessWidget {
   const ReportMapScreen({super.key});
 
   static const _malaysiaCenter = LatLng(4.2105, 101.9758);
-
-  /// Destinations for this screen, shared by the bottom bar and the
-
-  /// side rail so both surfaces stay identical.
 
   DriverNavigationConfig _navConfig(BuildContext context) =>
       DriverNavigationConfig(
@@ -148,7 +132,7 @@ class ReportMapScreen extends StatelessWidget {
         return BitmapDescriptor.hueAzure;
       case 'Resolved':
         return BitmapDescriptor.hueGreen;
-      default: // 'Submitted'
+      default:
         return BitmapDescriptor.hueRed;
     }
   }
@@ -163,8 +147,6 @@ class ReportMapScreen extends StatelessWidget {
   }
 }
 
-/// Small always-visible key explaining the marker colors — same compact
-/// `AppCard` chip pattern as the planning map's layer legend.
 class _StatusLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppCard(
