@@ -8,6 +8,13 @@ class RegistrationResult {
   final bool requiresEmailVerification;
 }
 
+class AccountDeactivatedException implements Exception {
+  const AccountDeactivatedException();
+
+  @override
+  String toString() => 'AccountDeactivatedException';
+}
+
 class AuthService {
   final SupabaseClient _client = Supabase.instance.client;
 
@@ -23,8 +30,18 @@ class AuthService {
       email: email.trim(),
       password: password,
     );
-    if (response.session != null) {
-      await _ensureProfileExistsForAuthenticatedUser();
+    if (response.session == null) return;
+
+    await _ensureProfileExistsForAuthenticatedUser();
+
+    final row = await _client
+        .from('users')
+        .select('status')
+        .eq('id', response.session!.user.id)
+        .maybeSingle();
+    if ((row?['status'] as String?) == 'deactivated') {
+      await _client.auth.signOut();
+      throw const AccountDeactivatedException();
     }
   }
 

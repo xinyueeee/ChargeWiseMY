@@ -59,6 +59,9 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
       _recentEmailsService.remember(_emailController.text);
+    } on AccountDeactivatedException {
+      if (!mounted) return;
+      await _showDeactivatedAlert();
     } catch (error, stackTrace) {
       debugPrint('Login error: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -70,6 +73,24 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _submitting = false);
     }
   }
+
+  Future<void> _showDeactivatedAlert() => showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(Icons.block_outlined, color: Colors.redAccent),
+          title: const Text('Account Deactivated'),
+          content: const Text(
+            'Your account has been deactivated by an administrator. '
+            'Please contact support if you believe this is a mistake.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
 
   String _friendlyError(Object error) {
     final message = error.toString();

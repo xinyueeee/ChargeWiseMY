@@ -7,6 +7,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/navigation/app_route_observer.dart';
 import 'core/navigation/driver_shell.dart';
 import 'modules/admin/screens/admin_shell.dart';
+import 'modules/admin/services/feedback_admin_repository.dart';
+import 'modules/admin/services/user_admin_repository.dart';
+import 'modules/admin/viewmodels/admin_feedback_viewmodel.dart';
+import 'modules/admin/viewmodels/admin_user_viewmodel.dart';
 import 'modules/auth/screens/auth_gate.dart';
 import 'modules/feedback/services/feedback_repository.dart';
 import 'modules/feedback/viewmodels/feedback_viewmodel.dart';
@@ -39,6 +43,13 @@ class ChargeWiseApp extends StatelessWidget {
           ),
           ChangeNotifierProvider(
             create: (_) => FeedbackViewModel(FeedbackRepository())..load(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) =>
+                AdminFeedbackViewModel(FeedbackAdminRepository())..load(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AdminUserViewModel(UserAdminRepository())..load(),
           ),
         ],
         child: Builder(
