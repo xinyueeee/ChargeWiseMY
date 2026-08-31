@@ -9,7 +9,9 @@ import '../widgets/admin_feedback_widgets.dart';
 import 'admin_report_details_screen.dart';
 
 class AdminFeedbackHistoryScreen extends StatefulWidget {
-  const AdminFeedbackHistoryScreen({super.key});
+  const AdminFeedbackHistoryScreen({super.key, this.initialTabIndex = 0});
+
+  final int initialTabIndex;
 
   @override
   State<AdminFeedbackHistoryScreen> createState() =>
@@ -35,8 +37,11 @@ class _AdminFeedbackHistoryScreenState extends State<AdminFeedbackHistoryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this)
-      ..addListener(() {
+    _tabController = TabController(
+      length: _tabs.length,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    )..addListener(() {
         if (!_tabController.indexIsChanging) setState(() => _page = 0);
       });
   }

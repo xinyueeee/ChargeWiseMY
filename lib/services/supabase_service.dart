@@ -225,15 +225,21 @@ class SupabaseService {
   Future<Map<String, String>> getUserNames(Iterable<String> userIds) async {
     final ids = userIds.toSet().toList();
     if (ids.isEmpty) return {};
-    final rows =
-        await client.from('users').select('id, full_name').inFilter('id', ids);
+    final rows = await client
+        .from('users')
+        .select('id, full_name, role')
+        .inFilter('id', ids);
     return {
       for (final row in List<Map<String, dynamic>>.from(rows))
-        row['id'] as String:
-            (row['full_name'] as String?)?.trim().isNotEmpty == true
-                ? row['full_name'] as String
-                : 'Unknown driver',
+        row['id'] as String: _reporterDisplayName(row),
     };
+  }
+
+  String _reporterDisplayName(Map<String, dynamic> row) {
+    final name = (row['full_name'] as String?)?.trim().isNotEmpty == true
+        ? row['full_name'] as String
+        : 'Unknown driver';
+    return row['role'] == 'admin' ? '$name (Admin)' : name;
   }
 
   Future<void> updateFaultReportStatus(

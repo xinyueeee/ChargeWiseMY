@@ -74,7 +74,8 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                             value: '${vm.inProgressCount}',
                             label: 'In Progress',
                             color: blue,
-                            onTap: () => _openMaintenance(context),
+                            onTap: () =>
+                                _openHistory(context, initialTabIndex: 3),
                           ),
                         ),
                         SizedBox(
@@ -84,7 +85,8 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                             value: '${vm.resolvedCount}',
                             label: 'Resolved',
                             color: green,
-                            onTap: () => _openHistory(context),
+                            onTap: () =>
+                                _openHistory(context, initialTabIndex: 4),
                           ),
                         ),
                         SizedBox(
@@ -263,10 +265,11 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
     );
   }
 
-  void _openHistory(BuildContext context) {
+  void _openHistory(BuildContext context, {int initialTabIndex = 0}) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const AdminFeedbackHistoryScreen(),
+        builder: (_) =>
+            AdminFeedbackHistoryScreen(initialTabIndex: initialTabIndex),
       ),
     );
   }
