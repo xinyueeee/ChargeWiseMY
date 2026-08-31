@@ -2,21 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'planning_widgets.dart';
 
-/// Floating "Layers" control drawn over the Interactive Map.
-///
-/// Extracted from `PlanningDashboardScreen` so it is directly constructible
-/// in a widget test without a real `GoogleMap` platform view or a
-/// `PlanningViewModel`/`Provider` tree.
-///
-/// [maxHeight] must be the exact height of the map `Stack` this legend is
-/// positioned over (the same `height` passed to `MapPanel`) minus whatever
-/// margin the caller leaves around it. The whole card — header included — is
-/// hard-capped to that height, so it can never grow taller than the map it
-/// floats on: a naturally-sized expanded `Column` was proven to exceed the
-/// map's height in short landscape (as little as 96px), which is exactly
-/// what produced the reported overflow. Only the toggle list below the
-/// header scrolls; the header itself always stays reachable so the legend
-/// can always be collapsed again.
 class CompactMapLegend extends StatelessWidget {
   const CompactMapLegend({
     super.key,
@@ -40,9 +25,6 @@ class CompactMapLegend extends StatelessWidget {
   final ValueChanged<bool> onMevnetProposedChanged;
   final ValueChanged<bool> onCommunityProposalsChanged;
 
-  /// The exact height of the map region this legend floats over. A hard
-  /// ceiling, never a fraction guessed in the abstract — the legend simply
-  /// cannot be sized correctly without knowing the space it actually has.
   final double maxHeight;
 
   @override
@@ -72,24 +54,16 @@ class CompactMapLegend extends StatelessWidget {
     );
 
     return ConstrainedBox(
-      // A hard cap, not a suggestion: whatever this card's content wants to
-      // be, it is never allowed to exceed the map it sits on top of.
       constraints: BoxConstraints(maxHeight: maxHeight.clamp(0.0, maxHeight)),
       child: AppCard(
         padding: const EdgeInsets.all(6),
         child: Column(
-          // `min`, not the Column default `max`: a collapsed legend must stay
-          // its own natural (small) size rather than being stretched to fill
-          // maxHeight, which would otherwise paint as a large empty card.
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             header,
             if (expanded) ...[
               const Divider(height: 10),
-              // `Flexible` (loose), not `Expanded`: short content keeps the
-              // card compact; content that would overflow scrolls instead
-              // of pushing the card past `maxHeight`.
               Flexible(
                 child: SingleChildScrollView(
                   child: Padding(

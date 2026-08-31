@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/io_client.dart';
 
-/// An [AssetBundle] that serves exactly what a test hands it, so trust-anchor
-/// loading can be exercised without the real asset bundle.
 class _FakeAssetBundle extends CachingAssetBundle {
   _FakeAssetBundle(this._assets);
 
@@ -29,7 +27,6 @@ void main() {
   late Uint8List realAnchor;
 
   setUpAll(() async {
-    // The genuine bundled root, read from disk exactly as it ships.
     realAnchor = Uint8List.fromList(
       await File('assets/certs/'
               'sectigo_public_server_authentication_root_r46.pem')
@@ -43,7 +40,7 @@ void main() {
       expect(text, contains('-----BEGIN CERTIFICATE-----'));
       expect(text, contains('-----END CERTIFICATE-----'));
       expect('-----BEGIN CERTIFICATE-----'.allMatches(text), hasLength(1));
-      // A trust anchor must never ship with private key material.
+
       expect(text, isNot(contains('PRIVATE KEY')));
     });
 
@@ -60,7 +57,6 @@ void main() {
     test('fails loudly when the asset is missing', () async {
       final bundle = _FakeAssetBundle(<String, ByteData>{});
 
-      // A packaging mistake must surface, never degrade into weaker TLS.
       await expectLater(
         loadMevnetTrustAnchor(bundle: bundle),
         throwsA(isA<MEVnetTrustAnchorException>()),
@@ -98,11 +94,7 @@ void main() {
       expect(client, isA<HttpClient>());
     });
 
-    test('no source file installs a certificate-verification bypass',
-        () async {
-      // HttpClient.badCertificateCallback is setter-only, so it cannot be read
-      // back at runtime. Asserting over the source is the durable guard: it
-      // fails the build if anyone later adds a bypass anywhere in lib/.
+    test('no source file installs a certificate-verification bypass', () async {
       const banned = <String>[
         'badCertificateCallback',
         'HttpOverrides.global',
@@ -111,14 +103,11 @@ void main() {
       final offenders = <String>[];
       await for (final entity in Directory('lib').list(recursive: true)) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
-        // Strip comments so documentation *describing* the policy does not
-        // register as a violation of it.
-        final code = (await entity.readAsLines())
-            .where((line) {
-              final trimmed = line.trimLeft();
-              return !trimmed.startsWith('//') && !trimmed.startsWith('*');
-            })
-            .join('\n');
+
+        final code = (await entity.readAsLines()).where((line) {
+          final trimmed = line.trimLeft();
+          return !trimmed.startsWith('//') && !trimmed.startsWith('*');
+        }).join('\n');
         if (banned.any(code.contains)) offenders.add(entity.path);
       }
 
@@ -146,8 +135,7 @@ void main() {
       expect(client, isA<IOClient>());
     });
 
-    test('propagates a missing asset rather than returning a client',
-        () async {
+    test('propagates a missing asset rather than returning a client', () async {
       final bundle = _FakeAssetBundle(<String, ByteData>{});
 
       await expectLater(
@@ -163,14 +151,10 @@ void main() {
       final client = createMevnetHttpsClient(realAnchor);
       addTearDown(() => client.close(force: true));
 
-      // Supabase, Google Maps and every other request keep the default trust
-      // settings; the bundled anchor is scoped to this client alone.
       expect(identical(SecurityContext.defaultContext, before), isTrue);
     });
 
     test('building the client does not install an HttpOverrides', () {
-      // flutter_test installs its own override, so the meaningful assertion is
-      // that building the MEVnet client leaves whatever is current unchanged.
       final before = HttpOverrides.current;
       final client = createMevnetHttpsClient(realAnchor);
       addTearDown(() => client.close(force: true));

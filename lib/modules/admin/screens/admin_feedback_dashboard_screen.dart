@@ -13,10 +13,6 @@ import 'admin_maintenance_list_screen.dart';
 import 'admin_report_details_screen.dart';
 import 'admin_verify_reports_screen.dart';
 
-/// Landing screen for `AdminShell`'s "Feedback" tab. No `Scaffold`/`AppBar`
-/// of its own — `AdminShell` already supplies the shared "Admin Portal"
-/// app bar (badge + logout) for this tab index, so this is body content
-/// only, matching how the "AI Planning" and other admin tabs are embedded.
 class AdminFeedbackDashboardScreen extends StatelessWidget {
   const AdminFeedbackDashboardScreen({super.key});
 
@@ -53,15 +49,7 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                   builder: (context, constraints) {
                     const spacing = 10.0;
                     final columns = constraints.maxWidth >= 420 ? 4 : 2;
-                    // A fixed-aspect-ratio GridView cannot fit
-                    // AdminStatTile's icon, value and two-line label at once
-                    // enlarged text and narrower (more-column) cells both
-                    // grow the label's wrapped height, and no single ratio
-                    // covers every combination — proven to still overflow by
-                    // 18px at 1.5x/2 columns and by 4.8px even at 1.0x/4
-                    // columns. A Wrap of fixed-width, natural-height tiles
-                    // has no such ceiling: each tile is exactly as tall as
-                    // its own content needs.
+
                     final tileWidth =
                         (constraints.maxWidth - spacing * (columns - 1)) /
                             columns;
@@ -147,8 +135,9 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                       location: report.locationLabel,
                       dateLabel: formatRelativeTime(report.createdAt),
                       chip: ReportStatusChip(report.status),
-                      photoUrl:
-                          report.photoUrls.isEmpty ? null : report.photoUrls.first,
+                      photoUrl: report.photoUrls.isEmpty
+                          ? null
+                          : report.photoUrls.first,
                       onTap: () => _openDetails(context, report),
                     ),
                     const SizedBox(height: 10),

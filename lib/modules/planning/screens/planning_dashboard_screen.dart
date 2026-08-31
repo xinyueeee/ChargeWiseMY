@@ -660,12 +660,14 @@ class _InfrastructureSummaryCard extends StatelessWidget {
                   children: [
                     Icon(Icons.bolt_outlined, color: green),
                     SizedBox(width: 8),
-                    Text(
-                      'Charging Infrastructure',
-                      style: TextStyle(
-                        color: planningTextColor,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Text(
+                        'Charging Infrastructure',
+                        style: TextStyle(
+                          color: planningTextColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],

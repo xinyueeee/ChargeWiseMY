@@ -8,8 +8,6 @@ const infrastructureCacheSchemaVersion = 1;
 const infrastructureCacheTable = 'charging_stations_cache';
 const infrastructureCacheFreshness = Duration(hours: 24);
 
-/// A complete, internally consistent snapshot of public charging
-/// infrastructure. One item is one physical MEVnet location, never one EVCB.
 class InfrastructureCacheSnapshot {
   InfrastructureCacheSnapshot({
     required Iterable<ChargingStation> stations,
@@ -49,7 +47,6 @@ class InfrastructureCacheSnapshot {
   }
 }
 
-/// Storage boundary used by production SQLite and lightweight test fakes.
 abstract interface class InfrastructureCacheStore {
   Future<InfrastructureCacheSnapshot?> readStations();
 
@@ -79,8 +76,6 @@ class SqliteInfrastructureCacheService implements InfrastructureCacheStore {
       version: infrastructureCacheSchemaVersion,
       onCreate: (db, version) => _createVersionOne(db),
       onUpgrade: (db, oldVersion, newVersion) async {
-        // Future schema versions must add explicit, non-destructive migrations
-        // here. Version 1 never drops an existing cache during normal opening.
         if (oldVersion < 1) await _createVersionOne(db);
       },
     );
@@ -265,10 +260,6 @@ class InfrastructureLoadUpdate {
       snapshot != null && snapshot!.existingStations.isNotEmpty;
 }
 
-/// Coordinates stale-while-revalidate loading. The data direction is strictly
-/// remote source -> memory -> SQLite; cached rows are never written back to
-/// the remote source. The source itself is injected, so this coordinator is
-/// agnostic to whether it is the MEVnet API or the Supabase loader.
 class InfrastructureSyncCoordinator {
   InfrastructureSyncCoordinator({
     required InfrastructureCacheStore cache,

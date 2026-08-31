@@ -16,13 +16,6 @@ import '../viewmodels/feedback_viewmodel.dart';
 import '../widgets/feedback_widgets.dart';
 import 'report_submitted_screen.dart';
 
-/// "Report an Issue" (create) and "Edit Report" (`report` supplied) —
-/// dual-purpose like `NewProposalScreen`. Create mode GPS auto-captures a
-/// starting location (falling back to search or a map pin if that
-/// fails/is denied); edit mode pre-fills everything from the existing
-/// report instead of re-detecting. All four of the mockup's numbered
-/// sections render on one scrollable page (see [ReportStepIndicator]'s doc
-/// comment for why).
 class NewReportScreen extends StatefulWidget {
   const NewReportScreen({super.key, this.report});
 
@@ -57,16 +50,10 @@ class _NewReportScreenState extends State<NewReportScreen> {
 
   String? _category;
 
-  /// Already-uploaded photo URLs kept from the existing report (edit mode
-  /// only) — anything the driver removes comes out of this list.
   List<String> _existingPhotoUrls = [];
 
-  /// Newly picked local files pending upload.
   final List<XFile> _photos = [];
 
-  /// Whether the driver has touched the photo section at all (edit mode
-  /// only) — lets a completely untouched edit skip re-uploading/replacing
-  /// photos entirely, per `FeedbackRepository.updateReport`'s contract.
   bool _photosTouched = false;
 
   bool _submitting = false;
@@ -490,7 +477,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Icon(_editing ? Icons.save_outlined : Icons.send_outlined),
+                      : Icon(
+                          _editing ? Icons.save_outlined : Icons.send_outlined),
                   label: Text(
                     _submitting
                         ? (_editing ? 'Updating…' : 'Submitting…')
@@ -513,7 +501,9 @@ class _NewReportScreenState extends State<NewReportScreen> {
             fontWeight: FontWeight.w600,
           ),
           children: required
-              ? const [TextSpan(text: ' *', style: TextStyle(color: Colors.red))]
+              ? const [
+                  TextSpan(text: ' *', style: TextStyle(color: Colors.red))
+                ]
               : null,
         ),
       );
@@ -711,7 +701,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 hintText: 'Search station name, address or place',
                 filled: true,
                 fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onChanged: _onSearchChanged,
             ),

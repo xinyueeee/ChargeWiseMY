@@ -8,10 +8,6 @@ import '../viewmodels/admin_feedback_viewmodel.dart';
 import '../widgets/admin_feedback_widgets.dart';
 import 'admin_report_details_screen.dart';
 
-/// "Verify Reports" — lists every report still awaiting an admin's first
-/// decision (`status == 'Submitted'`), with priority tabs, search, a
-/// category filter, and a Verify action per row. See
-/// MODULE3_ADMIN_IMPLEMENTATION_PLAN.md §6.3.
 class AdminVerifyReportsScreen extends StatefulWidget {
   const AdminVerifyReportsScreen({super.key});
 
@@ -22,7 +18,12 @@ class AdminVerifyReportsScreen extends StatefulWidget {
 
 class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
     with SingleTickerProviderStateMixin {
-  static const _tabs = ['All', 'High Priority', 'Medium Priority', 'Low Priority'];
+  static const _tabs = [
+    'All',
+    'High Priority',
+    'Medium Priority',
+    'Low Priority'
+  ];
   static const _pageSize = 6;
 
   late final TabController _tabController;
@@ -207,7 +208,9 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
                               onPressed: () => _openFilterSheet(context),
                               icon: const Icon(Icons.filter_list, size: 18),
                               label: Text(
-                                _categoryFilter == null ? 'Filter' : 'Filter (1)',
+                                _categoryFilter == null
+                                    ? 'Filter'
+                                    : 'Filter (1)',
                               ),
                             ),
                           ],
@@ -239,13 +242,15 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
                             child: PlanningEmptyState(
                               icon: Icons.fact_check_outlined,
                               title: 'Nothing to verify',
-                              message: 'No reports match this filter right now.',
+                              message:
+                                  'No reports match this filter right now.',
                             ),
                           )
                         : ListView.separated(
                             padding: const EdgeInsets.all(16),
                             itemCount: pageItems.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final report = pageItems[index];
                               final verifying = _verifying.contains(report.id);
@@ -264,7 +269,8 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
                                   children: [
                                     Expanded(
                                       child: OutlinedButton(
-                                        onPressed: () => _openDetails(context, report),
+                                        onPressed: () =>
+                                            _openDetails(context, report),
                                         child: const Text('View Details'),
                                       ),
                                     ),
@@ -282,7 +288,8 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
                                             ? const SizedBox(
                                                 width: 16,
                                                 height: 16,
-                                                child: CircularProgressIndicator(
+                                                child:
+                                                    CircularProgressIndicator(
                                                   strokeWidth: 2,
                                                   color: Colors.white,
                                                 ),
@@ -324,7 +331,8 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
             const SizedBox(width: 5),
             Text(
               '$label  $count',
-              style: const TextStyle(fontSize: 11, color: planningMutedTextColor),
+              style:
+                  const TextStyle(fontSize: 11, color: planningMutedTextColor),
             ),
           ],
         ),

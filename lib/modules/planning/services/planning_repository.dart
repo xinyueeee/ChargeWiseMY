@@ -216,12 +216,6 @@ class PlanningRepository {
     return '${stations.length}-${hash.toRadixString(16).padLeft(8, '0')}';
   }
 
-  /// Single remote seam used by [InfrastructureSyncCoordinator].
-  ///
-  /// The source is chosen once at construction from [useMevnetApi]. There is
-  /// deliberately no silent runtime fallback from the API to Supabase: when a
-  /// refresh fails the coordinator keeps serving the SQLite snapshot, which is
-  /// the only offline path the application relies on.
   Future<List<ChargingStation>> _loadRemoteStations(String status) =>
       _useMevnetApi
           ? _getStationsFromMevnetApi(status: status)

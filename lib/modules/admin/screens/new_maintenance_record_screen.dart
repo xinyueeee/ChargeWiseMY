@@ -5,12 +5,6 @@ import '../../planning/widgets/planning_widgets.dart';
 import '../models/maintenance_record.dart';
 import '../viewmodels/admin_feedback_viewmodel.dart';
 
-/// Create + edit a [MaintenanceRecord] — dual-purpose like
-/// `NewProposalScreen`/`NewReportScreen`. When [reportId] (or [record] with
-/// a linked report) is set, the linked report is shown read-only and saving
-/// drives its status forward (see `AdminFeedbackViewModel`/
-/// `FeedbackAdminRepository`). See MODULE3_ADMIN_IMPLEMENTATION_PLAN.md
-/// §6.6.
 class NewMaintenanceRecordScreen extends StatefulWidget {
   const NewMaintenanceRecordScreen({
     super.key,
@@ -24,9 +18,6 @@ class NewMaintenanceRecordScreen extends StatefulWidget {
   final String? reportId;
   final String? stationId;
 
-  /// Read-only label for the linked report shown at the top of the form
-  /// (e.g. "Broken Connector · IOI City Mall") when creating a new record
-  /// from `AdminReportDetailsScreen`.
   final String? reportSummary;
 
   bool get _editing => record != null;
@@ -95,8 +86,9 @@ class _NewMaintenanceRecordScreenState
           technicianName: _technicianController.text.trim().isEmpty
               ? null
               : _technicianController.text.trim(),
-          etaLabel:
-              _etaController.text.trim().isEmpty ? null : _etaController.text.trim(),
+          etaLabel: _etaController.text.trim().isEmpty
+              ? null
+              : _etaController.text.trim(),
           cost: cost,
         );
       } else {
@@ -110,8 +102,9 @@ class _NewMaintenanceRecordScreenState
           technicianName: _technicianController.text.trim().isEmpty
               ? null
               : _technicianController.text.trim(),
-          etaLabel:
-              _etaController.text.trim().isEmpty ? null : _etaController.text.trim(),
+          etaLabel: _etaController.text.trim().isEmpty
+              ? null
+              : _etaController.text.trim(),
           cost: cost,
         );
       }
@@ -119,7 +112,9 @@ class _NewMaintenanceRecordScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            widget._editing ? 'Maintenance record updated.' : 'Maintenance record logged.',
+            widget._editing
+                ? 'Maintenance record updated.'
+                : 'Maintenance record logged.',
           ),
         ),
       );
@@ -130,7 +125,8 @@ class _NewMaintenanceRecordScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Unable to save the maintenance record. Please try again.'),
+          content:
+              Text('Unable to save the maintenance record. Please try again.'),
         ),
       );
     } finally {
@@ -183,7 +179,9 @@ class _NewMaintenanceRecordScreenState
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
           title: Text(
-            widget._editing ? 'Edit Maintenance Record' : 'Log Maintenance Record',
+            widget._editing
+                ? 'Edit Maintenance Record'
+                : 'Log Maintenance Record',
             style: planningAppBarTitleStyle,
           ),
           centerTitle: true,
@@ -296,7 +294,8 @@ class _NewMaintenanceRecordScreenState
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _costController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                     labelText: 'Cost (RM)',
                     hintText: 'Optional',
@@ -315,7 +314,8 @@ class _NewMaintenanceRecordScreenState
                             color: Colors.white,
                           ),
                         )
-                      : Text(widget._editing ? 'Save Changes' : 'Log Maintenance'),
+                      : Text(
+                          widget._editing ? 'Save Changes' : 'Log Maintenance'),
                 ),
               ],
             ),

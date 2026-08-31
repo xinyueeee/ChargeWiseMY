@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import '../models/proposal.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// A small, factual payload derived only from deterministic Gap Analysis.
 class GapAiAnalysisContext {
   const GapAiAnalysisContext({
     required this.state,
@@ -25,7 +24,8 @@ class GapAiAnalysisContext {
     GapArea area, {
     String? displayName,
     PlannedInfrastructureContext? plannedInfrastructure,
-  }) => GapAiAnalysisContext(
+  }) =>
+      GapAiAnalysisContext(
         state: area.state,
         areaName: displayName ?? area.name,
         analysisProfile: area.analysisProfileId,
@@ -77,7 +77,8 @@ class GapAiAnalysisContext {
             plannedInfrastructure?.nearbyLocationCount ?? 0,
         'nearbyMevnetProposedEvcbCount':
             plannedInfrastructure?.nearbyProposedChargerCount ?? 0,
-        'plannedNearbyRadiusKm': plannedInfrastructure?.radiusKm ?? nearbyRadiusKm,
+        'plannedNearbyRadiusKm':
+            plannedInfrastructure?.radiusKm ?? nearbyRadiusKm,
       };
 }
 
@@ -103,8 +104,11 @@ class GapAiAnalysisResult {
         nextStep.trim().isEmpty) {
       throw const FormatException('Invalid Gap AI response.');
     }
-    final items = considerations.whereType<String>().map((item) => item.trim())
-        .where((item) => item.isNotEmpty).toList(growable: false);
+    final items = considerations
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
     if (items.isEmpty || items.length > 3) {
       throw const FormatException('Invalid AI considerations.');
     }
@@ -181,7 +185,6 @@ class SupabaseGapAiAnalysisService implements GapAiAnalysisService {
   }
 }
 
-/// Safe default until a server-side function owns the model credential.
 class UnconfiguredGapAiAnalysisService implements GapAiAnalysisService {
   const UnconfiguredGapAiAnalysisService();
 

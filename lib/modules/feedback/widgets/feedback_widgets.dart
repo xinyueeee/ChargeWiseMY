@@ -4,28 +4,12 @@ import '../../planning/widgets/planning_widgets.dart'
     show AppCard, green, blue, planningTextColor, planningMutedTextColor;
 import '../models/fault_report.dart';
 
-// Reuses the app's existing design tokens (green/blue/text colors, AppCard)
-// from planning_widgets.dart rather than redefining them — see
-// MODULE3_USER_IMPLEMENTATION_PLAN.md §2 for why that cross-module import is
-// consistent with the rest of the codebase.
-
 const orange = Color(0xFFFF9F43);
 const purple = Color(0xFF8B5CF6);
 const red = Color(0xFFE74C3C);
 
-/// Display label for a report's status. Identity function today (the four
-/// statuses — Submitted/Verified/In Progress/Resolved, see
-/// `FaultReport._displayStatus` — are shown as-is on both sides of the app),
-/// kept as a named call so call sites read the same whether or not a future
-/// relabeling is needed again.
 String feedbackStatusLabel(String status) => status;
 
-/// Matches the admin dashboard's 4-stage pipeline coloring
-/// (MODULE3_ADMIN_IMPLEMENTATION_PLAN.md): Submitted = red (new, unreviewed),
-/// Verified = orange (admin-confirmed), In Progress = blue (maintenance
-/// underway), Resolved = green (done). Shared by the driver's
-/// `ReportStatusChip` and every admin status pill/marker, so a status means
-/// the same color everywhere in the app.
 Color feedbackStatusColor(String status) {
   switch (status) {
     case 'Verified':
@@ -34,7 +18,7 @@ Color feedbackStatusColor(String status) {
       return blue;
     case 'Resolved':
       return green;
-    default: // 'Submitted'
+    default:
       return red;
   }
 }
@@ -47,28 +31,22 @@ IconData feedbackStatusIcon(String status) {
       return Icons.build_outlined;
     case 'Resolved':
       return Icons.check_circle_outline;
-    default: // 'Submitted'
+    default:
       return Icons.mark_email_unread_outlined;
   }
 }
 
-/// Admin-only triage priority coloring — High/Medium/Low, drivers never see
-/// this. Same red/orange/green family as status, but priority and status are
-/// independent axes (a report can be High priority and still Submitted).
 Color feedbackPriorityColor(String priority) {
   switch (priority) {
     case 'High':
       return red;
     case 'Low':
       return green;
-    default: // 'Medium'
+    default:
       return orange;
   }
 }
 
-/// Status pill for a [FaultReport] — same rounded-pill shape as
-/// `StatusChip` in planning_widgets.dart, plus a leading icon to match the
-/// "Report an Issue" mockups.
 class ReportStatusChip extends StatelessWidget {
   const ReportStatusChip(this.status, {super.key});
   final String status;
@@ -108,9 +86,6 @@ class ReportStatusChip extends StatelessWidget {
   }
 }
 
-/// Priority pill for a [FaultReport] — admin-only (High/Medium/Low triage),
-/// same rounded-pill shape as `ReportStatusChip` but without a leading icon,
-/// matching the plain colored pills in the "Verify Reports" mockup.
 class PriorityChip extends StatelessWidget {
   const PriorityChip(this.priority, {super.key});
   final String priority;
@@ -142,17 +117,9 @@ class PriorityChip extends StatelessWidget {
   }
 }
 
-/// The 4-node progress header on "Report an Issue": Location → Issue
-/// Details → Review → Submitted. The visible form combines the mockup's
-/// numbered Location/Issue-Details/Photo/Contact sections onto one
-/// scrollable page rather than separate step screens (there's no design for
-/// a distinct interactive "Review" step), so this indicator instead tracks
-/// real progress through that one page: 0 while filling it in, 1 once the
-/// location is confirmed, 2 while submitting, 3 on the success screen.
 class ReportStepIndicator extends StatelessWidget {
   const ReportStepIndicator({super.key, required this.currentStep});
 
-  /// 0 = Location, 1 = Issue Details, 2 = Review, 3 = Submitted.
   final int currentStep;
 
   static const _labels = ['Location', 'Issue Details', 'Review', 'Submitted'];
@@ -229,8 +196,6 @@ class ReportStepIndicator extends StatelessWidget {
       );
 }
 
-/// A row item in the "Report Overview" stat strip: icon in a tinted
-/// circle, a number + label on one line, and a muted subtitle beneath.
 class ReportOverviewStat extends StatelessWidget {
   const ReportOverviewStat({
     super.key,
@@ -312,7 +277,6 @@ class ReportOverviewStat extends StatelessWidget {
       );
 }
 
-/// A tappable tinted card in the "Quick Actions" grid.
 class QuickActionCard extends StatelessWidget {
   const QuickActionCard({
     super.key,
@@ -345,7 +309,8 @@ class QuickActionCard extends StatelessWidget {
                 Container(
                   width: 36,
                   height: 36,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  decoration:
+                      BoxDecoration(color: color, shape: BoxShape.circle),
                   child: Icon(icon, color: Colors.white, size: 18),
                 ),
                 const SizedBox(height: 10),
@@ -381,10 +346,6 @@ class QuickActionCard extends StatelessWidget {
       );
 }
 
-/// Green hero card on the Feedback dashboard. There's no illustration asset
-/// in the repo (the app otherwise relies entirely on Material icons rather
-/// than custom art — see e.g. `ProposalCard`), so this substitutes a
-/// stylized icon composition for the mockup's car-at-charger illustration.
 class FeedbackHeroBanner extends StatelessWidget {
   const FeedbackHeroBanner({super.key, required this.onReportIssue});
   final VoidCallback onReportIssue;
@@ -497,9 +458,6 @@ class FeedbackHeroBanner extends StatelessWidget {
       );
 }
 
-/// A row in a report list — thumbnail, title/location/date, status pill.
-/// Used for both the dashboard's "My Recent Reports" preview and the full
-/// "My Reports" list.
 class ReportCard extends StatelessWidget {
   const ReportCard({
     super.key,
@@ -511,8 +469,6 @@ class ReportCard extends StatelessWidget {
   final FaultReport report;
   final VoidCallback onTap;
 
-  /// Relative-time label ("10 mins ago") shown above the chevron on the
-  /// full "My Reports" list; omitted on the dashboard preview.
   final String? trailingTime;
 
   @override
@@ -636,13 +592,20 @@ class ReportCard extends StatelessWidget {
 }
 
 const _monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
-/// No `intl` dependency in this project (see pubspec.yaml), so this hand
-/// rolls the "15 Jul 2025, 10:30 AM" format the mockups use rather than
-/// adding a new package just for this.
 String formatReportDate(DateTime? date) {
   if (date == null) return 'an unknown date';
   final local = date.toLocal();
@@ -653,8 +616,6 @@ String formatReportDate(DateTime? date) {
       '$hour12:$minute $period';
 }
 
-/// "10 mins ago" / "2 hours ago" / "3 days ago" style relative time, used
-/// on the full "My Reports" list.
 String formatRelativeTime(DateTime? date) {
   if (date == null) return '';
   final diff = DateTime.now().difference(date.toLocal());

@@ -3,20 +3,12 @@ import 'package:image_picker/image_picker.dart';
 import '../../../services/supabase_service.dart';
 import '../models/fault_report.dart';
 
-/// Wraps [SupabaseService] the same way `PlanningRepository` wraps it for
-/// proposals — converts between raw Supabase rows and [FaultReport], and
-/// orchestrates the two-step photo upload (insert the row, upload each
-/// photo under the generated `report_id`, then attach the resulting URLs).
 class FeedbackRepository {
   FeedbackRepository({SupabaseService? supabaseService})
       : _supabase = supabaseService ?? SupabaseService();
 
   final SupabaseService _supabase;
 
-  /// The signed-in driver's id. Every feedback screen sits behind
-  /// `AuthGate`, so a real session should always exist here; `mockUserId`
-  /// is only a defensive fallback, same as
-  /// `SupabaseService.uploadFaultReportPhoto`.
   String get currentUserId =>
       _supabase.client.auth.currentUser?.id ?? SupabaseService.mockUserId;
 
@@ -36,13 +28,6 @@ class FeedbackRepository {
     }
   }
 
-  /// [newPhotos] is `null` to leave the existing photos untouched entirely
-  /// (no re-upload, `photo_urls` isn't sent), or a (possibly empty) list of
-  /// newly-picked local files to upload. When [newPhotos] is non-null, the
-  /// final `photo_urls` is [keepPhotoUrls] (already-uploaded URLs the
-  /// caller wants to retain) plus the freshly uploaded ones — the caller
-  /// (`NewReportScreen` in edit mode) is responsible for tracking which
-  /// existing photos the driver removed vs kept.
   Future<void> updateReport(
     FaultReport report,
     List<XFile>? newPhotos, {
@@ -68,9 +53,6 @@ class FeedbackRepository {
           ),
       ]);
 
-  /// Fields the driver controls. Deliberately excludes `status` — only the
-  /// admin side writes that (see MODULE3_ADMIN_IMPLEMENTATION_PLAN.md); RLS
-  /// also only allows edits while a report is still `submitted`.
   Map<String, dynamic> _toValues(FaultReport report) => {
         'category': report.category,
         'description': report.description,

@@ -708,12 +708,6 @@ Map<String, Object> _runCoverageGapAnalysis(Map<String, Object> payload) {
   };
 }
 
-/// Groups records that represent the same physical charging location.
-///
-/// Input order is stable (station ID order in [analyze]). A record joins the
-/// nearest existing anchor only when it is within [radiusMetres] of that fixed
-/// anchor. Keeping the anchor fixed prevents transitive chains from merging
-/// two legitimately separate sites that are farther apart than the radius.
 Map<String, Object> _runDistributionCoverageAnalysis({
   required List<_Coordinate> stationRecords,
   required List<_Coordinate> stationSites,

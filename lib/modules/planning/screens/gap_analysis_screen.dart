@@ -732,8 +732,10 @@ class _AiResultCard extends StatelessWidget {
           const Row(children: [
             Icon(Icons.auto_awesome_outlined, color: green, size: 20),
             SizedBox(width: 8),
-            Text('AI Planning Insight',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+            Expanded(
+              child: Text('AI Planning Insight',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
           ]),
           const SizedBox(height: 8),
           Text(result.interpretation),

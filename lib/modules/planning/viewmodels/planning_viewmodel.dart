@@ -25,8 +25,7 @@ class PlanningViewModel extends ChangeNotifier {
 
   List<Proposal> proposals = [];
   List<ChargingStation> allMevnetLocations = [];
-  // Existing-only by design. Coverage analysis and teammate consumers that
-  // depend on `stations` must never receive Newly Proposed locations.
+
   List<ChargingStation> stations = [];
   List<PlannedChargingLocation> plannedLocations = [];
   List<ChargingStation> _selectedStations = const [];
@@ -102,8 +101,6 @@ class PlanningViewModel extends ChangeNotifier {
     return null;
   }
 
-  // Existing-only source. MapPanel decides whether national consumers render
-  // these locations or replace them with Planning summary badges.
   List<ChargingStation> get mapStations => _selectedStations;
   List<Proposal> get mapProposals =>
       _selectedState == malaysiaSelection ? const [] : _selectedMapProposals;
@@ -323,8 +320,7 @@ class PlanningViewModel extends ChangeNotifier {
             homeInfrastructureReady &&
             _priorityAreas.isEmpty) {
           initialCachedAnalysisStarted = true;
-          // Coverage analysis is local and Existing-only, so cached physical
-          // locations are safe to analyze while Supabase revalidates them.
+
           unawaited(runSelectedStateAnalysis());
         }
       }
@@ -621,8 +617,6 @@ class PlanningViewModel extends ChangeNotifier {
   Future<void> retrySelectedStateAnalysis() =>
       runSelectedStateAnalysis(force: true);
 
-  /// Debug/support hook only. Infrastructure is public shared data, so logout
-  /// does not clear this cache automatically.
   Future<void> clearInfrastructureCache() =>
       _repository.clearInfrastructureCache();
 
@@ -961,11 +955,7 @@ class PlanningViewModel extends ChangeNotifier {
   Future<void> _refreshProposalsAfterAuthChange(String? userId) async {
     try {
       await _refreshProposalsForUser(userId);
-    } catch (_) {
-      // The detailed, sanitized failure is logged by the shared refresh path.
-      // Infrastructure remains usable and the next authenticated refresh can
-      // reconcile the user's reaction selection.
-    }
+    } catch (_) {}
   }
 
   Future<void> _refreshProposalsForUser(String? userId) async {

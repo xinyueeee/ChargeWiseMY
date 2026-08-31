@@ -8,10 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-/// Unmodified ArcGIS attribute rows captured from the official MEVnet layer.
-/// A record-by-record comparison against the live FeatureServer on
-/// 2026-08-28 found zero attribute differences across all 4,477 records, so
-/// this fixture exercises the mapper against real source data offline.
 const String mevnetRawFixture = 'tools/mevnet/staging/mevnet_raw.json';
 
 const String fakeLayerUrl = 'https://example.test/FeatureServer/0';
@@ -32,8 +28,6 @@ void main() {
 
   group('station identity', () {
     test('reproduces the production deterministic UUID scheme', () {
-      // saved_stations and charging_sessions reference these identifiers.
-      // Changing the derivation would orphan every saved station.
       expect(mevnetStationId(1), '6d65766e-6574-5000-8000-000000000001');
       expect(mevnetStationId(4477), '6d65766e-6574-5000-8000-00000000117d');
       expect(mevnetStationId(255), '6d65766e-6574-5000-8000-0000000000ff');
@@ -76,7 +70,7 @@ void main() {
       expect(mevnetStateName('PULAU PINANG'), 'Penang');
       expect(mevnetStateName('SELANGOR'), 'Selangor');
       expect(mevnetStateName('  '), isNull);
-      // An unmapped future value is passed through, never silently dropped.
+
       expect(mevnetStateName('NEW STATE'), 'NEW STATE');
     });
 
@@ -113,8 +107,6 @@ void main() {
           'type_ac': null,
           'type_dc': 2,
           'number_of_existing_ev_charger_s': 2,
-          // Existing rows also publish planned chargers; production discards
-          // them so Existing markers never advertise future capacity.
           'number_of_proposed_ev_charger__': 4,
           'data_as': '31-Aug-24',
         },
@@ -138,7 +130,7 @@ void main() {
       expect(station.sourceUrl, mevnetLayerUrl);
       expect(station.dataDate, DateTime.utc(2024, 8, 31));
       expect(station.importedAt, importedAt);
-      // MEVnet publishes no verified postal address.
+
       expect(station.address, isNull);
     });
 
@@ -178,7 +170,8 @@ void main() {
   });
 
   group('row exclusion', () {
-    Map<String, dynamic> row(Map<String, dynamic> overrides) => <String, dynamic>{
+    Map<String, dynamic> row(Map<String, dynamic> overrides) =>
+        <String, dynamic>{
           'objectid': 10,
           'location': 'SITE',
           'latitude': 3.1,
@@ -346,9 +339,6 @@ void main() {
   group('MEVnetApiService request shape and pagination', () {
     late List<Uri> requests;
 
-    /// Serves the real fixture the way the ArcGIS FeatureServer does:
-    /// server-side `status` filtering plus `resultOffset` / `resultRecordCount`
-    /// paging over an `objectid ASC` ordering.
     MockClient fakeLayer(List<Map<String, dynamic>> rows, {int? cap}) {
       return MockClient((request) async {
         requests.add(request.url);
@@ -363,13 +353,15 @@ void main() {
         final matching = rows
             .where((row) => row['status'] == status)
             .toList(growable: false)
-          ..sort((a, b) => (a['objectid'] as int).compareTo(b['objectid'] as int));
+          ..sort(
+              (a, b) => (a['objectid'] as int).compareTo(b['objectid'] as int));
         final pageSize = cap == null ? count : (count < cap ? count : cap);
         final page = matching.skip(offset).take(pageSize).toList();
         return http.Response(
           jsonEncode(<String, dynamic>{
             'features': page
-                .map((attributes) => <String, dynamic>{'attributes': attributes})
+                .map(
+                    (attributes) => <String, dynamic>{'attributes': attributes})
                 .toList(),
             'exceededTransferLimit': offset + page.length < matching.length,
           }),
@@ -399,7 +391,7 @@ void main() {
       expect(query['orderByFields'], 'objectid ASC');
       expect(query['resultRecordCount'], '1000');
       expect(query['resultOffset'], '0');
-      // Lean field list only; outFields=* would cost roughly 4x the payload.
+
       expect(query['outFields'], mevnetRequestedFields.join(','));
       expect(query['outFields'], isNot(contains('*')));
       expect(query['outFields'], isNot(contains('number_of_ev_charger_by')));
@@ -421,7 +413,7 @@ void main() {
         stations.every((s) => s.status == ChargingStation.statusExisting),
         isTrue,
       );
-      // 1374 rows at 1000 per page: a full page then a short page.
+
       expect(requests, hasLength(2));
       expect(requests[0].queryParameters['resultOffset'], '0');
       expect(requests[1].queryParameters['resultOffset'], '1000');
@@ -434,10 +426,9 @@ void main() {
         clock: () => importedAt,
       );
 
-      final stations =
-          await service.getStations(status: ChargingStation.statusNewlyProposed);
+      final stations = await service.getStations(
+          status: ChargingStation.statusNewlyProposed);
 
-      // 3103 published rows, 3 with null coordinates.
       expect(stations, hasLength(3100));
       expect(
         stations.fold<int>(0, (sum, s) => sum + s.proposedChargerCount),
@@ -448,8 +439,6 @@ void main() {
 
     test('offset paging stays correct when the server caps a page short',
         () async {
-      // ArcGIS may return fewer rows than requested; the loop must advance by
-      // what it received, not by what it asked for.
       final service = MEVnetApiService(
         httpClient: fakeLayer(rawRows, cap: 300),
         layerUrl: fakeLayerUrl,
@@ -461,7 +450,7 @@ void main() {
 
       expect(stations, hasLength(1374));
       expect(stations.map((s) => s.id).toSet(), hasLength(1374));
-      // 300 per page: four full pages then a 174-row page.
+
       expect(requests, hasLength(5));
       expect(requests.last.queryParameters['resultOffset'], '1200');
     });
@@ -473,12 +462,12 @@ void main() {
         layerUrl: fakeLayerUrl,
       );
 
-      // Guards the interpolated `where` clause against injection.
       expect(
         () => service.getStations(status: "Existing' or '1'='1"),
         throwsArgumentError,
       );
-      expect(() => service.getStations(status: 'Approved'), throwsArgumentError);
+      expect(
+          () => service.getStations(status: 'Approved'), throwsArgumentError);
       expect(requests, isEmpty);
     });
   });
@@ -523,8 +512,6 @@ void main() {
         layerUrl: fakeLayerUrl,
       );
 
-      // An empty Existing result would be rejected by the sync coordinator
-      // anyway; failing loudly keeps the SQLite snapshot in place.
       expect(
         () => service.getStations(status: ChargingStation.statusExisting),
         throwsA(isA<MEVnetApiException>()),
@@ -565,7 +552,7 @@ void main() {
           var call = 0;
           return MockClient((_) async {
             call++;
-            // Two full pages then a short page: three requests, one client.
+
             final rows = call <= 2 ? 2 : 1;
             return http.Response(
               jsonEncode(<String, dynamic>{
@@ -608,8 +595,6 @@ void main() {
             throw const MEVnetTrustAnchorException('missing asset'),
       );
 
-      // The sync coordinator turns this into remoteFailed, which keeps any
-      // existing SQLite snapshot in place rather than wiping it.
       await expectLater(
         service.getStations(status: ChargingStation.statusExisting),
         throwsA(isA<MEVnetTrustAnchorException>()),
@@ -639,7 +624,7 @@ void main() {
         service.getStations(status: ChargingStation.statusExisting),
         throwsA(isA<MEVnetTrustAnchorException>()),
       );
-      // A later refresh must be able to recover.
+
       await service.getStations(status: ChargingStation.statusExisting);
 
       expect(attempts, 2);

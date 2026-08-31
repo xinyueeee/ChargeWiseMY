@@ -6,30 +6,16 @@ import 'package:http/http.dart' as http;
 import '../models/proposal.dart';
 import 'mevnet_http_client.dart';
 
-/// Selects the remote source for public charging infrastructure.
-///
-/// `true`  : official PLANMalaysia MEVnet ArcGIS REST API.
-/// `false` : the previous `public.charging_stations` Supabase loader.
-///
-/// This is a developer rollback switch only. The application never flips it at
-/// runtime and never falls back from the API to Supabase silently; a failed
-/// remote refresh keeps serving the SQLite cache exactly as before.
 const bool useMevnetApi = true;
 
-/// Official PLANMalaysia MEVnet EV charging layer. Anonymous, read-only
-/// (`capabilities: Query`), ArcGIS Server 10.91.
 const String mevnetLayerUrl =
     'https://gisdev.planmalaysia.gov.my/server/rest/services/Hosted/'
     'MEVnet_EVCB/FeatureServer/0';
 
 const String mevnetSourceName = 'MEVnet / PLANMalaysia';
 
-/// `maxRecordCount` published by the layer. Paging never requests more.
 const int mevnetPageSize = 1000;
 
-/// Only the attributes that map onto [ChargingStation] are requested. The
-/// layer also publishes 27 per-network columns plus unused survey columns;
-/// `outFields=*` costs roughly 6.9 MB per full pull against 1.6 MB here.
 const List<String> mevnetRequestedFields = <String>[
   'objectid',
   'location',
@@ -47,16 +33,11 @@ const List<String> mevnetRequestedFields = <String>[
   'data_as',
 ];
 
-/// Malaysia bounding box used by the reviewed production import. Keeping it
-/// here preserves parity with `public.charging_stations`, whose rows were
-/// inserted under `where coordinate_valid`.
 const double mevnetMinimumLatitude = 0.5;
 const double mevnetMaximumLatitude = 7.6;
 const double mevnetMinimumLongitude = 99.5;
 const double mevnetMaximumLongitude = 120.0;
 
-/// MEVnet publishes state names in upper case with `W.P.` prefixes. The app
-/// and the GeoJSON state boundaries use these display names.
 const Map<String, String> mevnetStateNames = <String, String>{
   'JOHOR': 'Johor',
   'KEDAH': 'Kedah',
@@ -91,9 +72,6 @@ const Map<String, int> _monthNumbers = <String, int>{
   'dec': 12,
 };
 
-/// Raised when the MEVnet service is reachable but does not return a usable
-/// feature page. The sync coordinator treats this like any other remote
-/// failure: the SQLite snapshot stays active.
 class MEVnetApiException implements Exception {
   const MEVnetApiException(this.message);
 
@@ -103,12 +81,6 @@ class MEVnetApiException implements Exception {
   String toString() => 'MEVnetApiException: $message';
 }
 
-/// Reads public charging infrastructure from the official PLANMalaysia MEVnet
-/// ArcGIS REST FeatureServer.
-///
-/// The service is anonymous and query-only, so Flutter calls it directly; no
-/// key is held and nothing can be written back. Supabase remains responsible
-/// for authentication, proposals, reactions, admin decisions and photos.
 class MEVnetApiService {
   MEVnetApiService({
     http.Client? httpClient,
@@ -122,8 +94,6 @@ class MEVnetApiService {
         _pageSize = pageSize,
         _clock = clock ?? DateTime.now;
 
-  /// Supplied by tests. When null the MEVnet-scoped TLS client is built lazily
-  /// on the first request, because loading the bundled trust anchor is async.
   final http.Client? _injectedClient;
   final Future<http.Client> Function() _clientFactory;
   Future<http.Client>? _pendingClient;
@@ -141,16 +111,11 @@ class MEVnetApiService {
     try {
       return await future;
     } catch (_) {
-      // Do not cache a failed build; a later refresh may succeed.
       _pendingClient = null;
       rethrow;
     }
   }
 
-  /// Returns every valid MEVnet location for [status], filtered server-side.
-  ///
-  /// [status] must be one of the two canonical MEVnet values so that no caller
-  /// can inject a `where` clause.
   Future<List<ChargingStation>> getStations({required String status}) async {
     if (status != ChargingStation.statusExisting &&
         status != ChargingStation.statusNewlyProposed) {
@@ -189,12 +154,10 @@ class MEVnetApiService {
         'exceededTransferLimit=${page.exceededTransferLimit}, '
         'duration=${pageStopwatch.elapsedMilliseconds}ms.',
       );
-      // An empty page always terminates the loop, so paging cannot spin.
+
       if (page.features.isEmpty) break;
       offset += page.features.length;
-      // ArcGIS may return fewer rows than requested while more remain, so a
-      // short page only ends paging when the server also stops advertising a
-      // transfer limit. Advancing by the received count keeps offsets exact.
+
       final maybeMoreRows =
           page.exceededTransferLimit || page.features.length >= _pageSize;
       if (!maybeMoreRows) break;
@@ -245,7 +208,7 @@ class MEVnetApiService {
         'MEVnet query returned an unexpected payload.',
       );
     }
-    // ArcGIS reports query errors inside an HTTP 200 body.
+
     final error = decoded['error'];
     if (error != null) {
       throw MEVnetApiException('MEVnet query failed: $error');
@@ -288,12 +251,6 @@ class _MevnetPage {
   final bool exceededTransferLimit;
 }
 
-/// Converts one ArcGIS attribute row into the existing [ChargingStation]
-/// model, reproducing the reviewed production import exactly.
-///
-/// Returns `null` when the row must be excluded: an unusable `objectid`, a
-/// status outside the two canonical MEVnet values, or a coordinate that fails
-/// either [CoordinateParser] or the Malaysia bounding box.
 @visibleForTesting
 ChargingStation? mapMevnetAttributes(
   Map<String, dynamic> attributes, {
@@ -317,8 +274,6 @@ ChargingStation? mapMevnetAttributes(
     return null;
   }
 
-  // Charger type is derived from the published AC/DC columns before the
-  // status-based zeroing below, matching the production import.
   final acChargers = _asCount(attributes['type_ac']);
   final dcChargers = _asCount(attributes['type_dc']);
   final existingChargers =
@@ -337,8 +292,6 @@ ChargingStation? mapMevnetAttributes(
       acChargerCount: acChargers,
       dcChargerCount: dcChargers,
     ),
-    // MEVnet publishes no verified postal address. A fabricated address is
-    // never presented; PBT and state remain in their own fields.
     address: null,
     chargerCount: isExisting ? existingChargers : 0,
     acChargerCount: isExisting ? acChargers : 0,
@@ -357,11 +310,6 @@ ChargingStation? mapMevnetAttributes(
   );
 }
 
-/// Stable station identifier shared with `public.charging_stations`.
-///
-/// `saved_stations` and `charging_sessions` reference these values, so the
-/// derivation must stay byte-identical to the reviewed production import: a
-/// fixed UUID namespace whose final 12 hex digits encode the MEVnet OBJECTID.
 @visibleForTesting
 String mevnetStationId(int objectId) =>
     '6d65766e-6574-5000-8000-${objectId.toRadixString(16).padLeft(12, '0')}';
@@ -384,7 +332,6 @@ String? mevnetStateName(Object? value) {
   return mevnetStateNames[raw.toUpperCase()] ?? raw;
 }
 
-/// Parses the MEVnet `data_as` survey date, published as `d-MMM-yy`.
 @visibleForTesting
 DateTime? mevnetDataDate(Object? value) {
   final raw = value?.toString().trim() ?? '';
@@ -405,8 +352,6 @@ int? _asInteger(Object? value) {
   return int.tryParse(value?.toString().trim() ?? '');
 }
 
-/// MEVnet leaves count columns null rather than zero. The production table
-/// stores those as `0`, so the model must too.
 int _asCount(Object? value) {
   final parsed = _asInteger(value);
   if (parsed == null || parsed < 0) return 0;

@@ -1,8 +1,5 @@
 import '../../planning/models/proposal.dart' show CoordinateParser;
 
-/// Fixed category options for a fault report — mirrors how `charger_type`
-/// is offered as a fixed dropdown on the proposal form (see
-/// `new_proposal_screen.dart`), rather than free text.
 const List<String> kFaultReportCategories = [
   'Broken Connector',
   'Not Charging',
@@ -16,21 +13,10 @@ const List<String> kFaultReportCategories = [
   'Other',
 ];
 
-/// Admin-only triage priorities — drivers never set or see this (the
-/// "Report an Issue" form has no priority input). See
-/// MODULE3_ADMIN_IMPLEMENTATION_PLAN.md.
 const List<String> kFaultReportPriorities = ['High', 'Medium', 'Low'];
 
-/// Up to this many photos may be attached to a single report (matches the
-/// "Report an Issue" mockup's photo picker).
 const int kFaultReportMaxPhotos = 3;
 
-/// A driver-submitted fault report against a charging station or location.
-///
-/// Same shape as `Proposal` in `planning/models/proposal.dart`: a plain
-/// class with a `fromSupabase` factory and a `copyWith`-style helper for the
-/// location step. `CoordinateParser` is reused from that file rather than
-/// duplicated — it's a generic lat/lng validator, not proposal-specific.
 class FaultReport {
   FaultReport({
     required this.id,
@@ -53,23 +39,14 @@ class FaultReport {
 
   final String id, category, description;
 
-  /// Human-display status ('Submitted' / 'Verified' / 'In Progress' /
-  /// 'Resolved') — the raw DB value is lowercase/snake_case
-  /// (`fault_reports.status`), mapped here for display. When writing back to
-  /// Supabase, map it back down (see `AdminFeedbackRepository`'s reverse
-  /// mapping — drivers never write status directly).
   String status;
 
-  /// Human-display priority ('High' / 'Medium' / 'Low'), admin-set only.
   String priority;
 
   final String? stationId;
 
-  /// Up to [kFaultReportMaxPhotos] public Storage URLs, in upload order.
   final List<String> photoUrls;
 
-  /// Optional phone/email the driver leaves in case an admin needs to
-  /// follow up — separate from their account email.
   final String? contactInfo;
 
   final String locationLabel;
@@ -80,11 +57,6 @@ class FaultReport {
   final DateTime? createdAt;
   final String? userId;
 
-  /// The reporter's display name — not part of `fault_reports` itself (only
-  /// `user_id` is stored there), so this stays null unless a caller joins
-  /// against `users` and attaches it via [copyWithReporter]. Only the admin
-  /// report list/details screens need this; drivers never see who filed a
-  /// report other than themselves.
   final String? reporterName;
 
   factory FaultReport.fromSupabase(Map<String, dynamic> row) => FaultReport(
@@ -106,9 +78,6 @@ class FaultReport {
         userId: row['user_id'] as String?,
       );
 
-  /// Returns a copy with location fields overwritten (used once the picked
-  /// point resolves to a state / nearest town / display label via
-  /// `ProposalLocationService.resolve()`).
   FaultReport copyWithLocation({
     required String locationLabel,
     required String state,
@@ -120,9 +89,6 @@ class FaultReport {
         nearestTown: nearestTown,
       );
 
-  /// Returns a copy with the reporter's display name attached — used by
-  /// `AdminFeedbackRepository` after joining against `users`, since
-  /// `fault_reports` itself only stores `user_id`.
   FaultReport copyWithReporter(String reporterName) =>
       _copyWith(reporterName: reporterName);
 

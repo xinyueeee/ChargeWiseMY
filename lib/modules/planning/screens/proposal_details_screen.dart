@@ -582,11 +582,13 @@ class _SectionLabel extends StatelessWidget {
         children: [
           Icon(icon, size: 19, color: green),
           const SizedBox(width: 8),
-          Text(label,
-              style: const TextStyle(
-                  color: planningTextColor,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800)),
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(
+                    color: planningTextColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800)),
+          ),
         ],
       );
 }

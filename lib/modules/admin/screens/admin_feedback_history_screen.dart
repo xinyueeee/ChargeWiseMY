@@ -8,9 +8,6 @@ import '../viewmodels/admin_feedback_viewmodel.dart';
 import '../widgets/admin_feedback_widgets.dart';
 import 'admin_report_details_screen.dart';
 
-/// "History" — every report regardless of status, newest first, browsable
-/// with search and a status filter. No verify/resolve actions here; it's a
-/// read-only audit view (act on a report from `AdminReportDetailsScreen`).
 class AdminFeedbackHistoryScreen extends StatefulWidget {
   const AdminFeedbackHistoryScreen({super.key});
 
@@ -19,9 +16,15 @@ class AdminFeedbackHistoryScreen extends StatefulWidget {
       _AdminFeedbackHistoryScreenState();
 }
 
-class _AdminFeedbackHistoryScreenState
-    extends State<AdminFeedbackHistoryScreen> with SingleTickerProviderStateMixin {
-  static const _tabs = ['All', 'Submitted', 'Verified', 'In Progress', 'Resolved'];
+class _AdminFeedbackHistoryScreenState extends State<AdminFeedbackHistoryScreen>
+    with SingleTickerProviderStateMixin {
+  static const _tabs = [
+    'All',
+    'Submitted',
+    'Verified',
+    'In Progress',
+    'Resolved'
+  ];
   static const _pageSize = 8;
 
   late final TabController _tabController;
@@ -145,7 +148,8 @@ class _AdminFeedbackHistoryScreenState
                         : ListView.separated(
                             padding: const EdgeInsets.all(16),
                             itemCount: pageItems.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final report = pageItems[index];
                               return AdminReportListTile(
@@ -160,8 +164,8 @@ class _AdminFeedbackHistoryScreenState
                                 chip: ReportStatusChip(report.status),
                                 onTap: () => Navigator.of(context).push(
                                   MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        AdminReportDetailsScreen(report: report),
+                                    builder: (_) => AdminReportDetailsScreen(
+                                        report: report),
                                   ),
                                 ),
                               );

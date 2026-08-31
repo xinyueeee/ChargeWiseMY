@@ -340,11 +340,13 @@ class AdminProposalDetailsScreen extends StatelessWidget {
         children: [
           Icon(icon, size: 19, color: green),
           const SizedBox(width: 8),
-          Text(title,
-              style: const TextStyle(
-                  color: planningTextColor,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800)),
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(
+                    color: planningTextColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800)),
+          ),
         ],
       );
 

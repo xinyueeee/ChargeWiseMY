@@ -4,13 +4,6 @@ import '../../feedback/models/fault_report.dart';
 import '../models/maintenance_record.dart';
 import '../services/feedback_admin_repository.dart';
 
-/// Mirrors `PlanningViewModel`'s / `FeedbackViewModel`'s shape: a single
-/// `ChangeNotifier` the admin feedback screens read via
-/// `Consumer`/`context.watch`, backed by [FeedbackAdminRepository]. Scoped
-/// to the "Feedback" tab's subtree in `AdminShell` — never provided
-/// globally, so a driver session never constructs one or issues
-/// admin-scoped queries RLS would reject anyway (see
-/// MODULE3_ADMIN_IMPLEMENTATION_PLAN.md §7).
 class AdminFeedbackViewModel extends ChangeNotifier {
   AdminFeedbackViewModel(this._repository);
   final FeedbackAdminRepository _repository;
@@ -37,7 +30,8 @@ class AdminFeedbackViewModel extends ChangeNotifier {
     }
   }
 
-  int get submittedCount => reports.where((r) => r.status == 'Submitted').length;
+  int get submittedCount =>
+      reports.where((r) => r.status == 'Submitted').length;
   int get verifiedCount => reports.where((r) => r.status == 'Verified').length;
   int get inProgressCount =>
       reports.where((r) => r.status == 'In Progress').length;
@@ -47,8 +41,6 @@ class AdminFeedbackViewModel extends ChangeNotifier {
   int get openMaintenanceCount =>
       maintenanceRecords.where((r) => r.isOngoing).length;
 
-  /// Reports still awaiting an admin's first decision — what "Verify
-  /// Reports" lists.
   List<FaultReport> get reportsToVerify =>
       reports.where((r) => r.status == 'Submitted').toList();
 
@@ -130,9 +122,6 @@ class AdminFeedbackViewModel extends ChangeNotifier {
     await load();
   }
 
-  /// Looks up a report by id — used by maintenance screens that only have a
-  /// `reportId` on hand (e.g. showing the linked report's category/location
-  /// inline on a maintenance card).
   FaultReport? reportById(String? reportId) {
     if (reportId == null) return null;
     for (final report in reports) {

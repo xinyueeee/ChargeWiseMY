@@ -37,51 +37,46 @@ class _AdminShellState extends State<AdminShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FC),
-        appBar: _tabIndex >= 3
-            ? AppBar(
-                backgroundColor: Colors.white,
-                elevation: 0,
-                foregroundColor: _textColor,
-                titleSpacing: 20,
-                title: const Text(
-                  'Admin Portal',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
-                  ),
+      backgroundColor: const Color(0xFFF8F9FC),
+      appBar: _tabIndex >= 3
+          ? AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              foregroundColor: _textColor,
+              titleSpacing: 20,
+              title: const Text(
+                'Admin Portal',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _textColor,
                 ),
-                actions: [_adminBadge(), _logoutButton()],
-              )
-            : null,
-        body: SafeArea(
-          // Same breakpoint and rail pattern as the Driver root screens
-          // (`DriverNavigationShell`, >=700 logical px): a bottom bar wastes
-          // vertical space once the device is wide enough for a rail, and
-          // Admin previously kept the bottom bar in landscape/tablet
-          // regardless of width.
-          child: useDriverNavigationRail(context)
-              ? Row(
-                  children: [
-                    _AdminNavigationRail(
-                      selectedIndex: _tabIndex,
-                      tabs: _tabs,
-                      onTap: (index) => setState(() => _tabIndex = index),
-                    ),
-                    const VerticalDivider(width: 1, color: Color(0xFFE9EDF3)),
-                    Expanded(child: _adminTabs()),
-                  ],
-                )
-              : _adminTabs(),
-        ),
-        bottomNavigationBar: useDriverNavigationRail(context)
-            ? null
-            : _AdminBottomNav(
-                selectedIndex: _tabIndex,
-                tabs: _tabs,
-                onTap: (index) => setState(() => _tabIndex = index),
               ),
+              actions: [_adminBadge(), _logoutButton()],
+            )
+          : null,
+      body: SafeArea(
+        child: useDriverNavigationRail(context)
+            ? Row(
+                children: [
+                  _AdminNavigationRail(
+                    selectedIndex: _tabIndex,
+                    tabs: _tabs,
+                    onTap: (index) => setState(() => _tabIndex = index),
+                  ),
+                  const VerticalDivider(width: 1, color: Color(0xFFE9EDF3)),
+                  Expanded(child: _adminTabs()),
+                ],
+              )
+            : _adminTabs(),
+      ),
+      bottomNavigationBar: useDriverNavigationRail(context)
+          ? null
+          : _AdminBottomNav(
+              selectedIndex: _tabIndex,
+              tabs: _tabs,
+              onTap: (index) => setState(() => _tabIndex = index),
+            ),
     );
   }
 
@@ -161,7 +156,8 @@ class _AdminAssistantEntry extends StatelessWidget {
                 final assessment = viewModel.assessmentFor(proposal);
                 return Card(
                   child: ListTile(
-                    leading: const Icon(Icons.psychology_outlined, color: _green),
+                    leading:
+                        const Icon(Icons.psychology_outlined, color: _green),
                     title: Text(
                       proposal.city,
                       maxLines: 1,
@@ -202,7 +198,8 @@ class _ComingSoon extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.construction_outlined, size: 36, color: _mutedTextColor),
+          const Icon(Icons.construction_outlined,
+              size: 36, color: _mutedTextColor),
           const SizedBox(height: 10),
           Text(
             '$label - coming soon',
@@ -220,8 +217,6 @@ class _AdminTab {
   final String label;
 }
 
-/// Wide-layout equivalent of [_AdminBottomNav], following the same rail
-/// styling `DriverNavigationShell` uses for the Driver root screens.
 class _AdminNavigationRail extends StatelessWidget {
   const _AdminNavigationRail({
     required this.selectedIndex,
@@ -238,9 +233,6 @@ class _AdminNavigationRail extends StatelessWidget {
         right: false,
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
-            // Short landscape + enlarged text both make each destination
-            // taller; scrolling keeps every tab reachable instead of
-            // overflowing, matching DriverNavigationShell's rail.
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: IntrinsicHeight(

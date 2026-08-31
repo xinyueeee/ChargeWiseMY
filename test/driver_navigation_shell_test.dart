@@ -3,7 +3,6 @@ import 'package:chargewise_my/modules/planning/widgets/planning_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Sizes that matter for the Driver destinations, in logical pixels.
 const Size phonePortrait = Size(411, 891);
 const Size phoneLandscape = Size(891, 411);
 const Size tabletPortrait = Size(800, 1280);
@@ -54,7 +53,7 @@ void main() {
   group('breakpoint', () {
     test('is a sensible width for phone landscape and tablets', () {
       expect(kDriverNavigationRailBreakpoint, 700);
-      // Phone portrait stays below; phone landscape and tablets sit above.
+
       expect(phonePortrait.width < kDriverNavigationRailBreakpoint, isTrue);
       expect(phoneLandscape.width >= kDriverNavigationRailBreakpoint, isTrue);
       expect(tabletPortrait.width >= kDriverNavigationRailBreakpoint, isTrue);
@@ -189,7 +188,7 @@ void main() {
 
       final railRect = tester.getRect(find.byType(NavigationRail));
       final contentRect = tester.getRect(find.text('screen content'));
-      // Content begins to the right of the rail, never underneath it.
+
       expect(contentRect.left, greaterThanOrEqualTo(railRect.right));
     });
 

@@ -15,8 +15,6 @@ enum ProposalReaction {
     };
   }
 
-  /// Tapping an already-selected response clears it; tapping the other
-  /// response replaces the previous database row through the unique upsert.
   static ProposalReaction? selectionAfterTap(
     ProposalReaction? current,
     ProposalReaction tapped,
@@ -114,8 +112,6 @@ class Proposal {
         supports: supportCount,
         opposes: opposeCount,
         status: databaseStatus(row['status'] as String?),
-        // The current schema has no area-type column. Keep this presentation
-        // default until an `area_type` column is added later.
         area: 'Residential Area',
         charger: row['charger_type'] as String? ?? 'AC Charger',
         distance: nearestStationKm,
@@ -218,8 +214,6 @@ class Proposal {
             replaceReaction ? currentUserReaction : this.currentUserReaction,
       );
 
-  /// Normalizes only historic presentation variants when reading data. All
-  /// runtime values use the database constraint's exact values.
   static String databaseStatus(String? value) {
     switch (value?.trim().toLowerCase().replaceAll('_', ' ')) {
       case 'approved':
@@ -257,8 +251,6 @@ class Proposal {
         _ => false,
       };
 
-  /// Operational queue order: unresolved review work first, terminal records
-  /// later. Dates provide deterministic newest-first ordering within a status.
   static int compareForReviewQueue(Proposal a, Proposal b) {
     final statusComparison =
         statusPriority(a.status).compareTo(statusPriority(b.status));
@@ -276,8 +268,6 @@ class Proposal {
         _ => 4,
       };
 
-  // Retained for existing assessment/dashboard consumers. Reaction rows are
-  // already included in [supports], so no local adjustment is required.
   int get displayedSupports => supports;
 }
 
@@ -443,9 +433,6 @@ class ChargingStation {
   final String? status;
   final String? indoorOutdoor;
 
-  /// A database row represents one physical MEVnet location. The ViewModel
-  /// admits only `Existing` rows to coverage analysis; `Newly Proposed` rows
-  /// remain separate planning context. Counts never expand into extra markers.
   String get planningInfoWindowSnippet {
     final context = <String>[
       if (pbt?.trim().isNotEmpty == true) pbt!.trim(),
@@ -494,9 +481,6 @@ class ChargingStation {
       status == other.status &&
       indoorOutdoor == other.indoorOutdoor;
 
-  /// Serializes the public MEVnet infrastructure fields used by the local
-  /// SQLite cache. Supabase remains authoritative; this representation is
-  /// never uploaded back to the cloud.
   Map<String, Object?> toCacheMap({required DateTime cachedAt}) =>
       <String, Object?>{
         'station_id': id,
@@ -562,9 +546,6 @@ class ChargingStation {
   }
 }
 
-/// One official future charging location published by PLANMalaysia MEVnet.
-/// This is planning context only and must never be passed to current-coverage
-/// calculations as an operational [ChargingStation].
 class PlannedChargingLocation {
   const PlannedChargingLocation({
     required this.id,

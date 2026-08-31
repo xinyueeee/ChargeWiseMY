@@ -6,12 +6,6 @@ import '../../feedback/widgets/feedback_widgets.dart' show formatReportDate;
 import '../../planning/widgets/planning_widgets.dart'
     show AppCard, planningTextColor, planningMutedTextColor;
 
-/// Circular-icon stat tile for the admin feedback dashboard — mirrors the
-/// four-tile row in the design mockup (icon in a tinted circle, big colored
-/// number, label underneath). Deliberately doesn't show a "+X% vs last 7
-/// days" trend caption like the mockup: that would need historical
-/// snapshots the app doesn't collect, and a fabricated delta would be worse
-/// than none.
 class AdminStatTile extends StatelessWidget {
   const AdminStatTile({
     super.key,
@@ -84,9 +78,6 @@ class DonutSegment {
   final Color color;
 }
 
-/// "Reports by Status" donut — hand-rolled with `CustomPainter` rather than
-/// adding a charting package for one chart (no `fl_chart`/similar dependency
-/// exists in pubspec.yaml today).
 class AdminDonutChart extends StatelessWidget {
   const AdminDonutChart({super.key, required this.segments});
 
@@ -222,10 +213,6 @@ class _DonutPainter extends CustomPainter {
       oldDelegate.segments != segments || oldDelegate.total != total;
 }
 
-/// Shared list-item shape for admin report browsing — the dashboard's
-/// "Recent Fault Reports", "Verify Reports", and "History" all show the
-/// same photo/title/location/date row, just with different trailing chips
-/// and (optionally) an action-button row underneath.
 class AdminReportListTile extends StatelessWidget {
   const AdminReportListTile({
     super.key,
@@ -267,7 +254,8 @@ class AdminReportListTile extends StatelessWidget {
                       height: 56,
                       child: photoUrl == null
                           ? Container(
-                              color: planningMutedTextColor.withValues(alpha: .1),
+                              color:
+                                  planningMutedTextColor.withValues(alpha: .1),
                               child: const Icon(
                                 Icons.ev_station,
                                 color: planningMutedTextColor,
@@ -277,8 +265,8 @@ class AdminReportListTile extends StatelessWidget {
                               photoUrl!,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => Container(
-                                color:
-                                    planningMutedTextColor.withValues(alpha: .1),
+                                color: planningMutedTextColor.withValues(
+                                    alpha: .1),
                                 child: const Icon(
                                   Icons.broken_image_outlined,
                                   color: planningMutedTextColor,
@@ -312,7 +300,9 @@ class AdminReportListTile extends StatelessWidget {
                             const SizedBox(width: 3),
                             Expanded(
                               child: Text(
-                                location.isEmpty ? 'Unknown location' : location,
+                                location.isEmpty
+                                    ? 'Unknown location'
+                                    : location,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -365,9 +355,6 @@ class AdminReportListTile extends StatelessWidget {
       );
 }
 
-/// "Maintenance Ongoing" list item — the report/station header row plus the
-/// colored technician/ETA bar underneath (green while on site or scheduled,
-/// red once delayed).
 class AdminMaintenanceListTile extends StatelessWidget {
   const AdminMaintenanceListTile({
     super.key,
@@ -413,7 +400,8 @@ class AdminMaintenanceListTile extends StatelessWidget {
                       height: 56,
                       child: photoUrl == null
                           ? Container(
-                              color: planningMutedTextColor.withValues(alpha: .1),
+                              color:
+                                  planningMutedTextColor.withValues(alpha: .1),
                               child: const Icon(
                                 Icons.build_outlined,
                                 color: planningMutedTextColor,
@@ -423,8 +411,8 @@ class AdminMaintenanceListTile extends StatelessWidget {
                               photoUrl!,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => Container(
-                                color:
-                                    planningMutedTextColor.withValues(alpha: .1),
+                                color: planningMutedTextColor.withValues(
+                                    alpha: .1),
                                 child: const Icon(
                                   Icons.broken_image_outlined,
                                   color: planningMutedTextColor,
@@ -458,7 +446,9 @@ class AdminMaintenanceListTile extends StatelessWidget {
                             const SizedBox(width: 3),
                             Expanded(
                               child: Text(
-                                location.isEmpty ? 'Unknown location' : location,
+                                location.isEmpty
+                                    ? 'Unknown location'
+                                    : location,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -492,7 +482,8 @@ class AdminMaintenanceListTile extends StatelessWidget {
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: .08),
                   borderRadius: BorderRadius.circular(8),
@@ -530,10 +521,6 @@ class AdminMaintenanceListTile extends StatelessWidget {
       );
 }
 
-/// Compact numbered-page control shared by the admin list screens — same
-/// idea as the driver `_Pagination` in `my_reports_screen.dart`, duplicated
-/// (not exported — that one's file-private) rather than reworked into a
-/// shared widget across driver/admin modules for one small control.
 class AdminPagination extends StatelessWidget {
   const AdminPagination({
     super.key,
@@ -567,13 +554,10 @@ class AdminPagination extends StatelessWidget {
                 height: 32,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: i == page
-                      ? planningTextColor
-                      : Colors.transparent,
+                  color: i == page ? planningTextColor : Colors.transparent,
                   border: Border.all(
-                    color: i == page
-                        ? planningTextColor
-                        : const Color(0xFFE0E4EA),
+                    color:
+                        i == page ? planningTextColor : const Color(0xFFE0E4EA),
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -588,7 +572,8 @@ class AdminPagination extends StatelessWidget {
             ),
           ),
         IconButton(
-          onPressed: page < pageCount - 1 ? () => onPageChanged(page + 1) : null,
+          onPressed:
+              page < pageCount - 1 ? () => onPageChanged(page + 1) : null,
           icon: const Icon(Icons.chevron_right),
         ),
       ],
@@ -596,10 +581,6 @@ class AdminPagination extends StatelessWidget {
   }
 }
 
-/// Small "Admin" pill shown in the corner of every admin feedback screen —
-/// same shape as `AdminShell`'s own badge (that one's file-private), reused
-/// here so pushed sub-screens (Verify Reports, Maintenance Ongoing, Report
-/// Details) carry the same chrome as the tab's root dashboard.
 class AdminBadge extends StatelessWidget {
   const AdminBadge({super.key});
 
@@ -630,10 +611,8 @@ class AdminBadge extends StatelessWidget {
       );
 }
 
-/// "Submitted on {date}" label used across the admin list screens — thin
-/// wrapper over the shared `formatReportDate` so call sites read intent.
-String submittedOnLabel(DateTime? date) => 'Submitted on ${formatReportDate(date)}';
+String submittedOnLabel(DateTime? date) =>
+    'Submitted on ${formatReportDate(date)}';
 
-/// "Reported on {date}" — same date formatter, different verb for the
-/// maintenance-tracking context.
-String reportedOnLabel(DateTime? date) => 'Reported on ${formatReportDate(date)}';
+String reportedOnLabel(DateTime? date) =>
+    'Reported on ${formatReportDate(date)}';

@@ -4,9 +4,6 @@ import 'package:image_picker/image_picker.dart';
 import '../models/fault_report.dart';
 import '../services/feedback_repository.dart';
 
-/// Mirrors `PlanningViewModel`'s shape: a single `ChangeNotifier` the
-/// screens read via `Consumer`/`context.watch`, backed by
-/// [FeedbackRepository].
 class FeedbackViewModel extends ChangeNotifier {
   FeedbackViewModel(this._repository);
   final FeedbackRepository _repository;

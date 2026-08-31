@@ -2,12 +2,6 @@ import '../../../services/supabase_service.dart';
 import '../../feedback/models/fault_report.dart';
 import '../models/maintenance_record.dart';
 
-/// Wraps [SupabaseService] for the admin side of Module 3 — mirrors how
-/// `FeedbackRepository` wraps it for the driver side and `PlanningRepository`
-/// wraps it for proposals. Owns the reporter-name join (`fault_reports` only
-/// stores `user_id`) and the status-transition orchestration between fault
-/// reports and maintenance records (see MODULE3_ADMIN_IMPLEMENTATION_PLAN.md
-/// §6.4/§6.6).
 class FeedbackAdminRepository {
   FeedbackAdminRepository({SupabaseService? supabaseService})
       : _supabase = supabaseService ?? SupabaseService();
@@ -16,18 +10,11 @@ class FeedbackAdminRepository {
 
   String? get currentAdminId => _supabase.authenticatedUserId;
 
-  /// Every report, regardless of owner — the `fault_reports_select_all_
-  /// authenticated` RLS policy already grants community-wide read access
-  /// (needed for the driver's "Nearby Issues" map too), so this is the same
-  /// query the driver side uses, just with reporter names attached for the
-  /// admin UI.
   Future<List<FaultReport>> getAllReports() async {
     final rows = await _supabase.getFaultReports();
     final reports = rows.map(FaultReport.fromSupabase).toList();
-    final userIds = reports
-        .map((report) => report.userId)
-        .whereType<String>()
-        .toSet();
+    final userIds =
+        reports.map((report) => report.userId).whereType<String>().toSet();
     if (userIds.isEmpty) return reports;
     final names = await _supabase.getUserNames(userIds);
     return [
@@ -63,9 +50,6 @@ class FeedbackAdminRepository {
     );
   }
 
-  /// Creates a maintenance record and, when it's linked to a report
-  /// ([reportId] non-null), transitions that report to 'In Progress' — or
-  /// straight to 'Resolved' if the record is logged as already 'Completed'.
   Future<String> createMaintenanceRecord({
     required String summary,
     required String description,
@@ -98,8 +82,6 @@ class FeedbackAdminRepository {
     return recordId;
   }
 
-  /// Updates a maintenance record and, if its status is (re)set to
-  /// 'Completed' while it's linked to a report, resolves that report too.
   Future<void> updateMaintenanceRecord(
     MaintenanceRecord original, {
     required String summary,
@@ -120,7 +102,9 @@ class FeedbackAdminRepository {
       'cost': cost,
     });
     final reportId = original.reportId;
-    if (reportId != null && status == 'Completed' && original.status != 'Completed') {
+    if (reportId != null &&
+        status == 'Completed' &&
+        original.status != 'Completed') {
       await _supabase.updateFaultReportStatus(reportId, 'resolved');
     }
   }

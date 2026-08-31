@@ -4,11 +4,6 @@ import '../../planning/widgets/planning_widgets.dart';
 import '../widgets/feedback_widgets.dart';
 import 'my_reports_screen.dart';
 
-/// Step 4 of the "Report an Issue" flow — shown after a successful submit
-/// (see `NewReportScreen._submit`, which `pushReplacement`s here so the
-/// filled-in form can't be returned to via back). There's no mockup for
-/// this state; kept simple and consistent with the rest of the module's
-/// icon-driven visual language.
 class ReportSubmittedScreen extends StatelessWidget {
   const ReportSubmittedScreen({super.key});
 

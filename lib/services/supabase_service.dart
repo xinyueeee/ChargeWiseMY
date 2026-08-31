@@ -3,9 +3,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  /// Placeholder id used only as a defensive fallback when a feedback screen
-  /// somehow renders without a signed-in session (every such screen sits
-  /// behind `AuthGate`, so this should never actually be hit).
   static const mockUserId = '00000000-0000-4000-8000-000000000001';
 
   final SupabaseClient client = Supabase.instance.client;
@@ -172,8 +169,6 @@ class SupabaseService {
     }
   }
 
-  // --- Module 3: fault reports (driver-facing) ---------------------------
-
   Future<List<Map<String, dynamic>>> getFaultReports() async {
     final response = await client
         .from('fault_reports')
@@ -182,9 +177,6 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  /// Inserts a report and returns its generated `report_id` — needed by
-  /// [FeedbackRepository] to upload the photo under the right storage path
-  /// once the row exists (see `uploadFaultReportPhoto`).
   Future<String> insertFaultReport(Map<String, dynamic> values) async {
     final row = await client
         .from('fault_reports')
@@ -211,8 +203,6 @@ class SupabaseService {
         );
   }
 
-  /// Uploads one photo of a report (up to `kFaultReportMaxPhotos` total,
-  /// distinguished by [index]) and returns its public URL.
   Future<String> uploadFaultReportPhoto(
     String reportId,
     XFile file, {
@@ -232,39 +222,20 @@ class SupabaseService {
     return client.storage.from('fault_report_photos').getPublicUrl(path);
   }
 
-  // --- Module 3: fault reports + maintenance (admin-facing) --------------
-  //
-  // `getFaultReports()` above already returns every report regardless of
-  // caller — the `fault_reports_select_all_authenticated` RLS policy gives
-  // every signed-in user community-wide read access (needed for the
-  // driver's "Nearby Issues" map). Only *writing* another user's report
-  // needs the admin-only `fault_reports_admin_full_access` policy, so no
-  // separate admin read method is needed here.
-
-  /// Looks up display names for a set of user ids — used to attach
-  /// `FaultReport.reporterName` after the fact, since `fault_reports` itself
-  /// only stores `user_id`.
   Future<Map<String, String>> getUserNames(Iterable<String> userIds) async {
     final ids = userIds.toSet().toList();
     if (ids.isEmpty) return {};
-    final rows = await client
-        .from('users')
-        .select('id, full_name')
-        .inFilter('id', ids);
+    final rows =
+        await client.from('users').select('id, full_name').inFilter('id', ids);
     return {
       for (final row in List<Map<String, dynamic>>.from(rows))
-        row['id'] as String: (row['full_name'] as String?)?.trim().isNotEmpty ==
-                true
-            ? row['full_name'] as String
-            : 'Unknown driver',
+        row['id'] as String:
+            (row['full_name'] as String?)?.trim().isNotEmpty == true
+                ? row['full_name'] as String
+                : 'Unknown driver',
     };
   }
 
-  /// Writes a fault report's lifecycle status and stamps the matching
-  /// timestamp/actor columns. [status] is the raw lowercase/snake_case DB
-  /// value ('submitted' / 'verified' / 'in_progress' / 'resolved') — callers
-  /// map the display value down before calling this (see
-  /// `AdminFeedbackRepository`).
   Future<void> updateFaultReportStatus(
     String reportId,
     String status, {
@@ -276,12 +247,12 @@ class SupabaseService {
       if (status == 'verified') 'verified_by': adminId,
       if (status == 'in_progress')
         'in_progress_at': DateTime.now().toIso8601String(),
-      if (status == 'resolved')
-        'resolved_at': DateTime.now().toIso8601String(),
+      if (status == 'resolved') 'resolved_at': DateTime.now().toIso8601String(),
     }).eq('report_id', reportId);
   }
 
-  Future<void> updateFaultReportPriority(String reportId, String priority) async {
+  Future<void> updateFaultReportPriority(
+      String reportId, String priority) async {
     await client
         .from('fault_reports')
         .update({'priority': priority}).eq('report_id', reportId);
@@ -295,7 +266,6 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  /// Inserts a maintenance record and returns its generated `record_id`.
   Future<String> insertMaintenanceRecord(Map<String, dynamic> values) async {
     final row = await client
         .from('maintenance_records')
@@ -316,9 +286,6 @@ class SupabaseService {
   }
 
   Future<void> deleteMaintenanceRecord(String recordId) async {
-    await client
-        .from('maintenance_records')
-        .delete()
-        .eq('record_id', recordId);
+    await client.from('maintenance_records').delete().eq('record_id', recordId);
   }
 }

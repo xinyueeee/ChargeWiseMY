@@ -9,10 +9,6 @@ import '../viewmodels/admin_feedback_viewmodel.dart';
 import '../widgets/admin_feedback_widgets.dart';
 import 'new_maintenance_record_screen.dart';
 
-/// "Maintenance Ongoing" — tracks every active (non-'Completed')
-/// `MaintenanceRecord`, with status tabs, search, and tap-to-edit (no
-/// separate details screen — editing reuses `NewMaintenanceRecordScreen`,
-/// per MODULE3_ADMIN_IMPLEMENTATION_PLAN.md §6.5).
 class AdminMaintenanceListScreen extends StatefulWidget {
   const AdminMaintenanceListScreen({super.key});
 
@@ -21,8 +17,8 @@ class AdminMaintenanceListScreen extends StatefulWidget {
       _AdminMaintenanceListScreenState();
 }
 
-class _AdminMaintenanceListScreenState
-    extends State<AdminMaintenanceListScreen> with SingleTickerProviderStateMixin {
+class _AdminMaintenanceListScreenState extends State<AdminMaintenanceListScreen>
+    with SingleTickerProviderStateMixin {
   static const _tabs = ['All', 'On Site', 'Scheduled', 'Delayed'];
   static const _pageSize = 6;
 
@@ -142,7 +138,8 @@ class _AdminMaintenanceListScreenState
                                   color: green.withValues(alpha: .12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.build_outlined, color: green),
+                                child: const Icon(Icons.build_outlined,
+                                    color: green),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
@@ -181,7 +178,8 @@ class _AdminMaintenanceListScreenState
                                   _legendDot('On Site', onSite, green),
                                   _legendDot('Scheduled', scheduled, orange),
                                   _legendDot('Delayed', delayed, red),
-                                  _legendDot('Others', others, planningMutedTextColor),
+                                  _legendDot(
+                                      'Others', others, planningMutedTextColor),
                                 ],
                               ),
                             ],
@@ -232,13 +230,15 @@ class _AdminMaintenanceListScreenState
                             child: PlanningEmptyState(
                               icon: Icons.build_outlined,
                               title: 'Nothing here',
-                              message: 'No maintenance tasks match this filter.',
+                              message:
+                                  'No maintenance tasks match this filter.',
                             ),
                           )
                         : ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
                             itemCount: pageItems.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final record = pageItems[index];
                               final report = vm.reportById(record.reportId);
@@ -304,7 +304,8 @@ class _AdminMaintenanceListScreenState
             const SizedBox(width: 5),
             Text(
               '$label  $count',
-              style: const TextStyle(fontSize: 11, color: planningMutedTextColor),
+              style:
+                  const TextStyle(fontSize: 11, color: planningMutedTextColor),
             ),
           ],
         ),
@@ -312,7 +313,8 @@ class _AdminMaintenanceListScreenState
 
   void _openNewRecord(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const NewMaintenanceRecordScreen()),
+      MaterialPageRoute<void>(
+          builder: (_) => const NewMaintenanceRecordScreen()),
     );
   }
 
@@ -341,7 +343,8 @@ class _StatusPill extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+          style: TextStyle(
+              color: color, fontSize: 12, fontWeight: FontWeight.w700),
         ),
       );
 }

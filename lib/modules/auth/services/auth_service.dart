@@ -80,14 +80,14 @@ class AuthService {
       'full_name': fullName?.trim().isNotEmpty == true
           ? fullName!.trim()
           : metadataName?.isNotEmpty == true
-          ? metadataName
-          : 'ChargeWise Driver',
-      'email': email?.trim().isNotEmpty == true
-          ? email!.trim()
-          : user.email ?? '',
+              ? metadataName
+              : 'ChargeWise Driver',
+      'email':
+          email?.trim().isNotEmpty == true ? email!.trim() : user.email ?? '',
       'role': 'driver',
     });
-    debugPrint('AuthService: created profile for authenticated user ${user.id}.');
+    debugPrint(
+        'AuthService: created profile for authenticated user ${user.id}.');
   }
 
   Future<void> logout() => _client.auth.signOut();
@@ -197,7 +197,6 @@ class AuthService {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
-
   Future<void> requestPasswordReset(String email) async {
     await _client.auth.resetPasswordForEmail(email.trim());
   }
@@ -234,7 +233,6 @@ class AuthService {
           fileOptions: FileOptions(upsert: true, contentType: file.mimeType),
         );
 
-    // Cache-bust so a previously cached image doesn't hide the new upload.
     final publicUrl =
         '${_client.storage.from('avatars').getPublicUrl(path)}?v=${DateTime.now().millisecondsSinceEpoch}';
 

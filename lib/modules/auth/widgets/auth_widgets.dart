@@ -6,8 +6,6 @@ const _primaryGreen = Color(0xFF00B894);
 
 final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
 
-/// Branded header shown at the top of the auth screens, consistent across
-/// login and register so both feel like the same flow.
 class AuthHeader extends StatelessWidget {
   const AuthHeader({super.key, required this.title, required this.subtitle});
 
@@ -49,8 +47,6 @@ class AuthHeader extends StatelessWidget {
   }
 }
 
-/// Field with a label above it (matches the rest of the app's forms, e.g.
-/// the "Record Charging Session" screen), rather than a floating label.
 class AuthLabeledField extends StatelessWidget {
   const AuthLabeledField({
     super.key,

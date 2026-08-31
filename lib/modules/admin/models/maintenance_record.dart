@@ -1,7 +1,3 @@
-/// Dispatch/tracking status for a [MaintenanceRecord] — distinct from a
-/// fault report's own lifecycle status (see `FaultReport.status`).
-/// 'Completed' is what moves a linked report to 'Resolved'; it's excluded
-/// from the "Maintenance Ongoing" list once reached.
 const List<String> kMaintenanceStatuses = [
   'Scheduled',
   'On Site',
@@ -10,9 +6,6 @@ const List<String> kMaintenanceStatuses = [
   'Completed',
 ];
 
-/// A logged maintenance task — closes out a specific [FaultReport] (when
-/// [reportId] is set) or stands alone for routine/preventive work tied only
-/// to a [stationId]. See MODULE3_ADMIN_IMPLEMENTATION_PLAN.md §3.2.
 class MaintenanceRecord {
   MaintenanceRecord({
     required this.id,
@@ -36,8 +29,6 @@ class MaintenanceRecord {
   final String? stationId;
   final String? technicianName;
 
-  /// Free-text ETA, e.g. "1 hour" / "30 mins" — shown as "ETA: {etaLabel}"
-  /// normally, or "Delayed by {etaLabel}" when [status] is 'Delayed'.
   final String? etaLabel;
   final double? cost;
   final String? performedBy;
@@ -56,10 +47,10 @@ class MaintenanceRecord {
                 DateTime.now(),
         reportId: row['report_id'] as String?,
         stationId: row['station_id'] as String?,
-        technicianName: (row['technician_name'] as String?)?.trim().isNotEmpty ==
-                true
-            ? row['technician_name'] as String
-            : null,
+        technicianName:
+            (row['technician_name'] as String?)?.trim().isNotEmpty == true
+                ? row['technician_name'] as String
+                : null,
         etaLabel: (row['eta_label'] as String?)?.trim().isNotEmpty == true
             ? row['eta_label'] as String
             : null,
@@ -68,8 +59,6 @@ class MaintenanceRecord {
         createdAt: DateTime.tryParse('${row['created_at'] ?? ''}'),
       );
 
-  /// Raw lowercase/snake_case value for writing back to Supabase — reverse
-  /// of [_displayStatus].
   static String rawStatus(String displayStatus) {
     switch (displayStatus) {
       case 'On Site':

@@ -11,11 +11,6 @@ import '../viewmodels/admin_feedback_viewmodel.dart';
 import '../widgets/admin_feedback_widgets.dart';
 import 'new_maintenance_record_screen.dart';
 
-/// Full report view for the admin side — mirrors the driver's
-/// `ReportDetailsScreen` shape (photos, category/status card, description,
-/// location) plus the admin-only priority selector and status-action
-/// buttons gated by the current status (see
-/// MODULE3_ADMIN_IMPLEMENTATION_PLAN.md §6.4).
 class AdminReportDetailsScreen extends StatefulWidget {
   const AdminReportDetailsScreen({super.key, required this.report});
 
@@ -49,7 +44,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
               final linkedRecords = vm.maintenanceRecords
                   .where((record) => record.reportId == report.id)
                   .toList()
-                ..sort((a, b) => b.maintenanceDate.compareTo(a.maintenanceDate));
+                ..sort(
+                    (a, b) => b.maintenanceDate.compareTo(a.maintenanceDate));
 
               return ListView(
                 padding: planningPagePadding,
@@ -92,7 +88,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
                             color: green.withValues(alpha: .1),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.ev_station, color: green, size: 30),
+                          child: const Icon(Icons.ev_station,
+                              color: green, size: 30),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -101,7 +98,10 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
                             children: [
                               Text(
                                 report.category,
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(
                                       color: planningTextColor,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -109,11 +109,13 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 'Reported by: ${report.reporterName ?? 'Unknown driver'}',
-                                style: const TextStyle(color: planningMutedTextColor),
+                                style: const TextStyle(
+                                    color: planningMutedTextColor),
                               ),
                               Text(
                                 submittedOnLabel(report.createdAt),
-                                style: const TextStyle(color: planningMutedTextColor),
+                                style: const TextStyle(
+                                    color: planningMutedTextColor),
                               ),
                             ],
                           ),
@@ -131,7 +133,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
                       report.description.trim().isEmpty
                           ? 'No description was provided.'
                           : report.description,
-                      style: const TextStyle(color: planningMutedTextColor, height: 1.5),
+                      style: const TextStyle(
+                          color: planningMutedTextColor, height: 1.5),
                     ),
                   ),
                   planningSectionGap,
@@ -141,7 +144,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
                     const PlanningEmptyState(
                       icon: Icons.location_off_outlined,
                       title: 'Location unavailable',
-                      message: 'This report does not contain valid map coordinates.',
+                      message:
+                          'This report does not contain valid map coordinates.',
                     )
                   else
                     AppCard(
@@ -198,7 +202,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
                         const Divider(height: 1),
                         InformationRow('Category', report.category),
                         const Divider(height: 1),
-                        InformationRow('Reported on', formatReportDate(report.createdAt)),
+                        InformationRow(
+                            'Reported on', formatReportDate(report.createdAt)),
                         if ((report.contactInfo ?? '').isNotEmpty) ...[
                           const Divider(height: 1),
                           InformationRow('Contact', report.contactInfo!),
@@ -241,7 +246,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 )
               : const Icon(Icons.fact_check_outlined),
           label: const Text('Verify'),
@@ -274,7 +280,7 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
           icon: const Icon(Icons.check_circle_outline),
           label: const Text('Mark Resolved'),
         );
-      default: // 'Resolved'
+      default:
         return AppCard(
           child: Row(
             children: [
@@ -449,7 +455,9 @@ class _MaintenanceSummaryCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    record.summary.isEmpty ? 'Maintenance task' : record.summary,
+                    record.summary.isEmpty
+                        ? 'Maintenance task'
+                        : record.summary,
                     style: const TextStyle(
                       color: planningTextColor,
                       fontWeight: FontWeight.w700,
@@ -459,7 +467,8 @@ class _MaintenanceSummaryCard extends StatelessWidget {
                   Text(
                     '${record.status}'
                     '${record.technicianName == null ? '' : ' · ${record.technicianName}'}',
-                    style: const TextStyle(color: planningMutedTextColor, fontSize: 12),
+                    style: const TextStyle(
+                        color: planningMutedTextColor, fontSize: 12),
                   ),
                 ],
               ),
