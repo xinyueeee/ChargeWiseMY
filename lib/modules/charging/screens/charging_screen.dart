@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
@@ -7,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/navigation/app_route_observer.dart';
 import '../../../services/notification_service.dart';
 import '../../home/widgets/station_details_sheet.dart';
 import '../../planning/models/proposal.dart';
@@ -14,6 +16,7 @@ import '../../planning/viewmodels/planning_viewmodel.dart';
 import '../../planning/widgets/planning_widgets.dart';
 import '../services/charging_route_eta_service.dart';
 import '../services/charging_service.dart';
+import '../viewmodels/reminders_viewmodel.dart';
 import '../widgets/charging_widgets.dart';
 import 'create_reminder_sheet.dart';
 import 'create_session_sheet.dart';
@@ -187,7 +190,7 @@ class ChargingScreen extends StatefulWidget {
   State<ChargingScreen> createState() => _ChargingScreenState();
 }
 
-class _ChargingScreenState extends State<ChargingScreen> {
+class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
   final _service = ChargingService();
   final _notifications = NotificationService();
   final _routeEtaService = const SupabaseChargingRouteEtaService();
@@ -205,21 +208,50 @@ class _ChargingScreenState extends State<ChargingScreen> {
   double? _calcResult;
 
   Future<List<Map<String, dynamic>>>? _sessionsFuture;
-  List<Map<String, dynamic>>? _reminders;
+  late final RemindersViewModel _remindersVm;
 
   LatLng? _userLocation;
   bool _locationUnavailable = false;
+
+  PageRoute<dynamic>? _subscribedRoute;
+  final _fireTimers = <String, Timer>{};
 
   @override
   void initState() {
     super.initState();
     _reloadSessions();
-    _reloadReminders();
     _loadLocation();
+    _remindersVm = context.read<RemindersViewModel>();
+    _remindersVm.addListener(_scheduleFireTimers);
+    if (_remindersVm.reminders != null) {
+      _scheduleFireTimers();
+    } else {
+      _remindersVm.load();
+    }
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> || identical(route, _subscribedRoute)) {
+      return;
+    }
+    if (_subscribedRoute != null) appRouteObserver.unsubscribe(this);
+    _subscribedRoute = route;
+    appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPopNext() => _remindersVm.load();
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
+    _remindersVm.removeListener(_scheduleFireTimers);
+    for (final timer in _fireTimers.values) {
+      timer.cancel();
+    }
     _calcPowerController.dispose();
     _calcRateController.dispose();
     super.dispose();
@@ -231,10 +263,39 @@ class _ChargingScreenState extends State<ChargingScreen> {
     });
   }
 
-  Future<void> _reloadReminders() async {
-    final reminders = await _service.fetchReminders();
+  void _scheduleFireTimers() {
+    for (final timer in _fireTimers.values) {
+      timer.cancel();
+    }
+    _fireTimers.clear();
+    for (final reminder
+        in _remindersVm.reminders ?? const <Map<String, dynamic>>[]) {
+      final enabled = reminder['enabled'] as bool? ?? true;
+      final repeatFrequency = reminder['repeat_frequency'] as String? ?? 'once';
+      if (!enabled || repeatFrequency != 'once') continue;
+      final id = reminder['id'] as String;
+      final anchor = combineDateAndTime(
+        parseReminderDate(reminder['reminder_date'] as String),
+        parseReminderTime(reminder['reminder_time'] as String),
+      );
+      final delay = anchor.difference(DateTime.now());
+      _fireTimers[id] = Timer(
+        delay.isNegative ? Duration.zero : delay,
+        () => _handleReminderFired(id),
+      );
+    }
+  }
+
+  Future<void> _handleReminderFired(String id) async {
+    _fireTimers.remove(id);
     if (!mounted) return;
-    setState(() => _reminders = reminders);
+    final reminders = _remindersVm.reminders ?? const <Map<String, dynamic>>[];
+    final stillEnabled = reminders.any(
+      (r) => r['id'] == id && (r['enabled'] as bool? ?? true),
+    );
+    if (!stillEnabled) return;
+    _remindersVm.applyLocal(id, {'enabled': false});
+    await _service.setReminderEnabled(id, false);
   }
 
   Future<void> _loadLocation() async {
@@ -438,31 +499,42 @@ class _ChargingScreenState extends State<ChargingScreen> {
     if (confirmed != true) return;
     await _notifications.cancel(id);
     await _service.deleteReminder(id);
-    _reloadReminders();
+    await _remindersVm.load();
   }
 
   Future<void> _toggleReminder(
       Map<String, dynamic> reminder, bool enabled) async {
     final id = reminder['id'] as String;
+    final repeatFrequency = reminder['repeat_frequency'] as String? ?? 'once';
+    final repeatDays = (reminder['repeat_days'] as List<Object?>?)
+            ?.map((e) => e as int)
+            .toList() ??
+        const <int>[];
+    final anchor = combineDateAndTime(
+      parseReminderDate(reminder['reminder_date'] as String),
+      parseReminderTime(reminder['reminder_time'] as String),
+    );
 
-    setState(() {
-      _reminders = [
-        for (final r in _reminders ?? const <Map<String, dynamic>>[])
-          if (r['id'] == id) {...r, 'enabled': enabled} else r,
-      ];
-    });
+    if (enabled &&
+        repeatFrequency == 'once' &&
+        !anchor.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              "This reminder's date and time have passed. Edit it to "
+              'set a new time before turning it back on.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    _remindersVm.applyLocal(id, {'enabled': enabled});
 
     await _service.setReminderEnabled(id, enabled);
     if (enabled) {
-      final repeatFrequency = reminder['repeat_frequency'] as String? ?? 'once';
-      final repeatDays = (reminder['repeat_days'] as List<Object?>?)
-              ?.map((e) => e as int)
-              .toList() ??
-          const <int>[];
-      final anchor = combineDateAndTime(
-        parseReminderDate(reminder['reminder_date'] as String),
-        parseReminderTime(reminder['reminder_time'] as String),
-      );
       final scheduledAt = rollReminderToFuture(
         anchor,
         repeatFrequency,
@@ -486,7 +558,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
     } else {
       await _notifications.cancel(id);
     }
-    _reloadReminders();
+    await _remindersVm.load();
   }
 
   @override
@@ -817,7 +889,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
   }
 
   Widget _buildRemindersCard() {
-    final reminders = _reminders;
+    final reminders = context.watch<RemindersViewModel>().reminders;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -852,7 +924,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
                         context,
                         existing: reminder,
                       );
-                      if (saved == true) _reloadReminders();
+                      if (saved == true) _remindersVm.load();
                     },
                     onDelete: () => _deleteReminder(reminder['id'] as String),
                   ),
@@ -862,7 +934,7 @@ class _ChargingScreenState extends State<ChargingScreen> {
           OutlinedButton.icon(
             onPressed: () async {
               final saved = await showCreateReminderSheet(context);
-              if (saved == true) _reloadReminders();
+              if (saved == true) _remindersVm.load();
             },
             icon: const Icon(Icons.add, color: green),
             label: const Text('Create Reminder'),
@@ -1374,8 +1446,17 @@ class _ReminderTile extends StatelessWidget {
             ?.map((e) => e as int)
             .toList() ??
         const <int>[];
-    final time = parseReminderTime(reminder['reminder_time'] as String);
-    final date = parseReminderDate(reminder['reminder_date'] as String);
+    final anchor = combineDateAndTime(
+      parseReminderDate(reminder['reminder_date'] as String),
+      parseReminderTime(reminder['reminder_time'] as String),
+    );
+    final displayAt = rollReminderToFuture(
+      anchor,
+      repeatFrequency,
+      repeatDays: repeatDays,
+    );
+    final time = TimeOfDay.fromDateTime(displayAt);
+    final date = displayAt;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(

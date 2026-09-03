@@ -7,8 +7,10 @@ import 'package:provider/provider.dart';
 
 import '../../../core/navigation/app_route_observer.dart';
 import '../../../core/navigation/driver_navigation.dart';
+import '../../../services/notification_service.dart';
 import '../../auth/services/auth_service.dart';
 import '../../charging/services/charging_service.dart';
+import '../../charging/viewmodels/reminders_viewmodel.dart';
 import '../../charging/widgets/charging_widgets.dart';
 import '../../planning/models/proposal.dart';
 import '../../planning/services/state_boundary_service.dart';
@@ -69,7 +71,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with RouteAware {
   final _authService = AuthService();
-  final _chargingService = ChargingService();
 
   String _driverName = 'Driver';
   String _chargerFilter = 'All';
@@ -77,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   LatLng? _userLocation;
   bool _autoLocated = false;
   bool _autoLocateDone = false;
-  List<Map<String, dynamic>>? _reminders;
   PageRoute<dynamic>? _subscribedRoute;
   bool _mapMounted = true;
 
@@ -86,13 +86,8 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
     super.initState();
     _loadProfile();
     _loadLocation();
-    _reloadReminders();
-  }
-
-  Future<void> _reloadReminders() async {
-    final reminders = await _chargingService.fetchReminders();
-    if (!mounted) return;
-    setState(() => _reminders = reminders);
+    final remindersVm = context.read<RemindersViewModel>();
+    if (remindersVm.reminders == null) remindersVm.load();
   }
 
   @override
@@ -113,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   @override
   void didPopNext() {
     _setMapMounted(true);
-    _reloadReminders();
+    context.read<RemindersViewModel>().load();
   }
 
   void _setMapMounted(bool value) {
@@ -367,13 +362,21 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                         decoration: InputDecoration(
                           hintText: 'Search state or charging station',
                           prefixIcon: const Icon(Icons.search),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.search),
-                            onPressed: () => _handleSearchSubmit(
-                              context,
-                              vm,
-                              controller.text,
-                            ),
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: controller,
+                            builder: (context, value, _) {
+                              if (value.text.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return IconButton(
+                                icon: const Icon(Icons.close),
+                                tooltip: 'Clear search',
+                                onPressed: () {
+                                  controller.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              );
+                            },
                           ),
                           filled: true,
                           fillColor: const Color(0xFFF8F9FC),
@@ -613,33 +616,38 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   }
 
   Widget _buildReminderSummaryCard(BuildContext context) {
-    final reminders = _reminders ?? const <Map<String, dynamic>>[];
+    final reminders =
+        context.watch<RemindersViewModel>().reminders ??
+        const <Map<String, dynamic>>[];
     final now = DateTime.now();
-    final upcoming = reminders.where((r) {
-      if (r['enabled'] != true) return false;
-      final dateTime = combineDateAndTime(
-        parseReminderDate(r['reminder_date'] as String),
-        parseReminderTime(r['reminder_time'] as String),
-      );
-      return !dateTime.isBefore(now);
-    }).toList()
-      ..sort((a, b) {
-        final aTime = combineDateAndTime(
-          parseReminderDate(a['reminder_date'] as String),
-          parseReminderTime(a['reminder_time'] as String),
-        );
-        final bTime = combineDateAndTime(
-          parseReminderDate(b['reminder_date'] as String),
-          parseReminderTime(b['reminder_time'] as String),
-        );
-        return aTime.compareTo(bTime);
-      });
-    final next = upcoming.isEmpty ? null : upcoming.first;
+    final upcoming = reminders
+        .where((r) => r['enabled'] == true)
+        .map((r) {
+          final repeatFrequency = r['repeat_frequency'] as String? ?? 'once';
+          final repeatDays = (r['repeat_days'] as List<Object?>?)
+                  ?.map((e) => e as int)
+                  .toList() ??
+              const <int>[];
+          final anchor = combineDateAndTime(
+            parseReminderDate(r['reminder_date'] as String),
+            parseReminderTime(r['reminder_time'] as String),
+          );
+          final nextOccurrence = rollReminderToFuture(
+            anchor,
+            repeatFrequency,
+            repeatDays: repeatDays,
+          );
+          return MapEntry(r, nextOccurrence);
+        })
+        .where((entry) => !entry.value.isBefore(now))
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
 
     return InkWell(
       onTap: () => switchDriverTab(context, DriverTab.charging),
       child: AppCard(
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(
               Icons.event_available_outlined,
@@ -647,31 +655,51 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    next == null
-                        ? 'No upcoming reminders'
-                        : next['title'] as String,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: planningTextColor,
+              child: upcoming.isEmpty
+                  ? const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No upcoming reminders',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: planningTextColor,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          'Tap to set a charging reminder.',
+                          style: TextStyle(
+                            color: planningMutedTextColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var i = 0; i < upcoming.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 10),
+                          Text(
+                            upcoming[i].key['title'] as String,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: planningTextColor,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${relativeDateLabel(upcoming[i].value)}, '
+                            '${TimeOfDay.fromDateTime(upcoming[i].value).format(context)}',
+                            style: const TextStyle(
+                              color: planningMutedTextColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    next == null
-                        ? 'Tap to set a charging reminder.'
-                        : '${relativeDateLabel(parseReminderDate(next['reminder_date'] as String))}, '
-                            '${parseReminderTime(next['reminder_time'] as String).format(context)}',
-                    style: const TextStyle(
-                      color: planningMutedTextColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
             ),
             const Icon(
               Icons.chevron_right,

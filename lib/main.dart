@@ -12,6 +12,8 @@ import 'modules/admin/services/user_admin_repository.dart';
 import 'modules/admin/viewmodels/admin_feedback_viewmodel.dart';
 import 'modules/admin/viewmodels/admin_user_viewmodel.dart';
 import 'modules/auth/screens/auth_gate.dart';
+import 'modules/charging/services/charging_service.dart';
+import 'modules/charging/viewmodels/reminders_viewmodel.dart';
 import 'modules/feedback/services/feedback_repository.dart';
 import 'modules/feedback/viewmodels/feedback_viewmodel.dart';
 import 'modules/planning/admin/viewmodels/admin_planning_viewmodel.dart';
@@ -40,6 +42,9 @@ class ChargeWiseApp extends StatelessWidget {
         providers: [
           ChangeNotifierProvider(
             create: (_) => PlanningViewModel(PlanningRepository())..load(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => RemindersViewModel(ChargingService())..load(),
           ),
           ChangeNotifierProvider(
             create: (_) => FeedbackViewModel(FeedbackRepository())..load(),
