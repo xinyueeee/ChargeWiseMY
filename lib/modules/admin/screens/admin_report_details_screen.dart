@@ -256,8 +256,8 @@ class _AdminReportDetailsScreenState extends State<AdminReportDetailsScreen> {
         return ResponsiveButtonPair(
           first: OutlinedButton.icon(
             onPressed: _updating ? null : () => _openNewRecord(context),
-            icon: const Icon(Icons.build_outlined),
-            label: const Text('Log Maintenance Record'),
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: const Text('Schedule Maintenance'),
           ),
           second: ElevatedButton.icon(
             onPressed: _updating ? null : () => _resolve(vm),

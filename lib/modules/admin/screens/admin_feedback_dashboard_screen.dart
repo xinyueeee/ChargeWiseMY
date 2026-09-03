@@ -13,8 +13,26 @@ import 'admin_maintenance_list_screen.dart';
 import 'admin_report_details_screen.dart';
 import 'admin_verify_reports_screen.dart';
 
-class AdminFeedbackDashboardScreen extends StatelessWidget {
+class AdminFeedbackDashboardScreen extends StatefulWidget {
   const AdminFeedbackDashboardScreen({super.key});
+
+  @override
+  State<AdminFeedbackDashboardScreen> createState() =>
+      _AdminFeedbackDashboardScreenState();
+}
+
+class _AdminFeedbackDashboardScreenState
+    extends State<AdminFeedbackDashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // The view-model is created (and first loads) at app startup, well
+    // before any driver has necessarily filed a report. Refresh once the
+    // admin actually opens this screen so the counts aren't stale.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<AdminFeedbackViewModel>().load(silent: true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) => Consumer<AdminFeedbackViewModel>(
@@ -48,7 +66,11 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     const spacing = 10.0;
-                    final columns = constraints.maxWidth >= 420 ? 4 : 2;
+                    final columns = constraints.maxWidth >= 720
+                        ? 5
+                        : constraints.maxWidth >= 420
+                            ? 3
+                            : 2;
 
                     final tileWidth =
                         (constraints.maxWidth - spacing * (columns - 1)) /
@@ -65,6 +87,17 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
                             label: 'New Reports',
                             color: red,
                             onTap: () => _openVerifyReports(context),
+                          ),
+                        ),
+                        SizedBox(
+                          width: tileWidth,
+                          child: AdminStatTile(
+                            icon: Icons.pending_actions_outlined,
+                            value: '${vm.verifiedCount}',
+                            label: 'Awaiting Maintenance',
+                            color: orange,
+                            onTap: () =>
+                                _openHistory(context, initialTabIndex: 2),
                           ),
                         ),
                         SizedBox(
@@ -245,10 +278,15 @@ class AdminFeedbackDashboardScreen extends StatelessWidget {
     );
   }
 
-  void _openNewReport(BuildContext context) {
-    Navigator.of(context).push(
+  Future<void> _openNewReport(BuildContext context) async {
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const NewReportScreen()),
     );
+    // NewReportScreen submits through the driver FeedbackViewModel, so the
+    // admin view-model won't know about the new report unless we reload it.
+    if (context.mounted) {
+      await context.read<AdminFeedbackViewModel>().load();
+    }
   }
 
   void _openVerifyReports(BuildContext context) {

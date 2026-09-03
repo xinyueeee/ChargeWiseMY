@@ -8,6 +8,7 @@ import '../../planning/admin/screens/admin_proposal_details_screen.dart';
 import '../../planning/admin/screens/admin_proposal_list_screen.dart';
 import '../../planning/admin/models/proposal_assessment.dart';
 import '../../planning/admin/viewmodels/admin_planning_viewmodel.dart';
+import '../viewmodels/admin_feedback_viewmodel.dart';
 import 'admin_feedback_dashboard_screen.dart';
 import 'admin_profile_screen.dart';
 
@@ -24,6 +25,17 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _tabIndex = 0;
+
+  /// The Feedback dashboard (tab 3) and Admin profile (tab 4) both render
+  /// live counts from [AdminFeedbackViewModel], which otherwise only loads
+  /// once at startup. Pull a fresh copy whenever the admin navigates to one
+  /// of those tabs so newly submitted reports show up without a restart.
+  void _onTabSelected(int index) {
+    setState(() => _tabIndex = index);
+    if (index == 3 || index == 4) {
+      context.read<AdminFeedbackViewModel>().load(silent: true);
+    }
+  }
 
   static const _tabs = [
     _AdminTab(icon: Icons.dashboard_outlined, label: 'Dashboard'),
@@ -61,7 +73,7 @@ class _AdminShellState extends State<AdminShell> {
                   _AdminNavigationRail(
                     selectedIndex: _tabIndex,
                     tabs: _tabs,
-                    onTap: (index) => setState(() => _tabIndex = index),
+                    onTap: _onTabSelected,
                   ),
                   const VerticalDivider(width: 1, color: Color(0xFFE9EDF3)),
                   Expanded(child: _adminTabs()),
@@ -74,7 +86,7 @@ class _AdminShellState extends State<AdminShell> {
           : _AdminBottomNav(
               selectedIndex: _tabIndex,
               tabs: _tabs,
-              onTap: (index) => setState(() => _tabIndex = index),
+              onTap: _onTabSelected,
             ),
     );
   }

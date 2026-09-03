@@ -91,6 +91,15 @@ class _AdminFeedbackHistoryScreenState extends State<AdminFeedbackHistoryScreen>
             if (vm.loading) {
               return const PlanningLoadingState(message: 'Loading history…');
             }
+            if (vm.errorMessage != null) {
+              return Padding(
+                padding: planningPagePadding,
+                child: PlanningErrorState(
+                  message: vm.errorMessage!,
+                  onRetry: vm.load,
+                ),
+              );
+            }
             final all = vm.recentReports;
             final filtered = _applyFilters(all);
             final totalPages =

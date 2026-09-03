@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../feedback/models/fault_report.dart';
 import '../../feedback/widgets/feedback_widgets.dart'
     show formatReportDate, orange, red;
 import '../../planning/widgets/planning_widgets.dart';
@@ -86,7 +87,7 @@ class _AdminMaintenanceListScreenState extends State<AdminMaintenanceListScreen>
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _openNewRecord(context),
+          onPressed: _openNewRecord,
           backgroundColor: green,
           icon: const Icon(Icons.add),
           label: const Text('Log Maintenance'),
@@ -96,6 +97,15 @@ class _AdminMaintenanceListScreenState extends State<AdminMaintenanceListScreen>
             if (vm.loading) {
               return const PlanningLoadingState(
                 message: 'Loading maintenance tasks…',
+              );
+            }
+            if (vm.errorMessage != null) {
+              return Padding(
+                padding: planningPagePadding,
+                child: PlanningErrorState(
+                  message: vm.errorMessage!,
+                  onRetry: vm.load,
+                ),
               );
             }
             final ongoing =
@@ -311,10 +321,35 @@ class _AdminMaintenanceListScreenState extends State<AdminMaintenanceListScreen>
         ),
       );
 
-  void _openNewRecord(BuildContext context) {
-    Navigator.of(context).push(
+  Future<void> _openNewRecord() async {
+    final vm = context.read<AdminFeedbackViewModel>();
+    final candidates = vm.reports
+        .where((r) => r.status == 'Verified' || r.status == 'In Progress')
+        .toList()
+      ..sort((a, b) => (b.createdAt ?? DateTime(0))
+          .compareTo(a.createdAt ?? DateTime(0)));
+
+    final target = await showModalBottomSheet<_MaintenanceTarget>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _LinkReportSheet(candidates: candidates),
+    );
+    if (target == null || !mounted) return;
+
+    final report = target.report;
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
-          builder: (_) => const NewMaintenanceRecordScreen()),
+        builder: (_) => NewMaintenanceRecordScreen(
+          reportId: report?.id,
+          stationId: report?.stationId,
+          reportSummary: report == null
+              ? null
+              : '${report.category} · ${report.locationLabel}',
+        ),
+      ),
     );
   }
 
@@ -325,6 +360,94 @@ class _AdminMaintenanceListScreenState extends State<AdminMaintenanceListScreen>
       ),
     );
   }
+}
+
+/// Result of the "which report is this for?" sheet. [report] is null when the
+/// admin chose routine maintenance not tied to any report.
+class _MaintenanceTarget {
+  const _MaintenanceTarget(this.report);
+  final FaultReport? report;
+}
+
+class _LinkReportSheet extends StatelessWidget {
+  const _LinkReportSheet({required this.candidates});
+
+  final List<FaultReport> candidates;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0E4EA),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Which report is this maintenance for?',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  if (candidates.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+                      child: Text(
+                        'No verified or in-progress reports yet.',
+                        style: TextStyle(
+                          color: planningMutedTextColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  for (final report in candidates)
+                    ListTile(
+                      leading: const Icon(Icons.ev_station, color: green),
+                      title: Text(
+                        report.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${report.locationLabel.isEmpty ? 'No location' : report.locationLabel}'
+                        ' · ${report.status}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () =>
+                          Navigator.pop(context, _MaintenanceTarget(report)),
+                    ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.handyman_outlined,
+                      color: planningMutedTextColor,
+                    ),
+                    title: const Text('Routine maintenance'),
+                    subtitle: const Text('Not linked to a specific report'),
+                    onTap: () =>
+                        Navigator.pop(context, const _MaintenanceTarget(null)),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _StatusPill extends StatelessWidget {

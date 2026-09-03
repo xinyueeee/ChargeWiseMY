@@ -13,10 +13,17 @@ class AdminFeedbackViewModel extends ChangeNotifier {
   bool loading = true;
   String? errorMessage;
 
-  Future<void> load() async {
-    loading = true;
+  bool hasLoadedOnce = false;
+
+  /// [silent] skips the full-screen loading state — used for background
+  /// refreshes (tab switches, returning from a child screen) so the list
+  /// doesn't flash a spinner every time.
+  Future<void> load({bool silent = false}) async {
+    if (!silent) {
+      loading = true;
+      notifyListeners();
+    }
     errorMessage = null;
-    notifyListeners();
     try {
       reports = await _repository.getAllReports();
       maintenanceRecords = await _repository.getMaintenanceRecords();
@@ -26,6 +33,7 @@ class AdminFeedbackViewModel extends ChangeNotifier {
       errorMessage = 'Unable to load feedback data. Please try again.';
     } finally {
       loading = false;
+      hasLoadedOnce = true;
       notifyListeners();
     }
   }

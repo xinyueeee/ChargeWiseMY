@@ -50,6 +50,11 @@ class _NewMaintenanceRecordScreenState
       widget.record?.maintenanceDate ?? DateTime.now();
   bool _submitting = false;
 
+  /// Creating a new record is always a "schedule this" action — the extra
+  /// detail (status, description, ETA, cost) is filled in later when the
+  /// admin opens the record to update or close it out.
+  bool get _scheduling => widget.record == null;
+
   @override
   void dispose() {
     _summaryController.dispose();
@@ -181,7 +186,7 @@ class _NewMaintenanceRecordScreenState
           title: Text(
             widget._editing
                 ? 'Edit Maintenance Record'
-                : 'Log Maintenance Record',
+                : 'Schedule Maintenance',
             style: planningAppBarTitleStyle,
           ),
           centerTitle: true,
@@ -236,15 +241,6 @@ class _NewMaintenanceRecordScreenState
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _descriptionController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
                   controller: _technicianController,
                   decoration: const InputDecoration(
                     labelText: 'Technician name',
@@ -253,56 +249,81 @@ class _NewMaintenanceRecordScreenState
                   ),
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _status,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (final status in kMaintenanceStatuses)
-                      DropdownMenuItem(value: status, child: Text(status)),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _status = value);
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _etaController,
-                  decoration: InputDecoration(
-                    labelText: _status == 'Delayed' ? 'Delayed by' : 'ETA',
-                    hintText: 'e.g. 1 hour, 30 mins',
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 InkWell(
                   onTap: _pickDate,
                   child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Maintenance date',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.calendar_today_outlined),
+                    decoration: InputDecoration(
+                      labelText:
+                          _scheduling ? 'Scheduled date' : 'Maintenance date',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.calendar_today_outlined),
                     ),
                     child: Text(
                       '${_maintenanceDate.day}/${_maintenanceDate.month}/${_maintenanceDate.year}',
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _costController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Cost (RM)',
-                    hintText: 'Optional',
-                    border: OutlineInputBorder(),
+                if (!_scheduling) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _status,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final status in kMaintenanceStatuses)
+                        DropdownMenuItem(value: status, child: Text(status)),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _status = value);
+                    },
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _etaController,
+                    decoration: InputDecoration(
+                      labelText: _status == 'Delayed' ? 'Delayed by' : 'ETA',
+                      hintText: 'e.g. 1 hour, 30 mins',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _descriptionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _costController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Cost (RM)',
+                      hintText: 'Optional',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
+                if (_scheduling)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'The linked report moves to "In Progress" and this task '
+                      'appears under Maintenance Ongoing as Scheduled. Open it '
+                      'later to update the status or mark it Completed.',
+                      style: TextStyle(
+                        color: planningMutedTextColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 ElevatedButton(
                   onPressed: _submitting ? null : _submit,
                   child: _submitting
@@ -315,7 +336,10 @@ class _NewMaintenanceRecordScreenState
                           ),
                         )
                       : Text(
-                          widget._editing ? 'Save Changes' : 'Log Maintenance'),
+                          widget._editing
+                              ? 'Save Changes'
+                              : 'Schedule Maintenance',
+                        ),
                 ),
               ],
             ),

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../services/supabase_service.dart';
 import '../../feedback/models/fault_report.dart';
 import '../models/maintenance_record.dart';
@@ -16,7 +18,17 @@ class FeedbackAdminRepository {
     final userIds =
         reports.map((report) => report.userId).whereType<String>().toSet();
     if (userIds.isEmpty) return reports;
-    final names = await _supabase.getUserNames(userIds);
+    Map<String, String> names;
+    try {
+      names = await _supabase.getUserNames(userIds);
+    } catch (error, stackTrace) {
+      // Reporter-name enrichment is cosmetic. A failure here (e.g. a users
+      // table RLS/permission hiccup) must not discard the entire report
+      // list — fall back to reports without reporter names.
+      debugPrint('getAllReports: reporter name lookup failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return reports;
+    }
     return [
       for (final report in reports)
         if (report.userId != null && names.containsKey(report.userId))
