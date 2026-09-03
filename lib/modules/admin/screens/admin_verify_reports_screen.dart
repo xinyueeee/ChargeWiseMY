@@ -7,6 +7,7 @@ import '../../planning/widgets/planning_widgets.dart';
 import '../viewmodels/admin_feedback_viewmodel.dart';
 import '../widgets/admin_feedback_widgets.dart';
 import 'admin_report_details_screen.dart';
+import 'new_maintenance_record_screen.dart';
 
 class AdminVerifyReportsScreen extends StatefulWidget {
   const AdminVerifyReportsScreen({super.key});
@@ -96,6 +97,15 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
           builder: (context, vm, __) {
             if (vm.loading) {
               return const PlanningLoadingState(message: 'Loading reports…');
+            }
+            if (vm.errorMessage != null) {
+              return Padding(
+                padding: planningPagePadding,
+                child: PlanningErrorState(
+                  message: vm.errorMessage!,
+                  onRetry: vm.load,
+                ),
+              );
             }
             final toVerify = vm.reportsToVerify;
             final high = toVerify.where((r) => r.priority == 'High').length;
@@ -352,7 +362,13 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
       await vm.verifyReport(report);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('"${report.category}" verified.')),
+        SnackBar(
+          content: Text('"${report.category}" verified.'),
+          action: SnackBarAction(
+            label: 'Schedule maintenance',
+            onPressed: () => _openScheduleMaintenance(report),
+          ),
+        ),
       );
     } catch (error, stackTrace) {
       debugPrint('Verify report failed: $error');
@@ -363,6 +379,21 @@ class _AdminVerifyReportsScreenState extends State<AdminVerifyReportsScreen>
       );
     } finally {
       if (mounted) setState(() => _verifying.remove(report.id));
+    }
+  }
+
+  Future<void> _openScheduleMaintenance(FaultReport report) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => NewMaintenanceRecordScreen(
+          reportId: report.id,
+          stationId: report.stationId,
+          reportSummary: '${report.category} · ${report.locationLabel}',
+        ),
+      ),
+    );
+    if (mounted) {
+      await context.read<AdminFeedbackViewModel>().load(silent: true);
     }
   }
 
