@@ -323,8 +323,17 @@ class _AdminMaintenanceListScreenState extends State<AdminMaintenanceListScreen>
 
   Future<void> _openNewRecord() async {
     final vm = context.read<AdminFeedbackViewModel>();
+    // Reports that already have an unfinished maintenance task shouldn't be
+    // offered again — pick them up by editing that task, not by scheduling a
+    // second one.
+    final alreadyScheduled = vm.maintenanceRecords
+        .where((record) => record.isOngoing && record.reportId != null)
+        .map((record) => record.reportId!)
+        .toSet();
     final candidates = vm.reports
-        .where((r) => r.status == 'Verified' || r.status == 'In Progress')
+        .where((r) =>
+            (r.status == 'Verified' || r.status == 'In Progress') &&
+            !alreadyScheduled.contains(r.id))
         .toList()
       ..sort((a, b) => (b.createdAt ?? DateTime(0))
           .compareTo(a.createdAt ?? DateTime(0)));
