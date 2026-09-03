@@ -205,16 +205,22 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
               ),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
               children: [
-                _InformationRow('Charger type', proposal.charger),
-                _InformationRow('Expected usage', proposal.demand),
-                _InformationRow('Nearest Existing location',
-                    '${proposal.distance.toStringAsFixed(1)} km'),
-                if (proposal.latitude != null && proposal.longitude != null)
-                  _InformationRow(
-                    'Coordinates',
-                    '${proposal.latitude!.toStringAsFixed(6)}, '
-                        '${proposal.longitude!.toStringAsFixed(6)}',
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _InformationRow('Charger type', proposal.charger),
+                    _InformationRow('Expected usage', proposal.demand),
+                    _InformationRow('Nearest Existing location',
+                        '${proposal.distance.toStringAsFixed(1)} km'),
+                    if (proposal.latitude != null &&
+                        proposal.longitude != null)
+                      _InformationRow(
+                        'Coordinates',
+                        '${proposal.latitude!.toStringAsFixed(6)}, '
+                            '${proposal.longitude!.toStringAsFixed(6)}',
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
