@@ -310,8 +310,9 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
                               ),
                           ],
                           onChanged: (value) {
-                            if (value != null)
+                            if (value != null) {
                               setState(() => _chargerType = value);
+                            }
                           },
                         ),
                         const SizedBox(height: 12),

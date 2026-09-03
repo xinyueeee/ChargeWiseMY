@@ -185,25 +185,38 @@ class _ProposalDetailsScreenState extends State<ProposalDetailsScreen> {
         const SizedBox(height: 12),
         AppCard(
           padding: EdgeInsets.zero,
-          child: ExpansionTile(
-            leading: const Icon(Icons.tune_outlined, color: green),
-            title: const Text(
-              'Additional Information',
-              style: TextStyle(fontWeight: FontWeight.w700),
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              listTileTheme: const ListTileThemeData(
+                horizontalTitleGap: 8,
+                minLeadingWidth: 0,
+              ),
             ),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            children: [
-              _InformationRow('Charger type', proposal.charger),
-              _InformationRow('Expected usage', proposal.demand),
-              _InformationRow('Nearest Existing location',
-                  '${proposal.distance.toStringAsFixed(1)} km'),
-              if (proposal.latitude != null && proposal.longitude != null)
-                _InformationRow(
-                  'Coordinates',
-                  '${proposal.latitude!.toStringAsFixed(6)}, '
-                      '${proposal.longitude!.toStringAsFixed(6)}',
+            child: ExpansionTile(
+              leading:
+                  const Icon(Icons.tune_outlined, size: 19, color: green),
+              title: const Text(
+                'Additional Information',
+                style: TextStyle(
+                  color: planningTextColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
                 ),
-            ],
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              children: [
+                _InformationRow('Charger type', proposal.charger),
+                _InformationRow('Expected usage', proposal.demand),
+                _InformationRow('Nearest Existing location',
+                    '${proposal.distance.toStringAsFixed(1)} km'),
+                if (proposal.latitude != null && proposal.longitude != null)
+                  _InformationRow(
+                    'Coordinates',
+                    '${proposal.latitude!.toStringAsFixed(6)}, '
+                        '${proposal.longitude!.toStringAsFixed(6)}',
+                  ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 24),
