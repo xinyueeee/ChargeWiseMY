@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../services/supabase_service.dart';
@@ -15,6 +16,14 @@ class FeedbackRepository {
   Future<List<FaultReport>> getReports() async {
     final rows = await _supabase.getFaultReports();
     return rows.map(FaultReport.fromSupabase).toList();
+  }
+
+  /// Subscribes to live fault-report changes. Returns a disposer that tears
+  /// the subscription down; keeps the Supabase realtime types out of the
+  /// view model.
+  VoidCallback subscribeToReports(void Function() onChange) {
+    final channel = _supabase.subscribeToFaultReports(onChange);
+    return () => _supabase.removeChannel(channel);
   }
 
   Future<void> createReport(FaultReport draft, List<XFile> photos) async {

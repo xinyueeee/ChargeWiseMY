@@ -43,6 +43,13 @@ class FeedbackAdminRepository {
     return rows.map(MaintenanceRecord.fromSupabase).toList();
   }
 
+  /// Subscribes to live fault-report changes (a driver submitting a new
+  /// report, another admin acting on one). Returns a disposer.
+  VoidCallback subscribeToReports(void Function() onChange) {
+    final channel = _supabase.subscribeToFaultReports(onChange);
+    return () => _supabase.removeChannel(channel);
+  }
+
   Future<void> verifyReport(FaultReport report) async {
     await _supabase.updateFaultReportStatus(
       report.id,

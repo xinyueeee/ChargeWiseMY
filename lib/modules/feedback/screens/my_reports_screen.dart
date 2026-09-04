@@ -49,6 +49,11 @@ class _MyReportsScreenState extends State<MyReportsScreen>
           setState(() => _page = 0);
         }
       });
+    // Refresh on open so any status change an admin made since the list last
+    // loaded (app startup / previous visit) shows up here.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<FeedbackViewModel>().load(silent: true);
+    });
   }
 
   @override
@@ -264,50 +269,60 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                       ),
                     ),
                     Expanded(
-                      child: filtered.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                              child: PlanningEmptyState(
-                                icon: Icons.fact_check_outlined,
-                                title: vm.myReports.isEmpty
-                                    ? 'No reports yet'
-                                    : 'No matching reports',
-                                message: vm.myReports.isEmpty
-                                    ? 'Submit your first fault report to help '
-                                        'keep charging stations reliable.'
-                                    : 'Try changing the search text, tab, or '
-                                        'category filter.',
-                              ),
-                            )
-                          : ListView(
-                              keyboardDismissBehavior:
-                                  ScrollViewKeyboardDismissBehavior.onDrag,
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                              children: [
-                                for (final report in pageItems) ...[
-                                  ReportCard(
-                                    report: report,
-                                    trailingTime:
-                                        formatRelativeTime(report.createdAt),
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            ReportDetailsScreen(report: report),
+                      child: RefreshIndicator(
+                        onRefresh: () => vm.load(silent: true),
+                        child: filtered.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                children: [
+                                  PlanningEmptyState(
+                                    icon: Icons.fact_check_outlined,
+                                    title: vm.myReports.isEmpty
+                                        ? 'No reports yet'
+                                        : 'No matching reports',
+                                    message: vm.myReports.isEmpty
+                                        ? 'Submit your first fault report to '
+                                            'help keep charging stations '
+                                            'reliable.'
+                                        : 'Try changing the search text, tab, '
+                                            'or category filter.',
+                                  ),
+                                ],
+                              )
+                            : ListView(
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                                children: [
+                                  for (final report in pageItems) ...[
+                                    ReportCard(
+                                      report: report,
+                                      trailingTime:
+                                          formatRelativeTime(report.createdAt),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => ReportDetailsScreen(
+                                              report: report),
+                                        ),
                                       ),
                                     ),
+                                    const SizedBox(height: 10),
+                                  ],
+                                  const SizedBox(height: 6),
+                                  _Pagination(
+                                    page: page,
+                                    totalPages: totalPages,
+                                    onChanged: (next) =>
+                                        setState(() => _page = next),
                                   ),
-                                  const SizedBox(height: 10),
                                 ],
-                                const SizedBox(height: 6),
-                                _Pagination(
-                                  page: page,
-                                  totalPages: totalPages,
-                                  onChanged: (next) =>
-                                      setState(() => _page = next),
-                                ),
-                              ],
-                            ),
+                              ),
+                      ),
                     ),
                   ],
                 ),
