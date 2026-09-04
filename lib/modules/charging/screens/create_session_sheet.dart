@@ -76,7 +76,9 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
           : (source!['energy_kwh'] as num).toString(),
     );
     _costController = TextEditingController(
-      text: source?['cost'] == null ? '' : (source!['cost'] as num).toString(),
+      text: source?['cost'] == null
+          ? ''
+          : (source!['cost'] as num).toStringAsFixed(2),
     );
     _notesController =
         TextEditingController(text: existing?['notes'] as String? ?? '');
@@ -362,6 +364,7 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
                                 keyboardType:
                                     const TextInputType.numberWithOptions(
                                         decimal: true),
+                                inputFormatters: [twoDecimalInputFormatter],
                                 decoration: const InputDecoration(
                                   labelText: 'Cost (RM)',
                                   border: OutlineInputBorder(),

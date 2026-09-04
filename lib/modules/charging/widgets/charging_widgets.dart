@@ -1,7 +1,25 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import '../../planning/widgets/planning_widgets.dart';
+
+final _rmFormat = NumberFormat.currency(
+  locale: 'en_US',
+  symbol: 'RM',
+  decimalDigits: 2,
+);
+
+String formatRm(num amount) => _rmFormat.format(amount);
+
+final twoDecimalInputFormatter = TextInputFormatter.withFunction(
+  (oldValue, newValue) {
+    if (newValue.text.isEmpty) return newValue;
+    final isValid = RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text);
+    return isValid ? newValue : oldValue;
+  },
+);
 
 const chargingDcColor = Colors.orange;
 const chargingAcColor = Colors.deepPurple;

@@ -374,7 +374,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
     final rate = double.tryParse((value ?? '').trim());
     if (rate == null) return 'Enter a rate';
     if (rate < _rateMinRm || rate > _rateMaxRm) {
-      return 'Rate should be RM${_rateMinRm.toStringAsFixed(2)}-RM${_rateMaxRm.toStringAsFixed(2)} per kWh';
+      return 'Rate should be ${formatRm(_rateMinRm)}-${formatRm(_rateMaxRm)} per kWh';
     }
     return null;
   }
@@ -660,6 +660,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
               controller: _calcRateController,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [twoDecimalInputFormatter],
               decoration: const InputDecoration(
                 labelText: 'Electricity Rate (RM/kWh)',
                 border: OutlineInputBorder(),
@@ -694,7 +695,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
                       Text(
                         _calcResult == null
                             ? 'RM --'
-                            : 'RM${_calcResult!.toStringAsFixed(2)}',
+                            : formatRm(_calcResult!),
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
@@ -871,7 +872,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Total: RM${totalRm.toStringAsFixed(2)} over the last '
+                    'Total: ${formatRm(totalRm)} over the last '
                     '6 months',
                     style: const TextStyle(
                       fontSize: 12,
@@ -1246,7 +1247,7 @@ class _SessionTile extends StatelessWidget {
               ),
             ),
             Text(
-              'RM${cost.toStringAsFixed(2)}',
+              formatRm(cost),
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             PopupMenuButton<String>(
@@ -1369,7 +1370,7 @@ void _showSessionDetails(BuildContext context, Map<String, dynamic> session) {
                     ),
                     _SessionDetailRow(
                       label: 'Cost',
-                      value: 'RM${cost.toStringAsFixed(2)}',
+                      value: formatRm(cost),
                     ),
                     if (vehicleLabel != null && vehicleLabel.isNotEmpty)
                       _SessionDetailRow(label: 'Vehicle', value: vehicleLabel),
