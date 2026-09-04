@@ -61,6 +61,7 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
   String _repeatFrequency = 'once';
   late Set<int> _repeatDays;
   bool _saving = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -131,21 +132,18 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
   }
 
   Future<void> _save() async {
+    setState(() => _errorMessage = null);
     if (!_formKey.currentState!.validate()) return;
 
     final anchor = combineDateAndTime(_date, _time);
     if (_repeatFrequency == 'once' && anchor.isBefore(DateTime.now())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pick a date and time that hasn\'t passed yet.'),
-        ),
+      setState(
+        () => _errorMessage = 'Pick a date and time that hasn\'t passed yet.',
       );
       return;
     }
     if (_repeatFrequency == 'weekly' && _repeatDays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick at least one day of the week.')),
-      );
+      setState(() => _errorMessage = 'Pick at least one day of the week.');
       return;
     }
     final repeatDays =
@@ -184,12 +182,10 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save reminder. Please try again.'),
-          ),
-        );
-        setState(() => _saving = false);
+        setState(() {
+          _errorMessage = 'Could not save reminder. Please try again.';
+          _saving = false;
+        });
       }
       return;
     }
@@ -449,6 +445,36 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
                             color: planningMutedTextColor,
                           ),
                         ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: .08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  size: 16,
+                                  color: Colors.redAccent,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.redAccent,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 20),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
