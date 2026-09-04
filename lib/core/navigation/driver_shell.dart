@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../modules/auth/screens/profile_screen.dart';
 import '../../modules/charging/screens/charging_screen.dart';
 import '../../modules/feedback/screens/feedback_dashboard_screen.dart';
+import '../../modules/feedback/viewmodels/feedback_viewmodel.dart';
 import '../../modules/home/screens/home_screen.dart';
 import '../../modules/planning/screens/planning_dashboard_screen.dart';
 import 'driver_navigation_shell.dart';
@@ -47,6 +49,12 @@ class DriverShellState extends State<DriverShell> {
   void switchTab(int index) {
     if (_tabIndex == index) return;
     setState(() => _tabIndex = index);
+    // The Feedback tab keeps its state alive inside the IndexedStack and
+    // otherwise only loads once at startup, so it never picks up status
+    // changes an admin makes. Pull a fresh copy on entry.
+    if (index == DriverTab.feedback) {
+      context.read<FeedbackViewModel>().load(silent: true);
+    }
   }
 
   DriverNavigationConfig get _navConfig => DriverNavigationConfig(

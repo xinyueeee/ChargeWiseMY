@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../feedback/models/fault_report.dart';
@@ -5,8 +7,16 @@ import '../models/maintenance_record.dart';
 import '../services/feedback_admin_repository.dart';
 
 class AdminFeedbackViewModel extends ChangeNotifier {
-  AdminFeedbackViewModel(this._repository);
+  AdminFeedbackViewModel(this._repository) {
+    _unsubscribe = _repository.subscribeToReports(_onRemoteChange);
+  }
   final FeedbackAdminRepository _repository;
+
+  static const _realtimeDebounce = Duration(milliseconds: 500);
+
+  VoidCallback? _unsubscribe;
+  Timer? _refreshTimer;
+  bool _disposed = false;
 
   List<FaultReport> reports = const [];
   List<MaintenanceRecord> maintenanceRecords = const [];
@@ -14,6 +24,21 @@ class AdminFeedbackViewModel extends ChangeNotifier {
   String? errorMessage;
 
   bool hasLoadedOnce = false;
+
+  void _onRemoteChange() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer(_realtimeDebounce, () {
+      if (!_disposed) load(silent: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _refreshTimer?.cancel();
+    _unsubscribe?.call();
+    super.dispose();
+  }
 
   /// [silent] skips the full-screen loading state — used for background
   /// refreshes (tab switches, returning from a child screen) so the list
@@ -34,7 +59,7 @@ class AdminFeedbackViewModel extends ChangeNotifier {
     } finally {
       loading = false;
       hasLoadedOnce = true;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 

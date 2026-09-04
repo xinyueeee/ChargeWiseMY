@@ -56,143 +56,149 @@ class FeedbackDashboardScreen extends StatelessWidget {
                 vm.myReports.where((r) => r.status == 'Resolved').length;
 
             return SafeArea(
-              child: ListView(
-                padding: planningPagePadding,
-                children: [
-                  if (vm.errorMessage != null) ...[
-                    PlanningErrorState(
-                      message: vm.errorMessage!,
-                      onRetry: vm.load,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  FeedbackHeroBanner(
-                    onReportIssue: () => _openNewReport(context),
-                  ),
-                  planningSectionGap,
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Report Overview',
-                          style: TextStyle(
-                            color: planningTextColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ReportOverviewStat(
-                              value: '${vm.myReports.length}',
-                              label: 'My Reports',
-                              subtitle: 'View all your submissions',
-                              icon: Icons.description_outlined,
-                              color: blue,
-                              onTap: () => _openMyReports(context, 'All'),
-                            ),
-                            ReportOverviewStat(
-                              value: '$inProgress',
-                              label: 'In Progress',
-                              subtitle: 'Reports still being worked on',
-                              icon: Icons.access_time_outlined,
-                              color: orange,
-                              onTap: () => _openMyReports(context, 'All'),
-                            ),
-                            ReportOverviewStat(
-                              value: '$resolved',
-                              label: 'Resolved',
-                              subtitle: 'Issues have been resolved',
-                              icon: Icons.check_circle_outline,
-                              color: green,
-                              onTap: () => _openMyReports(context, 'Resolved'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  planningSectionGap,
-                  const PlanningSectionTitle('Quick Actions'),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      QuickActionCard(
-                        icon: Icons.camera_alt_outlined,
-                        title: 'Report Issue',
-                        subtitle: 'Submit a new fault report',
-                        color: green,
-                        onTap: () => _openNewReport(context),
+              child: RefreshIndicator(
+                onRefresh: () => vm.load(silent: true),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: planningPagePadding,
+                  children: [
+                    if (vm.errorMessage != null) ...[
+                      PlanningErrorState(
+                        message: vm.errorMessage!,
+                        onRetry: vm.load,
                       ),
-                      const SizedBox(width: 10),
-                      QuickActionCard(
-                        icon: Icons.map_outlined,
-                        title: 'Nearby Issues',
-                        subtitle: 'View reported issues near you',
-                        color: blue,
-                        onTap: () => _openNearbyIssues(context),
-                      ),
-                      const SizedBox(width: 10),
-                      QuickActionCard(
-                        icon: Icons.info_outline,
-                        title: 'How It Works',
-                        subtitle: 'Learn about our feedback process',
-                        color: purple,
-                        onTap: () => _showHowItWorks(context),
-                      ),
+                      const SizedBox(height: 16),
                     ],
-                  ),
-                  planningSectionGap,
-                  PlanningSectionTitle(
-                    'My Recent Reports',
-                    trailing: TextButton(
-                      onPressed: () => _openMyReports(context, 'All'),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
+                    FeedbackHeroBanner(
+                      onReportIssue: () => _openNewReport(context),
+                    ),
+                    planningSectionGap,
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'View All',
+                          const Text(
+                            'Report Overview',
                             style: TextStyle(
-                              color: green,
+                              color: planningTextColor,
                               fontWeight: FontWeight.w700,
+                              fontSize: 16,
                             ),
                           ),
-                          Icon(Icons.chevron_right, color: green, size: 18),
+                          const SizedBox(height: 14),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ReportOverviewStat(
+                                value: '${vm.myReports.length}',
+                                label: 'My Reports',
+                                subtitle: 'View all your submissions',
+                                icon: Icons.description_outlined,
+                                color: blue,
+                                onTap: () => _openMyReports(context, 'All'),
+                              ),
+                              ReportOverviewStat(
+                                value: '$inProgress',
+                                label: 'In Progress',
+                                subtitle: 'Reports still being worked on',
+                                icon: Icons.access_time_outlined,
+                                color: orange,
+                                onTap: () => _openMyReports(context, 'All'),
+                              ),
+                              ReportOverviewStat(
+                                value: '$resolved',
+                                label: 'Resolved',
+                                subtitle: 'Issues have been resolved',
+                                icon: Icons.check_circle_outline,
+                                color: green,
+                                onTap: () =>
+                                    _openMyReports(context, 'Resolved'),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  if (topThree.isEmpty)
-                    PlanningEmptyState(
-                      icon: Icons.fact_check_outlined,
-                      title: 'No reports yet',
-                      message: 'Submit your first fault report to help '
-                          'keep charging stations reliable.',
-                      action: ElevatedButton.icon(
-                        onPressed: () => _openNewReport(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Report an Issue'),
-                      ),
-                    )
-                  else
-                    for (final report in topThree) ...[
-                      ReportCard(
-                        report: report,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) => ReportDetailsScreen(report: report),
-                          ),
+                    planningSectionGap,
+                    const PlanningSectionTitle('Quick Actions'),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        QuickActionCard(
+                          icon: Icons.camera_alt_outlined,
+                          title: 'Report Issue',
+                          subtitle: 'Submit a new fault report',
+                          color: green,
+                          onTap: () => _openNewReport(context),
+                        ),
+                        const SizedBox(width: 10),
+                        QuickActionCard(
+                          icon: Icons.map_outlined,
+                          title: 'Nearby Issues',
+                          subtitle: 'View reported issues near you',
+                          color: blue,
+                          onTap: () => _openNearbyIssues(context),
+                        ),
+                        const SizedBox(width: 10),
+                        QuickActionCard(
+                          icon: Icons.info_outline,
+                          title: 'How It Works',
+                          subtitle: 'Learn about our feedback process',
+                          color: purple,
+                          onTap: () => _showHowItWorks(context),
+                        ),
+                      ],
+                    ),
+                    planningSectionGap,
+                    PlanningSectionTitle(
+                      'My Recent Reports',
+                      trailing: TextButton(
+                        onPressed: () => _openMyReports(context, 'All'),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'View All',
+                              style: TextStyle(
+                                color: green,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: green, size: 18),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                    ],
-                ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (topThree.isEmpty)
+                      PlanningEmptyState(
+                        icon: Icons.fact_check_outlined,
+                        title: 'No reports yet',
+                        message: 'Submit your first fault report to help '
+                            'keep charging stations reliable.',
+                        action: ElevatedButton.icon(
+                          onPressed: () => _openNewReport(context),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Report an Issue'),
+                        ),
+                      )
+                    else
+                      for (final report in topThree) ...[
+                        ReportCard(
+                          report: report,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  ReportDetailsScreen(report: report),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                  ],
+                ),
               ),
             );
           },

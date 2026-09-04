@@ -10,10 +10,25 @@ import '../viewmodels/feedback_viewmodel.dart';
 import '../widgets/feedback_widgets.dart';
 import 'report_details_screen.dart';
 
-class ReportMapScreen extends StatelessWidget {
+class ReportMapScreen extends StatefulWidget {
   const ReportMapScreen({super.key});
 
+  @override
+  State<ReportMapScreen> createState() => _ReportMapScreenState();
+}
+
+class _ReportMapScreenState extends State<ReportMapScreen> {
   static const _malaysiaCenter = LatLng(4.2105, 101.9758);
+
+  @override
+  void initState() {
+    super.initState();
+    // Nearby-issue statuses can change while a driver is elsewhere in the
+    // app; pull a fresh copy whenever this screen opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<FeedbackViewModel>().load(silent: true);
+    });
+  }
 
   DriverNavigationConfig _navConfig(BuildContext context) =>
       DriverNavigationConfig(

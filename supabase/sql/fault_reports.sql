@@ -56,6 +56,19 @@ create index if not exists fault_reports_status_idx
 create index if not exists fault_reports_created_at_idx
   on fault_reports (created_at desc);
 
+-- Realtime: let driver + admin clients receive live status changes.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'fault_reports'
+  ) then
+    alter publication supabase_realtime add table public.fault_reports;
+  end if;
+end $$;
+
 create or replace function set_fault_reports_updated_at()
 returns trigger as $$
 begin

@@ -264,6 +264,33 @@ class SupabaseService {
         .update({'priority': priority}).eq('report_id', reportId);
   }
 
+  static int _realtimeChannelSeq = 0;
+
+  /// Opens a realtime subscription on the `fault_reports` table. [onChange]
+  /// fires on every insert/update/delete (RLS-filtered to what the caller can
+  /// read); callers debounce it into a silent re-fetch so driver and admin
+  /// views stay in sync without polling. Tear down with [removeChannel].
+  RealtimeChannel subscribeToFaultReports(void Function() onChange) {
+    // Unique topic per subscription — `channel()` never dedupes, so the
+    // driver and admin view models (and hot-reload re-creations) must not
+    // share one.
+    final channel =
+        client.channel('fault_reports:changes:${_realtimeChannelSeq++}');
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'fault_reports',
+          callback: (_) => onChange(),
+        )
+        .subscribe();
+    return channel;
+  }
+
+  Future<void> removeChannel(RealtimeChannel channel) async {
+    await client.removeChannel(channel);
+  }
+
   Future<List<Map<String, dynamic>>> getMaintenanceRecords() async {
     final response = await client
         .from('maintenance_records')
