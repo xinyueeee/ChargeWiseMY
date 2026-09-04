@@ -294,6 +294,7 @@ class _CreateReminderSheetState extends State<_CreateReminderSheet> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _titleController,
+                          maxLength: 20,
                           decoration: const InputDecoration(
                             labelText: 'Reminder Title',
                             hintText: 'e.g. Charge my car',

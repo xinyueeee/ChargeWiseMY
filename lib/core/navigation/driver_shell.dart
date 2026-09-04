@@ -26,6 +26,7 @@ class DriverShell extends StatefulWidget {
 
 class DriverShellState extends State<DriverShell> {
   int _tabIndex = DriverTab.home;
+  final _tabsKey = GlobalKey();
 
   static const _tabLabels = [
     'Home',
@@ -63,7 +64,11 @@ class DriverShellState extends State<DriverShell> {
     return Scaffold(
       body: DriverNavigationShell(
         config: config,
-        child: IndexedStack(index: _tabIndex, children: _tabs),
+        child: IndexedStack(
+          key: _tabsKey,
+          index: _tabIndex,
+          children: _tabs,
+        ),
       ),
       bottomNavigationBar: config.bottomBarFor(context),
     );
