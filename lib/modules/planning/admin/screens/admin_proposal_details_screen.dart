@@ -827,10 +827,14 @@ String _adminAiInputFingerprint(
       planned?.radiusKm,
     ].join('|');
 
-class _AdminAiReviewCardState extends State<_AdminAiReviewCard> {
+class _AdminAiReviewCardState extends State<_AdminAiReviewCard>
+    with AutomaticKeepAliveClientMixin<_AdminAiReviewCard> {
   AdminProposalAiReview? _review;
   AdminAiReviewFailureReason? _failure;
   bool _loading = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   Future<void> _generate() async {
     if (_loading) return;
@@ -860,6 +864,7 @@ class _AdminAiReviewCardState extends State<_AdminAiReviewCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final review = _review;
     return AppCard(
       padding: const EdgeInsets.all(14),
