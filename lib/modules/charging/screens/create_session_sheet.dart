@@ -335,11 +335,17 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
                           decoration: const InputDecoration(
                             labelText: 'Cost (RM)',
                             border: OutlineInputBorder(),
+                            errorMaxLines: 2,
                           ),
-                          validator: (value) =>
-                              double.tryParse((value ?? '').trim()) == null
-                                  ? 'Enter cost'
-                                  : null,
+                          validator: (value) {
+                            final cost = double.tryParse((value ?? '').trim());
+                            if (cost == null) return 'Enter cost';
+                            if (cost < 0 || cost > 99999) {
+                              return 'Cost should be '
+                                  '${formatRm(0)}-${formatRm(99999)}';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         DurationPickerField(
