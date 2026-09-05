@@ -41,7 +41,6 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
   final _authService = AuthService();
 
   late final TextEditingController _powerController;
-  late final TextEditingController _energyController;
   late final TextEditingController _costController;
   late final TextEditingController _notesController;
   late String _chargerType;
@@ -69,11 +68,6 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
       text: source?['power_kw'] == null
           ? ''
           : (source!['power_kw'] as num).toString(),
-    );
-    _energyController = TextEditingController(
-      text: source?['energy_kwh'] == null
-          ? ''
-          : (source!['energy_kwh'] as num).toString(),
     );
     _costController = TextEditingController(
       text: source?['cost'] == null
@@ -112,7 +106,6 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
   @override
   void dispose() {
     _powerController.dispose();
-    _energyController.dispose();
     _costController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -148,9 +141,9 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
     setState(() => _saving = true);
     try {
       final power = double.parse(_powerController.text.trim());
-      final energy = double.parse(_energyController.text.trim());
       final cost = double.parse(_costController.text.trim());
       final duration = _durationHours * 60 + _durationMinutes;
+      final energy = power * (duration / 60);
       final vehicle = _vehicles.firstWhere(
         (v) => v['id'] == _selectedVehicleId,
         orElse: () => const {},
@@ -329,54 +322,24 @@ class _CreateSessionSheetState extends State<_CreateSessionSheet> {
                             helperText:
                                 'The charger\'s speed, e.g. 50, 120, 180',
                             border: OutlineInputBorder(),
+                            errorMaxLines: 2,
                           ),
-                          validator: (value) =>
-                              int.tryParse((value ?? '').trim()) == null
-                                  ? 'Enter power in kW'
-                                  : null,
+                          validator: validateChargingPowerKw,
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _energyController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                decoration: const InputDecoration(
-                                  labelText: 'Energy (kWh)',
-                                  helperText:
-                                      'Electricity added to your vehicle',
-                                  border: OutlineInputBorder(),
-                                ),
-                                validator: (value) =>
-                                    double.tryParse((value ?? '').trim()) ==
-                                            null
-                                        ? 'Enter kWh'
-                                        : null,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _costController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                inputFormatters: [twoDecimalInputFormatter],
-                                decoration: const InputDecoration(
-                                  labelText: 'Cost (RM)',
-                                  border: OutlineInputBorder(),
-                                ),
-                                validator: (value) =>
-                                    double.tryParse((value ?? '').trim()) ==
-                                            null
-                                        ? 'Enter cost'
-                                        : null,
-                              ),
-                            ),
-                          ],
+                        TextFormField(
+                          controller: _costController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [twoDecimalInputFormatter],
+                          decoration: const InputDecoration(
+                            labelText: 'Cost (RM)',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) =>
+                              double.tryParse((value ?? '').trim()) == null
+                                  ? 'Enter cost'
+                                  : null,
                         ),
                         const SizedBox(height: 12),
                         DurationPickerField(

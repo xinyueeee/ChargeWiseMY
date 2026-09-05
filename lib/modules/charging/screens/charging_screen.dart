@@ -23,10 +23,6 @@ import 'create_session_sheet.dart';
 
 const _malaysiaFallback = LatLng(3.1390, 101.6869);
 
-const _acPowerMinKw = 3;
-const _acPowerMaxKw = 22;
-const _dcPowerMinKw = 30;
-const _dcPowerMaxKw = 180;
 const _rateMinRm = 0.20;
 const _rateMaxRm = 2.00;
 
@@ -357,18 +353,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
     return 10;
   }
 
-  bool get _calcIsDc => _calcChargerType.toLowerCase().contains('dc');
-
-  String? _validateCalcPower(String? value) {
-    final power = int.tryParse((value ?? '').trim());
-    if (power == null) return 'Enter power in kW';
-    final min = _calcIsDc ? _dcPowerMinKw : _acPowerMinKw;
-    final max = _calcIsDc ? _dcPowerMaxKw : _acPowerMaxKw;
-    if (power < min || power > max) {
-      return '${_calcIsDc ? 'DC' : 'AC'} charger power should be $min-$max kW';
-    }
-    return null;
-  }
+  String? _validateCalcPower(String? value) => validateChargingPowerKw(value);
 
   String? _validateCalcRate(String? value) {
     final rate = double.tryParse((value ?? '').trim());
@@ -404,13 +389,11 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
     if (!_validateCalcForm()) return;
     final power = int.parse(_calcPowerController.text.trim());
     if (_calcResult == null) return;
-    final hours = _calcHours + _calcMinutes / 60;
     final saved = await showCreateSessionSheet(
       context,
       prefill: {
         'charger_type': _calcChargerType,
         'power_kw': power,
-        'energy_kwh': power * hours,
         'cost': _calcResult,
         'duration_minutes': _calcHours * 60 + _calcMinutes,
       },
@@ -649,6 +632,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
                     decoration: const InputDecoration(
                       labelText: 'Charging Power (kW)',
                       border: OutlineInputBorder(),
+                      errorMaxLines: 2,
                     ),
                     validator: _validateCalcPower,
                   ),
@@ -664,6 +648,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
               decoration: const InputDecoration(
                 labelText: 'Electricity Rate (RM/kWh)',
                 border: OutlineInputBorder(),
+                errorMaxLines: 2,
               ),
               validator: _validateCalcRate,
             ),
@@ -693,9 +678,7 @@ class _ChargingScreenState extends State<ChargingScreen> with RouteAware {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _calcResult == null
-                            ? 'RM --'
-                            : formatRm(_calcResult!),
+                        _calcResult == null ? 'RM --' : formatRm(_calcResult!),
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,

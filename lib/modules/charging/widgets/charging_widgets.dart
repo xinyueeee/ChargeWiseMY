@@ -24,6 +24,19 @@ final twoDecimalInputFormatter = TextInputFormatter.withFunction(
 const chargingDcColor = Colors.orange;
 const chargingAcColor = Colors.deepPurple;
 
+const chargingPowerMinKw = 1;
+const chargingPowerMaxKw = 999;
+
+String? validateChargingPowerKw(String? value) {
+  final power = int.tryParse((value ?? '').trim());
+  if (power == null) return 'Enter power in kW';
+  if (power < chargingPowerMinKw || power > chargingPowerMaxKw) {
+    return 'Charging power should be '
+        '$chargingPowerMinKw-$chargingPowerMaxKw kW';
+  }
+  return null;
+}
+
 const chargerTypes = ['AC Charger', 'DC Fast Charger'];
 
 Color colorForChargerType(String? chargerType) {
